@@ -1,9 +1,10 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.db import models
+from typing import ClassVar
 
 
-class UserManager(BaseUserManager):
-    def create_user(self, username, email, name, role, password=None):
+class UserManager(BaseUserManager['User']):
+    def create_user(self, username: str, email: str, name: str, role: str, password: str | None = None) -> 'User':
         if not username:
             raise ValueError('El usuario debe tener un nombre de usuario')
         if not email:
@@ -19,15 +20,14 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, username, email, name, password=None):
-        user = self.create_user(
+    def create_superuser(self, username: str, email: str, name: str, password: str | None = None) -> 'User':
+        return self.create_user(
             username=username,
             email=email,
             name=name,
             role='superuser',
             password=password,
         )
-        return user
 
 
 class User(AbstractBaseUser):
@@ -45,7 +45,8 @@ class User(AbstractBaseUser):
     role = models.CharField(max_length=30, choices=ROLES)
     state = models.BooleanField(default=True)
 
-    objects = UserManager()
+    # ← ClassVar le dice a Pylance el tipo exacto del manager
+    objects: ClassVar[UserManager] = UserManager()
 
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email', 'name']
@@ -53,5 +54,5 @@ class User(AbstractBaseUser):
     class Meta:
         db_table = '"USER"'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.username} ({self.role})'
