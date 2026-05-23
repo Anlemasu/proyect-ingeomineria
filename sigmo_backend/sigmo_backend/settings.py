@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+from datetime import timedelta
 
 load_dotenv()
 
@@ -116,6 +117,20 @@ DATABASES = {
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
+
+SIMPLE_JWT = {
+    # Token de acceso: el que usas en cada request
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),  # RF-06B: máximo 8 horas
+    
+    # Token de refresco: para obtener un nuevo access token sin hacer login
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    
+    'ROTATE_REFRESH_TOKENS': True,  # Genera nuevo refresh token cada vez que lo usas
+    'BLACKLIST_AFTER_ROTATION': False,
+    
+    'ALGORITHM': 'HS256',
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
