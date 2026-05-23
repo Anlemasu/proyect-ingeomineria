@@ -79,6 +79,8 @@ class TripWriteSerializer(serializers.ModelSerializer):
             'date',
             'state',
         ]
+        # voucher_num lo genera el backend, no el frontend
+        read_only_fields = ['voucher_num']
 
     def validate_value(self, value):
         # RF-28: no acepta valores negativos ni cero
