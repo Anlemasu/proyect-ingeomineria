@@ -2,21 +2,18 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from apps.audit.services import log_action
+from typing import cast
 
 from .models import Invoice
 from .serializers import InvoiceSerializer
 
 
 def can_manage_invoices(user):
-    # RF-39: Superusuario y Contador
     return user.role in ['superuser', 'accountant']
 
 
 class InvoiceListCreateView(APIView):
-    """
-    GET  /api/invoices/  → lista facturas
-    POST /api/invoices/  → registra número de factura electrónica (RF-39)
-    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -26,21 +23,24 @@ class InvoiceListCreateView(APIView):
 
     def post(self, request):
         if not can_manage_invoices(request.user):
+            log_action(request, 'access_denied', 'Invoice')
             return Response(
                 {'error': 'No tiene permisos para registrar facturas.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         serializer = InvoiceSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            invoice = cast(Invoice, serializer.save(user=request.user))
+            log_action(
+                request, 'create', 'Invoice',
+                object_id=invoice.id,
+                new_data=dict(serializer.data),  # type: ignore
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class InvoiceDetailView(APIView):
-    """
-    GET /api/invoices/<id>/  → detalle de factura
-    """
     permission_classes = [IsAuthenticated]
 
     def get_object(self, pk):

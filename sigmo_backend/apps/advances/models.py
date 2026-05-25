@@ -9,6 +9,7 @@ MOVEMENT_TYPE_CHOICES = [
 
 
 class Advance(models.Model):
+    id = models.AutoField(primary_key=True)
     client = models.ForeignKey(Client, on_delete=models.RESTRICT)
     user = models.ForeignKey(User, on_delete=models.RESTRICT)
     value = models.DecimalField(max_digits=15, decimal_places=2)
@@ -25,6 +26,7 @@ class Advance(models.Model):
 
 
 class AdvanceMovement(models.Model):
+    id = models.AutoField(primary_key=True)
     advance = models.ForeignKey(Advance, on_delete=models.RESTRICT)
     trip = models.ForeignKey('trips.Trip', on_delete=models.RESTRICT, null=True, blank=True)
     type_movement = models.CharField(max_length=30, choices=MOVEMENT_TYPE_CHOICES)

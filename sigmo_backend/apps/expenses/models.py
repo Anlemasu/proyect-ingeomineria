@@ -3,6 +3,7 @@ from apps.users.models import User
 
 
 class Expense(models.Model):
+    id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.RESTRICT)
     value = models.DecimalField(max_digits=15, decimal_places=2)
     description = models.TextField()

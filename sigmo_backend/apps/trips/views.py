@@ -3,6 +3,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
+from apps.audit.services import log_action
+from typing import cast
+from django.db import transaction
 
 from .models import Trip, Transfer
 from .serializers import TripReadSerializer, TripWriteSerializer
@@ -10,15 +13,10 @@ from apps.advances.models import Advance, AdvanceMovement
 
 
 def can_register_trips(user):
-    # RF-26: Superusuario y Operador de Caja
     return user.role in ['superuser', 'cashier']
 
 
 class TripListCreateView(APIView):
-    """
-    GET  /api/trips/  → lista viajes con filtros (RF-42, RF-43, RF-44)
-    POST /api/trips/  → registra un viaje (RF-26)
-    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -26,7 +24,6 @@ class TripListCreateView(APIView):
             'client', 'payment', 'vehicle', 'material_type', 'origin_site'
         ).all().order_by('-date_register')
 
-        # Filtros opcionales
         client_id  = request.query_params.get('client')
         date_from  = request.query_params.get('date_from')
         date_to    = request.query_params.get('date_to')
@@ -52,64 +49,77 @@ class TripListCreateView(APIView):
 
     def post(self, request):
         if not can_register_trips(request.user):
+            log_action(request, 'access_denied', 'Trip')
             return Response(
                 {'error': 'No tiene permisos para registrar viajes.'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        last_trip = Trip.objects.order_by('-voucher_num').first()
-        next_voucher = (last_trip.voucher_num + 1) if last_trip else 1
 
-            # Inyectar el voucher en los datos antes de pasarlos al serializer
+        # Validar el serializer antes del atomic para retornar errores claros
         data = request.data.copy()
-        data['voucher_num'] = next_voucher
+        data['voucher_num'] = 0  # temporal, se reemplaza dentro del atomic
+        serializer = TripWriteSerializer(data=data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = TripWriteSerializer(data=request.data)
-        if serializer.is_valid():
-            payment = serializer.validated_data.get('payment')  # type: ignore
-            advance = serializer.validated_data.get('advance')  # type: ignore
-            value   = serializer.validated_data.get('value')    # type: ignore
+        payment = serializer.validated_data.get('payment')  # type: ignore
+        advance = serializer.validated_data.get('advance')  # type: ignore
+        value   = serializer.validated_data.get('value')    # type: ignore
 
-            # RF-31B: validar saldo suficiente si el pago es anticipo
-            if payment and payment.is_advance and advance:
-                from apps.advances.serializers import AdvanceSerializer
-                advance_data: dict = dict(AdvanceSerializer(advance).data)  # type: ignore
-                raw_balance = advance_data.get('available_balance') or 0  # ← or 0 cubre el None
-                balance = float(raw_balance)  # type: ignore
-                if float(value) > balance:  # type: ignore
-                    return Response({
-                        'error': 'Saldo insuficiente.',
-                        'saldo_disponible': balance,
-                        'valor_viaje': str(value),
-                        'diferencia': str(float(value) - balance),  # type: ignore
-                    }, status=status.HTTP_400_BAD_REQUEST)
+        # RF-31B: validar saldo ANTES del atomic — es solo lectura, no necesita lock
+        if payment and payment.is_advance and advance:
+            from apps.advances.serializers import AdvanceSerializer
+            advance_data: dict = dict(AdvanceSerializer(advance).data)  # type: ignore
+            raw_balance = advance_data.get('available_balance') or 0
+            balance = float(raw_balance)  # type: ignore
+            if float(value) > balance:  # type: ignore
+                return Response({
+                    'error': 'Saldo insuficiente.',
+                    'saldo_disponible': balance,
+                    'valor_viaje': str(value),
+                    'diferencia': str(float(value) - balance),  # type: ignore
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Guardar el viaje con fecha de registro automática
-            trip: Trip = serializer.save(date_register=timezone.now().date())  # type: ignore
+        # Solo entrar al atomic para las escrituras
+        try:
+            with transaction.atomic():
+                last_trip = Trip.objects.select_for_update().order_by('-voucher_num').first()
+                next_voucher = (last_trip.voucher_num + 1) if last_trip else 1
 
-            # RF-31: descontar anticipo automáticamente
-            if payment and payment.is_advance and advance:
-                AdvanceMovement.objects.create(
-                    advance=advance,
-                    trip=trip,
-                    type_movement='egreso',
-                    amount=trip.value,
-                    trips_quantity=1,
-                    date=trip.date,
-                    description=f'Descuento por viaje #{trip.voucher_num}',
+                trip = cast(Trip, serializer.save(
+                    date_register=timezone.now().date(),
+                    voucher_num=next_voucher,
+                ))
+
+                if payment and payment.is_advance and advance:
+                    AdvanceMovement.objects.create(
+                        advance=advance,
+                        trip=trip,
+                        type_movement='egreso',
+                        amount=trip.value,
+                        trips_quantity=1,
+                        date=trip.date,
+                        description=f'Descuento por viaje #{trip.voucher_num}',
+                    )
+
+                log_action(
+                    request, 'create', 'Trip',
+                    object_id=trip.id,
+                    new_data=dict(TripReadSerializer(trip).data),  # type: ignore
                 )
 
-            return Response(
-                TripReadSerializer(trip).data,
-                status=status.HTTP_201_CREATED
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    TripReadSerializer(trip).data,
+                    status=status.HTTP_201_CREATED
+                )
 
+        except Exception:
+            return Response(
+                {'error': 'Error al registrar el viaje. Intente nuevamente.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class TripDetailView(APIView):
-    """
-    GET   /api/trips/<id>/  → detalle del viaje
-    PATCH /api/trips/<id>/  → ajuste del viaje (RF-36, RF-37)
-    """
     permission_classes = [IsAuthenticated]
 
     def get_object(self, pk):
@@ -145,20 +155,45 @@ class TripDetailView(APIView):
         # RF-36: operador de caja solo puede editar registros del día en curso
         if request.user.role == 'cashier':
             if obj.date_register != timezone.now().date():
+                log_action(request, 'access_denied', 'Trip', object_id=obj.id)
                 return Response(
                     {'error': 'Solo puede modificar registros del día en curso.'},
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-        # RF-36: operador de caja no puede anular, solo marcar como requiere revisión
+        # RF-36: operador de caja no puede anular
         if request.user.role == 'cashier' and request.data.get('state') is False:
+            log_action(request, 'access_denied', 'Trip', object_id=obj.id)
             return Response(
                 {'error': 'No tiene permisos para anular viajes.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
+        # Capturar datos anteriores antes de modificar (RF-38)
+        previous = dict(TripReadSerializer(obj).data)  # type: ignore
+
+        # RF-37: si es anulación, registrar como 'annul'
+        is_annulment = request.data.get('state') is False
+        action = 'annul' if is_annulment else 'update'
+
+        # RF-37: justificación obligatoria para ajuste histórico de superusuario
+        justification = request.data.get('justification', None)
+        if request.user.role == 'superuser' and obj.date_register != timezone.now().date():
+            if not justification:
+                return Response(
+                    {'error': 'Se requiere justificación para modificar registros históricos.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         serializer = TripWriteSerializer(obj, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            log_action(
+                request, action, 'Trip',
+                object_id=obj.id,
+                previous_data=previous,
+                new_data=dict(TripReadSerializer(obj).data),  # type: ignore
+                justification=justification,
+            )
             return Response(TripReadSerializer(obj).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

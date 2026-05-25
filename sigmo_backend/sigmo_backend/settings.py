@@ -55,7 +55,6 @@ INSTALLED_APPS = [
     'apps.cash_closing',
     'apps.reports',
     'apps.audit',
-    'simple_history',
     'rest_framework',
 ]
 
@@ -76,8 +75,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    #PROPIAS
-    'simple_history.middleware.HistoryRequestMiddleware',
 ]
 
 ROOT_URLCONF = 'sigmo_backend.urls'

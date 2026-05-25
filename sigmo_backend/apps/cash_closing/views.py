@@ -3,7 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
-from django.db.models import Sum, Count
+from django.db.models import Sum
+from apps.audit.services import log_action
 
 from .models import DailySummary
 from .serializers import DailySummarySerializer
@@ -12,9 +13,6 @@ from apps.expenses.models import Expense
 
 
 class DailySummaryListView(APIView):
-    """
-    GET /api/cash-closing/  → lista cierres históricos
-    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -24,13 +22,11 @@ class DailySummaryListView(APIView):
 
 
 class DailySummaryCloseView(APIView):
-    """
-    POST /api/cash-closing/close/  → ejecuta el cierre de caja del día (RF-41)
-    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         if request.user.role not in ['superuser', 'cashier']:
+            log_action(request, 'access_denied', 'DailySummary')
             return Response(
                 {'error': 'No tiene permisos para ejecutar el cierre de caja.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -38,17 +34,14 @@ class DailySummaryCloseView(APIView):
 
         today = timezone.now().date()
 
-        # Verificar que no exista ya un cierre para hoy
         if DailySummary.objects.filter(date=today).exists():
             return Response(
                 {'error': 'Ya existe un cierre de caja para el día de hoy.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Obtener todos los viajes activos del día
         trips = Trip.objects.filter(date=today, state=True)
 
-        # Calcular totales por medio de pago
         income_cash = trips.filter(
             payment__is_advance=False,
             payment__name__icontains='efectivo'
@@ -63,8 +56,8 @@ class DailySummaryCloseView(APIView):
             payment__is_advance=True
         ).aggregate(total=Sum('value'))['total'] or 0
 
-        total_trips   = trips.count()
-        total_volume  = trips.aggregate(
+        total_trips = trips.count()
+        total_volume = trips.aggregate(
             total=Sum('vehicle__vehicle_type__capacity')
         )['total'] or 0
 
@@ -76,7 +69,6 @@ class DailySummaryCloseView(APIView):
             date=today
         ).aggregate(total=Sum('value'))['total'] or 0
 
-        # Crear el cierre
         summary = DailySummary.objects.create(
             date=today,
             total_trips=total_trips,
@@ -88,8 +80,14 @@ class DailySummaryCloseView(APIView):
             total_expenses=total_expenses,
         )
 
-        # Asociar los viajes del día al cierre
         trips.update(summary=summary)
+
+        # RF-41: registrar el cierre en auditoría
+        log_action(
+            request, 'create', 'DailySummary',
+            object_id=summary.id,
+            new_data=dict(DailySummarySerializer(summary).data),  # type: ignore
+        )
 
         return Response(
             DailySummarySerializer(summary).data,

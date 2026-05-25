@@ -3,6 +3,7 @@ from apps.clients.models import Client
 
 
 class VehicleType(models.Model):
+    id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=20)
     capacity = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(null=True, blank=True)
@@ -16,6 +17,7 @@ class VehicleType(models.Model):
 
 
 class PinsDumper(models.Model):
+    id = models.AutoField(primary_key=True)
     ambiental_pin = models.CharField(max_length=30)
     propietary = models.CharField(max_length=50)
     address = models.CharField(max_length=20)
@@ -37,6 +39,7 @@ class PinsDumper(models.Model):
 
 
 class Vehicle(models.Model):
+    id = models.AutoField(primary_key=True)
     vehicle_type = models.ForeignKey(VehicleType, on_delete=models.RESTRICT)
     dumper = models.ForeignKey(PinsDumper, on_delete=models.RESTRICT, null=True, blank=True)
     plaque = models.CharField(max_length=6, unique=True)
@@ -49,6 +52,7 @@ class Vehicle(models.Model):
 
 
 class MaterialType(models.Model):
+    id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=30)
     description = models.TextField(null=True, blank=True)
     state = models.BooleanField(default=True)
@@ -61,6 +65,7 @@ class MaterialType(models.Model):
 
 
 class PaymentMethod(models.Model):
+    id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=20)
     is_advance = models.BooleanField(default=False)
     state = models.BooleanField(default=True)
@@ -73,6 +78,7 @@ class PaymentMethod(models.Model):
 
 
 class OriginSite(models.Model):
+    id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=50)
     state = models.BooleanField(default=True)
 
@@ -84,6 +90,7 @@ class OriginSite(models.Model):
 
 
 class Tariff(models.Model):
+    id = models.AutoField(primary_key=True)
     client = models.ForeignKey(Client, on_delete=models.RESTRICT, null=True, blank=True)
     vehicle_type = models.ForeignKey(VehicleType, on_delete=models.RESTRICT)
     material_type = models.ForeignKey(MaterialType, on_delete=models.RESTRICT, null=True, blank=True)

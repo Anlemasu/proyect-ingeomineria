@@ -8,6 +8,7 @@ from apps.advances.models import Advance
 
 
 class Trip(models.Model):
+    id = models.AutoField(primary_key=True)
     invoice = models.ForeignKey(Invoice, on_delete=models.RESTRICT, null=True, blank=True)
     payment = models.ForeignKey(PaymentMethod, on_delete=models.RESTRICT)
     origin_site = models.ForeignKey(OriginSite, on_delete=models.RESTRICT)

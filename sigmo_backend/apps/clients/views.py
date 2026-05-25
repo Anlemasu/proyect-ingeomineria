@@ -2,6 +2,8 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from apps.audit.services import log_action
+from typing import cast
 
 from .models import Client
 from .serializers import ClientSerializer
@@ -42,6 +44,7 @@ class ClientListCreateView(APIView):
 
     def post(self, request):
         if not can_manage_clients(request.user):
+            log_action(request, 'access_denied', 'Client')
             return Response(
                 {'error': 'No tiene permisos para crear clientes.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -49,7 +52,12 @@ class ClientListCreateView(APIView):
         serializer = ClientSerializer(data=request.data)
         if serializer.is_valid():
             # RF-07: el usuario que crea el cliente es el autenticado
-            serializer.save(user=request.user)
+            client = cast(Client, serializer.save(user=request.user))
+            log_action(
+                request, 'create', 'Client',
+                object_id=client.id,
+                new_data=serializer.data,  # type: ignore
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -78,6 +86,7 @@ class ClientDetailView(APIView):
 
     def patch(self, request, pk):
         if not can_manage_clients(request.user):
+            log_action(request, 'access_denied', 'Client', object_id=pk)
             return Response(
                 {'error': 'No tiene permisos para editar clientes.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -88,12 +97,21 @@ class ClientDetailView(APIView):
                 {'error': 'Cliente no encontrado.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        # RF-09: NIT no es editable, lo excluimos si viene en el request
+
+        # Capturar datos anteriores ANTES de modificar
+        previous = dict(ClientSerializer(obj).data)  # type: ignore
+
         data = request.data.copy()
         data.pop('nit', None)
 
         serializer = ClientSerializer(obj, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            log_action(
+                request, 'update', 'Client',
+                object_id=obj.id,
+                previous_data=previous,
+                new_data=dict(serializer.data),  # type: ignore
+            )
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

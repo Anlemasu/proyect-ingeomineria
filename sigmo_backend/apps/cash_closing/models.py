@@ -2,6 +2,7 @@ from django.db import models
 
 
 class DailySummary(models.Model):
+    id = models.AutoField(primary_key=True)
     date = models.DateField()
     total_trips = models.DecimalField(max_digits=15, decimal_places=2)
     total_volume = models.DecimalField(max_digits=15, decimal_places=2)
