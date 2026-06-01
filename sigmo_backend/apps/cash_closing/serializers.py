@@ -1,11 +1,22 @@
 from rest_framework import serializers
-from .models import DailySummary
+from .models import DailySummary, DailySummaryPayment
+
+
+class DailySummaryPaymentSerializer(serializers.ModelSerializer):
+    payment_method_name = serializers.CharField(
+        source='payment_method.name', read_only=True
+    )
+
+    class Meta:
+        model = DailySummaryPayment
+        fields = ['payment_method', 'payment_method_name', 'total']
+
 
 class DailySummarySerializer(serializers.ModelSerializer):
-    """
-    Solo lectura en su totalidad: el cierre lo genera
-    el service de cierre de caja (RF-41), no el frontend.
-    """
+    payment_details = DailySummaryPaymentSerializer(
+        many=True, read_only=True
+    )
+
     class Meta:
         model = DailySummary
         fields = [
@@ -13,10 +24,8 @@ class DailySummarySerializer(serializers.ModelSerializer):
             'date',
             'total_trips',
             'total_volume',
-            'income_cash',
-            'income_transfer',
-            'income_advance',
             'avg_trip_value',
             'total_expenses',
+            'payment_details',
         ]
         read_only_fields = fields

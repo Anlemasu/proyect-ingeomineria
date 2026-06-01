@@ -7,7 +7,7 @@ from apps.audit.services import log_action
 from typing import cast
 from django.db import transaction
 
-from .models import Trip, Transfer
+from .models import Trip
 from .serializers import TripReadSerializer, TripWriteSerializer
 from apps.advances.models import Advance, AdvanceMovement
 

@@ -32,14 +32,3 @@ class Trip(models.Model):
 
     def __str__(self):
         return f'Viaje {self.voucher_num} - {self.client}'
-
-
-class Transfer(models.Model):
-    trip = models.ForeignKey(Trip, on_delete=models.RESTRICT)
-    number = models.IntegerField()
-
-    class Meta:
-        db_table = 'TRANSFER'
-
-    def __str__(self):
-        return f'Transferencia {self.number}'
