@@ -470,3 +470,50 @@ class VehicleListCreateView(APIView):
             )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class PinsDumperImportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not can_manage_masters(request.user):
+            log_action(request, 'access_denied', 'PinsDumper')
+            return Response(
+                {'error': 'No tiene permisos para importar pines.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if 'file' not in request.FILES:
+            return Response(
+                {'error': 'Debe enviar un archivo .xlsx o .csv.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        file = request.FILES['file']
+
+        if not file.name.endswith(('.xlsx', '.csv')):
+            return Response(
+                {'error': 'El archivo debe ser .xlsx o .csv.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        from .services import parse_pins_from_excel
+        result = parse_pins_from_excel(file)
+
+        if not result['success']:
+            return Response(
+                {'error': result.get('error', 'Error al procesar el archivo.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        log_action(
+            request, 'create', 'PinsDumper',
+            new_data={
+                'import_result': {
+                    'created': result['created'],
+                    'updated': result['updated'],
+                    'rejected': result['rejected_count'],
+                }
+            }
+        )
+
+        return Response(result, status=status.HTTP_200_OK)

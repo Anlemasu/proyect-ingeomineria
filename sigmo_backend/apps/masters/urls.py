@@ -5,7 +5,7 @@ from .views import (
     PaymentMethodListCreateView, PaymentMethodDetailView,
     OriginSiteListCreateView, OriginSiteDetailView,
     TariffListCreateView, TariffDetailView,
-    PinsDumperListCreateView,
+    PinsDumperListCreateView, PinsDumperImportView,
     VehicleListCreateView,
 )
 
@@ -27,6 +27,7 @@ urlpatterns = [
     path('tariffs/<int:pk>/', TariffDetailView.as_view(),     name='tariff-detail'),
     # Pines
     path('pins/',  PinsDumperListCreateView.as_view(), name='pins-list'),
+    path('pins/import/',   PinsDumperImportView.as_view(),     name='pins-import'),
     # Vehículos
     path('vehicles/', VehicleListCreateView.as_view(), name='vehicle-list'),
 ]
