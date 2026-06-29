@@ -34,11 +34,18 @@ class AdvanceListCreateView(APIView):
         if serializer.is_valid():
             advance: Advance = serializer.save(user=request.user)  # type: ignore
 
+            try:
+                trips_quantity = int(request.data.get('trips_quantity', 0))
+                if trips_quantity < 0:
+                    trips_quantity = 0
+            except (TypeError, ValueError):
+                trips_quantity = 0
+
             AdvanceMovement.objects.create(
                 advance=advance,
                 type_movement='ingreso',
                 amount=advance.value,
-                trips_quantity=0,
+                trips_quantity=trips_quantity,
                 date=advance.date,
                 description=f'Anticipo registrado. Ref: {advance.transfer_num}',
             )

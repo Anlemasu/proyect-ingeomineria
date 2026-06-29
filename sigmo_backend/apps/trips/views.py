@@ -178,8 +178,12 @@ class TripDetailView(APIView):
 
         # RF-37: justificación obligatoria para ajuste histórico de superusuario
         justification = request.data.get('justification', None)
+        INVOICE_ONLY_FIELDS = {'invoice', 'invoice_pos'}
+        incoming_fields = set(request.data.keys()) - {'justification'}
+        is_invoice_only_patch = incoming_fields.issubset(INVOICE_ONLY_FIELDS)
+
         if request.user.role == 'superuser' and obj.date_register != timezone.now().date():
-            if not justification:
+            if not justification and not is_invoice_only_patch:
                 return Response(
                     {'error': 'Se requiere justificación para modificar registros históricos.'},
                     status=status.HTTP_400_BAD_REQUEST

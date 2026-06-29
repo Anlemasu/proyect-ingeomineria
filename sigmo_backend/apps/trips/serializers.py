@@ -50,6 +50,8 @@ class TripWriteSerializer(serializers.ModelSerializer):
             'client',
             'vehicle',
             'advance',
+            'invoice',
+            'invoice_pos',
             'voucher_num',
             'value',
             'extern_voucher_num',

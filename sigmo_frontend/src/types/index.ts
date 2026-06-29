@@ -1,0 +1,168 @@
+export interface User {
+  id: number
+  name: string
+  email: string
+  username: string
+  role: string
+  role_display: string
+  state: boolean
+}
+
+export interface Client {
+  id: number
+  nit: string
+  name: string
+  abrev_name: string
+  address: string
+  phone: string
+  city: string | null
+  facturation_name: string | null
+  email: string | null
+  validate_certification: boolean | null
+  state: boolean
+  created_by: User | null
+}
+
+export interface VehicleType {
+  id: number
+  name: string
+  capacity: string
+  description: string | null
+  state: boolean
+}
+
+export interface PinsDumper {
+  id: number
+  ambiental_pin: string
+  propietary: string
+  address: string
+  phone: string
+  email: string
+  plaque: string
+  expedition_site: string
+  model: string
+  capacity: string
+  driver: string
+  date_register: string
+  state: boolean
+}
+
+export interface Vehicle {
+  id: number
+  plaque: string
+  vehicle_type: number
+  vehicle_type_detail: VehicleType
+  dumper: number | null
+  dumper_detail: PinsDumper | null
+}
+
+export interface MaterialType {
+  id: number
+  name: string
+  description: string | null
+  state: boolean
+}
+
+export interface PaymentMethod {
+  id: number
+  name: string
+  is_advance: boolean
+  state: boolean
+}
+
+export interface OriginSite {
+  id: number
+  name: string
+  state: boolean
+}
+
+export interface Tariff {
+  id: number
+  client: number | null
+  client_name: string | null
+  vehicle_type: number
+  vehicle_type_name: string
+  material_type: number | null
+  material_type_name: string | null
+  value: string
+  start_date: string
+  end_date: string | null
+  state: boolean
+}
+
+export interface LoginResponse {
+  access: string
+  refresh: string
+  user: User
+}
+
+export interface ApiError {
+  error?: string
+  detail?: string
+  [key: string]: unknown
+}
+
+export interface Invoice {
+  id: number
+  user: number
+  number: string
+}
+
+export interface Trip {
+  id: number
+  voucher_num: number
+  date: string
+  date_register: string
+  value: string
+  extern_voucher_num: string | null
+  invoice_pos: number | null
+  certification_state: boolean | null
+  certification_num: string | null
+  state: boolean
+  client_detail: Client
+  payment_detail: PaymentMethod
+  vehicle_detail: Vehicle
+  material_type_detail: MaterialType
+  origin_site_detail: OriginSite
+  advance: number | null
+  invoice: number | null
+  summary: number | null
+}
+
+export interface AdvanceMovement {
+  id: number
+  advance: number
+  trip: number | null
+  type_movement: 'ingreso' | 'egreso'
+  amount: string
+  trips_quantity: number
+  date: string
+  description: string | null
+}
+
+export interface Advance {
+  id: number
+  client: number
+  client_detail: Client
+  user: number
+  value: string
+  transfer_num: number
+  date: string
+  proforma_number: number | null
+  observations: string | null
+  available_balance: number
+  movements: AdvanceMovement[]
+}
+
+export interface AdvanceBalance {
+  client_id: number
+  balance: number
+}
+
+export interface ImportResult {
+  success: boolean
+  created: number
+  updated: number
+  rejected_count: number
+  rejected: Array<{ fila: number; placa?: string; motivo: string }>
+}
