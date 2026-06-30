@@ -331,3 +331,89 @@ El endpoint `GET /api/users/` es solo-superusuario. El rol `auditor` recibiría 
 - Implementar refresh token automático (actualmente el token de 8h expira sin renovación silenciosa)
 - Considerar paginación server-side para clientes y tarifas cuando el volumen crezca
 - Agregar tests con Vitest + Vue Test Utils para los composables críticos (useAuth, usePermissions)
+
+
+---
+
+## Parte 6 — Gastos
+
+### Análisis del backend
+
+**Modelo `Expense` (apps/expenses/models.py):**
+Campos: `id`, `user` (FK → User, RESTRICT), `value` (DecimalField max_digits=15 decimales=2), `description` (TextField, sin max_length), `date` (DateField).
+**Sin campo `category`** — el modelo no tiene categoría en absoluto.
+
+**Serializer `ExpenseSerializer`:**
+Campos expuestos: `id`, `user` (int FK, read-only), `value` (string decimal), `description`, `date`.
+No hay `user_detail` anidado — el serializador solo devuelve el ID del usuario. Por eso la columna "Usuario" no se incluye en la tabla (no hay nombre legible disponible sin un campo extra en el serializer).
+
+**Endpoints:**
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/api/expenses/` | Todos (solo `IsAuthenticated`) | Lista con filtros opcionales |
+| POST | `/api/expenses/` | superuser, cashier, commercial_admin | Crear gasto |
+| GET | `/api/expenses/{id}/` | Todos | Detalle |
+| PATCH | `/api/expenses/{id}/` | superuser, cashier, commercial_admin | Editar (sin restricción de fecha) |
+
+**Filtros del listado:** `date` (fecha exacta), `date_from` (desde), `date_to` (hasta). Sin paginación — devuelve todos los resultados.
+
+**Campo `category`:** No existe. La ERS menciona categorías pero el backend no las implementa. Se omite del formulario y la tabla.
+
+**Edición/eliminación:** PATCH soportado, sin restricción de día. No existe endpoint de eliminación ni de anulación — los gastos son permanentes.
+
+**Restricción de mismo día:** No existe en el backend. Cualquier gasto puede editarse en cualquier momento por los roles con permiso.
+
+**Permisos GET:** `IsAuthenticated` sin restricción de rol → todos los roles pueden ver gastos.
+**Permisos POST/PATCH:** `can_manage_expenses` = `['superuser', 'cashier', 'commercial_admin']`.
+
+**Alineación con CashClosingPage:**
+CashClosingPage usa `cashClosingApi.today()` que devuelve `total_expenses` como suma agregada calculada server-side. **No carga la lista individual de gastos.** No existe solapamiento de query keys. Al registrar/editar un gasto desde ExpensesPage se invalida `['cash-closing-today']` para que el panel de cierre de caja refleje el cambio si está abierto. CashClosingPage también tiene `refetchInterval: 30_000` como respaldo.
+
+### Módulo implementado
+
+**Archivos creados/modificados:**
+- `sigmo_frontend/src/api/expenses.api.ts` — creado (`list`, `create`, `detail`, `update`)
+- `sigmo_frontend/src/types/index.ts` — añadida interfaz `Expense`
+- `sigmo_frontend/src/constants/permissions.ts` — añadido módulo `expenses`
+- `sigmo_frontend/src/pages/expenses/ExpensesPage.vue` — creado
+- `sigmo_frontend/src/router/index.ts` — ruta `/expenses` apunta a `ExpensesPage.vue`, allowedRoles actualizado a todos los roles
+
+**Formulario de registro:**
+Campos: Descripción (texto), Valor (CurrencyInput COP), Fecha (date input, default hoy).
+Sin campo categoría (no existe en el modelo). Sin restricción de fecha pasada.
+
+**Modos de filtro:**
+- **Hoy** — envía `date=<hoy>` (modo por defecto)
+- **Fecha específica** — muestra date picker, envía `date=<seleccionada>`
+- **Rango de fechas** — muestra dos date pickers, envía `date_from` + `date_to`
+
+**Columnas de la tabla:** Fecha, Descripción, Valor, Acciones.
+La columna "Usuario" se omite porque el serializer no devuelve nombre de usuario (solo FK ID).
+
+**Edición:** Modal con los mismos campos del formulario. Sin restricción de fecha. Botón de lápiz visible solo para roles con permiso `edit` en `expenses`.
+
+**Footer:** Total de gastos + suma en COP para el conjunto filtrado actual.
+
+### Seguridad implementada
+
+| Medida | Estado |
+|--------|--------|
+| `canCreate('expenses')` controla visibilidad del formulario de registro | ✅ |
+| `canEdit('expenses')` controla visibilidad del botón de edición por fila | ✅ |
+| Ruta `/expenses` incluye todos los roles en `allowedRoles` (acceso de vista es para todos) | ✅ |
+| Módulo `expenses` añadido a `PERMISSIONS` con roles exactos del backend | ✅ |
+| Sin `.default()` en esquemas Zod | ✅ |
+| Todos los strings transformados con `.transform(s => s.trim())` | ✅ |
+| `value` validado como número positivo | ✅ |
+| Botón submit deshabilitado + spinner mientras `isSubmitting`/`isEditSubmitting` | ✅ |
+| Errores via `getApiErrorMessage()` | ✅ |
+| Sin `console.log` en código final | ✅ |
+
+### Pendiente para Parte 7
+
+**Módulos restantes:**
+- Reportes (`/reports/general`, `/reports/daily`, `/reports/range`) — analizar `apps/reports/`
+
+**Gaps de backend encontrados:**
+- `ExpenseSerializer` no incluye `user_detail` anidado → columna "Usuario" no disponible en la tabla. Corrección mínima: añadir `user_detail = UserReadSerializer(source='user', read_only=True)` al serializer.
+- No existe filtro por usuario en `GET /api/expenses/` — no es bloqueante para Parte 7.

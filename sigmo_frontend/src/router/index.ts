@@ -118,8 +118,8 @@ const router = createRouter({
         {
           path: 'expenses',
           name: 'expenses',
-          component: { ...UnderConstruction, props: { module: 'Gastos' } },
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier', 'commercial_admin'] },
+          component: () => import('@/pages/expenses/ExpensesPage.vue'),
+          meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier', 'commercial_admin', 'accountant', 'auditor'] },
         },
 
         // ── Reportes ───────────────────────────────────────────────────────────

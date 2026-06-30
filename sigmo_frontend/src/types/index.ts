@@ -206,6 +206,14 @@ export interface AuditLogEntry {
   timestamp: string
 }
 
+export interface Expense {
+  id: number
+  user: number
+  value: string
+  description: string
+  date: string
+}
+
 export interface ImportResult {
   success: boolean
   created: number

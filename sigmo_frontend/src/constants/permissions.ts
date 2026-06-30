@@ -19,6 +19,12 @@ export const PERMISSIONS = {
     edit: [ROLES.SUPERUSER],
     delete: [],
   },
+  expenses: {
+    view: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.CASHIER, ROLES.ACCOUNTANT, ROLES.AUDITOR],
+    create: [ROLES.SUPERUSER, ROLES.CASHIER, ROLES.COMMERCIAL_ADMIN],
+    edit: [ROLES.SUPERUSER, ROLES.CASHIER, ROLES.COMMERCIAL_ADMIN],
+    delete: [],
+  },
 } as const
 
 export type PermissionModule = keyof typeof PERMISSIONS
