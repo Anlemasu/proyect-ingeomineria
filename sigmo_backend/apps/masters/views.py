@@ -301,10 +301,16 @@ class TariffListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        client_id = request.query_params.get('client')
+        client_id      = request.query_params.get('client')
+        vehicle_type   = request.query_params.get('vehicle_type')
+        state          = request.query_params.get('state')
         tariffs = Tariff.objects.all().order_by('client', 'vehicle_type')
         if client_id:
             tariffs = tariffs.filter(client_id=client_id)
+        if vehicle_type:
+            tariffs = tariffs.filter(vehicle_type_id=vehicle_type)
+        if state is not None:
+            tariffs = tariffs.filter(state=state.lower() == 'true')
         serializer = TariffSerializer(tariffs, many=True)
         return Response(serializer.data)
 

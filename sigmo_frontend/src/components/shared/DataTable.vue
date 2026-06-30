@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T extends Record<string, unknown>">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
   useVueTable,
   getCoreRowModel,
@@ -21,6 +21,7 @@ const props = defineProps<{
 const globalFilter = ref('')
 const sorting = ref<SortingState>([])
 const pageSize = ref(10)
+const pageIndex = ref(0)
 
 const table = useVueTable({
   get data() { return props.data },
@@ -32,16 +33,29 @@ const table = useVueTable({
   state: {
     get globalFilter() { return globalFilter.value },
     get sorting() { return sorting.value },
-    get pagination() { return { pageIndex: 0, pageSize: pageSize.value } },
+    get pagination() { return { pageIndex: pageIndex.value, pageSize: pageSize.value } },
   },
   onSortingChange: (updater) => {
     sorting.value = typeof updater === 'function' ? updater(sorting.value) : updater
   },
-  onGlobalFilterChange: (val) => { globalFilter.value = val },
+  onGlobalFilterChange: (val) => {
+    globalFilter.value = val
+    pageIndex.value = 0
+  },
+  onPaginationChange: (updater) => {
+    const next = typeof updater === 'function'
+      ? updater({ pageIndex: pageIndex.value, pageSize: pageSize.value })
+      : updater
+    pageIndex.value = next.pageIndex
+    pageSize.value = next.pageSize
+  },
 })
 
-const pageIndex = computed(() => table.getState().pagination.pageIndex)
 const pageCount = computed(() => table.getPageCount())
+
+// Reset to first page when page size or data changes
+watch(pageSize, () => { pageIndex.value = 0 })
+watch(() => props.data, () => { pageIndex.value = 0 })
 </script>
 
 <template>

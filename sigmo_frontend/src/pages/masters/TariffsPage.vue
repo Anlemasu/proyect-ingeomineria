@@ -57,9 +57,9 @@ function getCellValue(clientId: number | null, typeId: number): number | null {
   return t ? parseFloat(t.value) : null
 }
 
-function setCellValue(clientId: number | null, typeId: number, val: number | null) {
+function setCellValue(clientId: number | null, typeId: number, val: number | null | undefined) {
   const key = cellKey(clientId, typeId)
-  editValues.value[key] = val
+  editValues.value[key] = val ?? null
   dirtyKeys.value.add(key)
 }
 

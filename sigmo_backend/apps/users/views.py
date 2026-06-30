@@ -10,7 +10,7 @@ from apps.audit.services import log_action
 from typing import cast
 
 from .models import User
-from .serializers import UserReadSerializer, UserCreateSerializer, ChangePasswordSerializer
+from .serializers import UserReadSerializer, UserCreateSerializer, ChangePasswordSerializer, ResetPasswordByAdminSerializer
 
 
 def is_superuser(user):
@@ -181,6 +181,41 @@ class UserDetailView(APIView):
                 new_data=dict(serializer.data),  # type: ignore
             )
             return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResetPasswordAdminView(APIView):
+    """El superusuario restablece la contraseña temporal de otro usuario (RF-01)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not is_superuser(request.user):
+            log_action(request, 'access_denied', 'User', object_id=pk)
+            return Response(
+                {'error': 'No tiene permisos para restablecer contraseñas.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        try:
+            target_user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Usuario no encontrado.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = ResetPasswordByAdminSerializer(data=request.data)
+        if serializer.is_valid():
+            new_password: str = serializer.validated_data['new_password']
+            target_user.set_password(new_password)
+            target_user.save()
+            log_action(
+                request, 'update', 'User',
+                object_id=target_user.id,
+                new_data={'action': 'password_reset_by_admin', 'target_username': target_user.username},
+            )
+            return Response(
+                {'message': 'Contraseña restablecida correctamente.'},
+                status=status.HTTP_200_OK
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

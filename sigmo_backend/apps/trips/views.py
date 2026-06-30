@@ -73,12 +73,14 @@ class TripListCreateView(APIView):
             raw_balance = advance_data.get('available_balance') or 0
             balance = float(raw_balance)  # type: ignore
             if float(value) > balance:  # type: ignore
-                return Response({
-                    'error': 'Saldo insuficiente.',
-                    'saldo_disponible': balance,
-                    'valor_viaje': str(value),
-                    'diferencia': str(float(value) - balance),  # type: ignore
-                }, status=status.HTTP_400_BAD_REQUEST)
+                force = str(request.data.get('force', '')).lower() == 'true'
+                if not force or request.user.role != 'superuser':
+                    return Response({
+                        'error': 'Saldo insuficiente.',
+                        'saldo_disponible': balance,
+                        'valor_viaje': str(value),
+                        'diferencia': str(float(value) - balance),  # type: ignore
+                    }, status=status.HTTP_400_BAD_REQUEST)
 
         # Solo entrar al atomic para las escrituras
         try:

@@ -109,3 +109,20 @@ class ChangePasswordSerializer(serializers.Serializer):
                 {'current_password': 'La contraseña actual es incorrecta.'}
             )
         return data
+
+
+# ── Reset de contraseña por el Superusuario (RF-01) ───────────────────────────
+class ResetPasswordByAdminSerializer(serializers.Serializer):
+    """Permite al superusuario establecer una contraseña temporal a cualquier usuario."""
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_new_password(self, value):
+        if not any(c.isupper() for c in value):
+            raise serializers.ValidationError(
+                'La contraseña debe contener al menos una letra mayúscula.'
+            )
+        if not any(c.isdigit() for c in value):
+            raise serializers.ValidationError(
+                'La contraseña debe contener al menos un número.'
+            )
+        return value

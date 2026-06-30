@@ -2,7 +2,7 @@ import api from './axiosInstance'
 import type { Tariff } from '@/types'
 
 export const tariffsApi = {
-  list: (params?: { client?: number }) =>
+  list: (params?: { client?: number; vehicle_type?: number; state?: boolean }) =>
     api.get<Tariff[]>('/masters/tariffs/', { params }),
 
   get: (id: number) =>

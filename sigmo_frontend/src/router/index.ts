@@ -40,19 +40,19 @@ const router = createRouter({
         {
           path: 'trips',
           name: 'trips',
-          component: { ...UnderConstruction, props: { module: 'Registro de Viajes' } },
+          component: () => import('@/pages/trips/TripsPage.vue'),
           meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier'] },
         },
         {
           path: 'trips/adjustments',
           name: 'trips-adjustments',
-          component: { ...UnderConstruction, props: { module: 'Ajustes del Día' } },
+          component: () => import('@/pages/trips/AdjustmentsPage.vue'),
           meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier', 'commercial_admin'] },
         },
         {
           path: 'cash-closing',
           name: 'cash-closing',
-          component: { ...UnderConstruction, props: { module: 'Cierre de Caja' } },
+          component: () => import('@/pages/cash-closing/CashClosingPage.vue'),
           meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier'] },
         },
 
@@ -146,13 +146,13 @@ const router = createRouter({
         {
           path: 'admin/users',
           name: 'admin-users',
-          component: { ...UnderConstruction, props: { module: 'Gestión de Usuarios' } },
+          component: () => import('@/pages/admin/UsersPage.vue'),
           meta: { requiresAuth: true, allowedRoles: ['superuser'] },
         },
         {
           path: 'admin/audit-log',
           name: 'admin-audit-log',
-          component: { ...UnderConstruction, props: { module: 'Log de Auditoría' } },
+          component: () => import('@/pages/admin/AuditLogPage.vue'),
           meta: { requiresAuth: true, allowedRoles: ['superuser', 'auditor'] },
         },
       ],

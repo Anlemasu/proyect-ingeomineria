@@ -1,9 +1,11 @@
+export type UserRole = 'superuser' | 'commercial_admin' | 'cashier' | 'accountant' | 'auditor'
+
 export interface User {
   id: number
   name: string
   email: string
   username: string
-  role: string
+  role: UserRole
   role_display: string
   state: boolean
 }
@@ -157,6 +159,51 @@ export interface Advance {
 export interface AdvanceBalance {
   client_id: number
   balance: number
+}
+
+export interface DailySummaryPayment {
+  payment_method: number
+  payment_method_name: string
+  total: string
+}
+
+export interface DailySummary {
+  id: number
+  date: string
+  total_trips: number
+  total_volume: string
+  avg_trip_value: string
+  total_expenses: string
+  payment_details: DailySummaryPayment[]
+}
+
+export interface TodaySummary {
+  date: string
+  already_closed: boolean
+  total_trips: number
+  total_volume: string
+  avg_trip_value: string
+  total_expenses: string
+  payment_details: Array<{
+    payment_method: number
+    payment_method_name: string
+    total: number
+  }>
+}
+
+export interface AuditLogEntry {
+  id: number
+  user: number | null
+  user_name: string
+  action: string
+  action_display: string
+  model_name: string
+  object_id: number | null
+  previous_data: Record<string, unknown> | null
+  new_data: Record<string, unknown> | null
+  ip_address: string | null
+  justification: string | null
+  timestamp: string
 }
 
 export interface ImportResult {
