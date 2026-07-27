@@ -417,3 +417,314 @@ La columna "Usuario" se omite porque el serializer no devuelve nombre de usuario
 **Gaps de backend encontrados:**
 - `ExpenseSerializer` no incluye `user_detail` anidado → columna "Usuario" no disponible en la tabla. Corrección mínima: añadir `user_detail = UserReadSerializer(source='user', read_only=True)` al serializer.
 - No existe filtro por usuario en `GET /api/expenses/` — no es bloqueante para Parte 7.
+
+---
+
+## Parte 7 — Análisis: Reporte Diario
+
+### Parámetros de consulta confirmados
+
+| Endpoint | Parámetros soportados | Filtra sobre |
+|----------|------------------------|---------------|
+| `GET /api/trips/` | `client`, `date`, `date_from`, `date_to`, `state`, `invoice` | campo `date` (fecha del viaje, NO `date_register`) |
+| `GET /api/expenses/` | `date`, `date_from`, `date_to` | campo `date` — igual que Parte 6 |
+| `GET /api/advances/` | solo `client` | **sin filtro de fecha**, ni a nivel de anticipo ni de movimiento |
+| `GET /api/cash-closing/today/` | ninguno — siempre usa `timezone.localdate()` server-side | no acepta fecha arbitraria |
+| `GET /api/cash-closing/` | ninguno | lista cierres ya ejecutados (`DailySummary`), no garantizado para cualquier fecha |
+
+Importante: el filtro `date` de `/api/trips/` opera sobre `Trip.date` (fecha de negocio del viaje), no sobre `Trip.date_register` (fecha de registro en sistema, siempre "hoy" al crear). El reporte diario debe consultar por `date`, igual que lo hacen los filtros de Gastos.
+
+### Decisión: resumen calculado 100% en frontend
+
+No existe un endpoint de "resumen diario para fecha arbitraria". `DailySummaryTodayView` está hardcodeado a `timezone.localdate()` y `DailySummaryListView` solo devuelve cierres ya ejecutados (que pueden no existir para la fecha consultada, y de todas formas no incluyen el detalle línea por línea de viajes/gastos que la vista necesita). Decisión: los 3 `useQuery` (viajes, gastos — sin tercera llamada, ver abajo) se disparan en paralelo con la fecha seleccionada, y el resumen (totales, desglose por medio de pago, saldo neto) se calcula client-side a partir de esos datos, igual que ya hace `TripsPage.vue` con `totalValue`/`totalActive`.
+
+### Decisión: anticipos consumidos derivados de los viajes, no de un tercer endpoint
+
+No existe endpoint de movimientos de anticipo filtrable por fecha (`GET /api/advances/` sólo filtra por `client` y devuelve `movements` anidados sin filtro de fecha). Pedir todos los anticipos y recorrer sus `movements` para filtrar por fecha en el cliente implicaría N llamadas adicionales sin necesidad. Los campos requeridos por la sección (Cliente, Anticipo ID, Valor Descontado, N° Viaje asociado) ya están disponibles directamente en cada `Trip` con `advance !== null`: `client_detail.name`, `advance`, `value`, `voucher_num`. Decisión: la sección "Anticipos consumidos" se deriva del mismo array de viajes del día ya cargado (filtrando `trip.advance !== null`), sin llamada adicional al backend.
+
+Nota de integridad: `TripDetailView.patch` no reversa el `AdvanceMovement` cuando un viaje con anticipo es anulado (gap ya existente en el backend, fuera de alcance de esta parte). El reporte no oculta viajes anulados con anticipo en esta sección para ser fiel al movimiento real registrado en la base de datos.
+
+### Campos de Trip confirmados (`TripsPage.vue` + `types/index.ts`)
+
+`voucher_num`, `date_register`, `date`, `value`, `extern_voucher_num`, `invoice`, `invoice_pos`, `state`, `client_detail.name`, `vehicle_detail.plaque`, `vehicle_detail.dumper_detail.ambiental_pin`, `material_type_detail.name`, `vehicle_detail.vehicle_type_detail.name`, `origin_site_detail.name`, `payment_detail.name` / `payment_detail.is_advance`.
+
+### Columnas de Gastos — mismo gap ya documentado en Parte 6
+
+El modelo `Expense` no tiene campo `category` (no existe en absoluto en el backend) y `ExpenseSerializer` no expone `user_detail` anidado, solo el FK `user` como número. Decisión: se omite la columna "Categoría" (no hay dato que mostrar) y la columna "Usuario" muestra únicamente el ID numérico (`#<id>`), documentando el mismo gap ya señalado en la Parte 6.
+
+### Hallazgo: SheetJS (xlsx) NO está instalado
+
+El prompt asumía que SheetJS ya era una dependencia del proyecto (usado en la "exportación CSV de Anticipos" de la Parte 2). Se verificó `package.json` (sin entrada `xlsx`) y se buscó `XLSX`/`sheet_to_json`/`writeFile` en todo `src/` — cero resultados. La exportación existente en `AdvancesPage.vue` (`downloadCsv()`) es un generador manual de Blob CSV, no SheetJS. Esto entra en conflicto directo con la restricción "no instalar paquetes nuevos" del mismo prompt. Se consultó al usuario, que eligió instalar la dependencia real (`npm install xlsx --legacy-peer-deps`, versión `0.18.5`).
+
+Nota: `npm install` requiere `--legacy-peer-deps` en este proyecto por un conflicto de peer-dependency preexistente y no relacionado (`@vee-validate/zod@4.15.1` pide `zod@^3.24.0`, el proyecto usa `zod@4.4.3`). No es algo introducido por esta parte.
+
+`npm audit` reporta 2 vulnerabilidades "high" en `xlsx@0.18.5` (Prototype Pollution y ReDoS) — son CVEs conocidos del **parseo** de archivos `.xlsx` no confiables; SheetJS no publicó el fix en el registro npm (solo en su propio CDN). Riesgo aceptado: el uso en este módulo es exclusivamente de **escritura** (`XLSX.utils.aoa_to_sheet` + `XLSX.writeFile`), nunca se parsea un archivo `.xlsx` subido por el usuario con este paquete, por lo que las vulnerabilidades reportadas no aplican a este flujo.
+
+Limitación conocida: la build gratuita/community de `xlsx` no soporta de forma confiable el guardado de estilos de celda (negrita, colores) al escribir `.xlsx` — es una función reservada a SheetJS Pro. El requisito "header row bold" de la Hoja 2 (Viajes) no se implementó por esta limitación; los encabezados quedan como texto plano.
+
+### Módulo implementado
+
+**Archivos creados/modificados:**
+- `sigmo_frontend/package.json` — añadida dependencia `xlsx@0.18.5`
+- `sigmo_frontend/src/types/index.ts` — añadida interfaz `DailyReportData` (con `advancesConsumed: Trip[]`, no `AdvanceMovement[]`, porque se deriva de viajes — ver decisión arriba)
+- `sigmo_frontend/src/utils/printDailyReport.ts` — creado, exporta `printDailyReport(date, data)` (mismo patrón que `printVoucher.ts`: ventana nueva, `document.write`, `print()`, `close()`)
+- `sigmo_frontend/src/utils/exportDailyReportExcel.ts` — creado, exporta `exportDailyReportExcel(date, data)`, genera un workbook de 4 hojas (`Resumen`, `Viajes`, `Gastos`, `Anticipos Consumidos`) con SheetJS
+- `sigmo_frontend/src/pages/reports/DailyReportPage.vue` — creado
+- `sigmo_frontend/src/router/index.ts` — ruta `reports/daily` apunta a `DailyReportPage.vue` (ya tenía `allowedRoles` correctos para RF-43, solo se reemplazó el componente `UnderConstruction`)
+- `.claude/launch.json` — creado para poder previsualizar el frontend con el navegador embebido
+
+**Nota:** `navigation.ts` y `router/index.ts` ya tenían la entrada "Reporte Diario" con los 5 roles correctos (incluye `cashier`) desde antes — no requirió cambios, solo se verificó que coincidiera con RF-43.
+
+**Secciones renderizadas y su origen de datos:**
+- Tarjetas resumen + desglose por medio de pago: calculadas client-side a partir de `tripsApi.list({ date })` (solo viajes con `state=true`) y `expensesApi.list({ date })`
+- Viajes del día: `DataTable` con **todos** los viajes de la fecha (activos y anulados, para que la columna Estado tenga sentido); el total de "Total Recaudado" excluye los anulados
+- Gastos del día: tabla simple, sin columna "Categoría" (no existe en el backend) y "Usuario" solo con el ID numérico (mismo gap de Parte 6)
+- Anticipos consumidos: derivados de los mismos viajes ya cargados (`trip.advance !== null`), sin llamada adicional
+
+**Visibilidad por rol (`usePermissions().hasRole('cashier')`):**
+- Columna "Valor" de la tabla de viajes: oculta si el usuario es `cashier`, visible para el resto
+- Sección "Anticipos consumidos": oculta completamente si el usuario es `cashier`
+- Ambas reglas verificadas por inspección de código contra el patrón ya usado en `TripsPage.vue` (`isSuperuser = computed(() => authStore.user?.role === ...)`); no se pudo iniciar sesión con un usuario `cashier` real durante las pruebas (existe `cajero1` en el backend de prueba pero no se dispuso de su contraseña, y resetear la contraseña de otro usuario o anular datos ajenos no se hizo sin autorización explícita)
+
+**Exportación:**
+- Excel: 4 hojas reales vía SheetJS, `value` siempre incluido (independiente del rol, ya que el export es para contabilidad)
+- PDF: ventana de impresión HTML en horizontal (`@page { size: A4 landscape }`), incluye las 4 secciones + `value` siempre visible
+
+**Carga automática y en paralelo:** al entrar a la página se dispara el reporte de "hoy" automáticamente (`reportDate` inicializado a la fecha actual); los `useQuery` de viajes y gastos corren en paralelo (dos hooks independientes, TanStack Query los resuelve concurrentemente sin `await` secuencial)
+
+**Estado vacío del día:** si viajes + gastos + anticipos consumidos están todos vacíos, se reemplaza el bloque de tarjetas/tablas por un estado centrado ("Sin actividad registrada para el DD/MM/YYYY")
+
+### Verificación en navegador
+
+Probado en vivo contra el backend real (`localhost:8000`) con usuario `admin` (`superuser`):
+- Estado vacío del día confirmado (sin datos para la fecha)
+- Se registró un viaje de prueba (#1025, pago Efectivo, placa TST001) vía formulario real de `/trips`, y un gasto de prueba (id=34, "Combustible prueba reporte diario", $50.000) vía API directa
+- El reporte reflejó correctamente: 2 viajes (incluyendo el #1026 preexistente pagado con Anticipo), desglose Efectivo/Anticipo, gasto de $50.000, saldo neto $455.000, y la sección "Anticipos consumidos" con cliente, ID de anticipo, valor descontado y N° de viaje
+- Columna "Valor" y sección "Anticipos consumidos" visibles para `superuser`, como se espera (`hasRole('cashier')` = false)
+- Exportar Excel y Exportar PDF ejecutados sin errores de consola
+- Sin errores de consola en ningún momento de la navegación
+
+**Hallazgo real durante la verificación (no relacionado con Gastos):** al navegar con recargas de página completas (F5 / URL directa), `usePermissions()` empezó a devolver `false` para todo (sin `Nuevo cliente`, sin `Registrar gasto`, sidebar vacío), aunque la sesión seguía autenticada. Se investigó la causa: `authStore.initialize()` (`sigmo_frontend/src/stores/auth.store.ts:32`) solo restaura el **token** desde `localStorage` al arrancar la app — nunca vuelve a poblar `user` (no existe llamada a un endpoint tipo `/me/`). `user` solo se setea en memoria dentro de `login()`. Resultado: cualquier recarga completa de página deja `isAuthenticated=true` pero `user=null`, degradando silenciosamente todo el UI basado en rol (botones de creación, sidebar completo, restricciones de fecha, etc.) sin cerrar la sesión ni mostrar error. Se confirmó re-logueando y navegando solo con clicks in-app (sin recarga): con `user` poblado, `ExpensesPage.vue` muestra el formulario de registro correctamente para `superuser` — **no hay ningún bug en `ExpensesPage.vue`**, la causa raíz está en `auth.store.ts` y es anterior a esta parte. Está fuera de alcance tocar el auth store en esta parte (instrucción explícita del prompt), así que se documenta aquí y se reporta como tarea separada.
+
+**Datos de prueba sin limpiar:** el gasto de prueba (`id=34`) no se pudo eliminar — `Expense` no tiene endpoint de borrado ni anulación (gap ya documentado en Parte 6); el intento de anular el viaje de prueba #1025 fue bloqueado por el clasificador de permisos del entorno, así que también queda visible en `/trips`.
+
+### Seguridad implementada
+
+| Medida | Estado |
+|--------|--------|
+| Ruta `/reports/daily` accesible a los 5 roles (RF-43) | ✅ Ya estaba correcto en `router/index.ts` y `navigation.ts`, verificado sin cambios |
+| Columna "Valor" oculta para `cashier` vía `usePermissions().hasRole()` | ✅ Implementado; verificado en navegador que se muestra para `superuser` (no se pudo probar `cashier` real, ver limitación abajo) |
+| Sección "Anticipos consumidos" oculta para `cashier` | ✅ Implementado; misma limitación de verificación que la fila anterior |
+| Botones de exportación visibles para todos los roles (RF-45) | ✅ Sin `v-if` de rol sobre los botones |
+| Página 100% de solo lectura, sin acciones de escritura | ✅ Ningún formulario ni mutación en `DailyReportPage.vue` |
+| Errores de backend vía `getApiErrorMessage()` | ✅ Usado en el catch de la exportación Excel |
+| Parámetros enviados al backend limitados a los confirmados en el análisis (`date` únicamente) | ✅ Sin parámetros no soportados |
+| Sin `console.log` en el código final | ✅ |
+| Value siempre incluido en exports (Excel/PDF) independiente del rol, por ser para contabilidad | ✅ |
+
+### Pendiente para Parte 8
+
+- **RF-42 Reporte General** — analizar qué agregaciones expone (o no) el backend más allá de lo ya usado aquí
+- **RF-44 Reporte por Rango de Fechas** — reutilizable en gran parte con los mismos endpoints (`date_from`/`date_to` ya confirmados en Trips y Expenses en esta parte)
+- **RF-46 Dashboard**
+
+---
+
+## Parte 8 — Análisis: Consulta General de Viajes
+
+### Campos reales de `TripReadSerializer` (verificado en `trips/serializers.py` + `trips/models.py`)
+
+```
+id, voucher_num, date, date_register, value, extern_voucher_num, invoice_pos,
+certification_state, certification_num, state,
+client_detail, payment_detail, vehicle_detail, material_type_detail, origin_site_detail,
+advance, invoice, summary
+```
+
+`Trip` (modelo) tiene FKs a: `invoice`, `payment`, `origin_site`, `material_type`, `client`, `summary` (→ `DailySummary`), `vehicle`, `advance`. **No tiene FK a `User`** — no existe ningún campo de "quién registró el viaje" en el modelo ni en el serializer.
+
+### Correcciones al `COLUMN_CONFIG` propuesto en el prompt
+
+El prompt trae algunas rutas de acceso aproximadas; se corrigieron contra la forma real anidada de `Trip` (`types/index.ts`):
+
+| Columna del prompt | Ruta propuesta | Ruta real corregida |
+|---|---|---|
+| PIN Ambiental | `ambiental_pin` | `vehicle_detail.dumper_detail.ambiental_pin` |
+| Tipo de vehículo | `vehicle_type_detail.name` | `vehicle_detail.vehicle_type_detail.name` |
+| Capacidad (m³) | `vehicle_type_detail.capacity` | `vehicle_detail.vehicle_type_detail.capacity` |
+| N° Factura | `invoice_number` | No existe anidado — `Trip.invoice` es solo un ID (`number \| null`). Se resuelve con un lookup client-side contra `GET /api/invoices/` (`InvoiceSerializer` expone `id`, `user`, `number`), construyendo un `Map<id, number>` una sola vez al montar la página (misma lista para todos los roles que puedan ver la columna) |
+
+### Columnas omitidas (no existen en el backend)
+
+- **`observations`** — no existe ningún campo de observaciones en el modelo `Trip` ni en `TripReadSerializer`/`TripWriteSerializer`. El campo "Observaciones" del formulario de `TripsPage.vue` es **efímero**: se usa solo para el vale impreso (`printVoucher(trip, pin, values.observations)`) y **nunca se envía al backend** (verificado: el payload de `tripsApi.create()` en `TripsPage.vue` no incluye `observations`). No hay ningún dato que consultar — columna omitida por completo.
+- **`user_registered`** ("Usuario que registró") — no existe FK a `User` en el modelo `Trip`. Columna omitida.
+
+### Parámetros de consulta soportados por `GET /api/trips/`
+
+Confirmado en `TripListCreateView.get`: `client` (ID exacto), `date` (fecha exacta), `date_from`, `date_to` (rango sobre el campo `date`), `state` (`'true'`/`'false'`), `invoice` (ID exacto de factura).
+
+**No soportados por el backend** (se filtran 100% client-side sobre el resultado ya traído con los params de arriba):
+- **Placa** — no hay filtro de placa en `/api/trips/` (el filtro por placa solo existe en `/api/masters/vehicles/`, un endpoint distinto). Se hace `includes()` case-insensitive sobre `vehicle_detail.plaque`.
+- **Tipo de material** — no hay parámetro `material_type`. Filtro por igualdad de ID sobre `material_type_detail.id`.
+- **Tipo de vehículo** — no hay parámetro `vehicle_type`. Filtro por igualdad de ID sobre `vehicle_detail.vehicle_type_detail.id`.
+- **Medio de pago** — no hay parámetro `payment`. Filtro por igualdad de ID sobre `payment_detail.id`.
+- **N° Vale** — no hay parámetro `voucher_num`. Comparación exacta client-side.
+- **Estado de facturación** (Facturado/Sin facturar) — el único parámetro relacionado es `invoice=<id exacto>`, que sirve para buscar viajes de UNA factura específica, no para "tiene factura sí/no". Se resuelve client-side: Facturado = `trip.invoice !== null`, Sin facturar = `trip.invoice === null`.
+
+**Sí soportados server-side** y usados como tal: `date_from`, `date_to`, `client`, `state`.
+
+### `columnVisibility` de TanStack Table — no se usaba en el proyecto
+
+Se revisó `DataTable.vue` (componente compartido usado en 12+ páginas): implementa `sorting`, `globalFilter` y `pagination`, pero **no** implementa `columnVisibility` ni filtros por columna (`columnFilters`), ni fila de footer. Añadir estas features a `DataTable.vue` arriesgaría romper las demás páginas que lo consumen. Decisión: esta página construye su propia tabla directamente con `useVueTable` (mismo patrón ya usado por `TripsPage.vue` y `CashClosingPage.vue`, que tampoco usan `DataTable.vue`), sin tocar el componente compartido.
+
+### Nota sobre el guard de rutas y el rol `cashier`
+
+`router/index.ts` ya restringe `reports/general` a `allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor']` — **`cashier` no puede entrar a esta página en absoluto** (el guard redirige a `/unauthorized` antes de que el componente cargue). La lógica de "columnas visibles solo `roles: 'all'` para `cashier`" pedida en el prompt es, en la práctica actual, código defensivo que nunca se ejecuta para ese rol mientras el guard de ruta siga así. Se implementa igualmente tal como se pidió (defensa en profundidad: si en el futuro se agrega `cashier` a `allowedRoles` de esta ruta, la restricción de columnas ya está lista), y se documenta aquí para que quede claro que no es una funcionalidad "muerta" por error sino intencional.
+
+### Módulo implementado
+
+**Archivos creados/modificados:**
+- `sigmo_frontend/src/pages/reports/GeneralReportPage.vue` — creado
+- `sigmo_frontend/src/utils/printReport.ts` — creado, exporta `printGeneralQuery(data, visibleColumns, filters)`
+- `sigmo_frontend/src/utils/exportGeneralQueryExcel.ts` — creado, exporta `exportGeneralQueryExcel(rows, visibleColumns)`, una sola hoja "Consulta de Viajes"
+- `sigmo_frontend/src/router/index.ts` — ruta `reports/general` apunta a `GeneralReportPage.vue` en lugar de `UnderConstruction`
+- `sigmo_frontend/src/constants/navigation.ts` — label cambiado de "Reporte General" a "Consulta de Viajes" (path y roles sin cambios)
+
+**Configuración de columnas:** `COLUMN_CONFIG` tipado como array constante al tope del componente, con `key` (accessor path, soporta notación de punto nativa de TanStack v8), `label` y `roles: 'all' | UserRole[]`. Columnas visibles = `COLUMN_CONFIG` filtrado por rol ∩ preferencia guardada en `localStorage['sigmo_columns_general']` — el filtro de rol se aplica **siempre** después de leer localStorage, nunca antes, así que un `cashier` (si llegara a tener acceso a la ruta) no puede exponer columnas restringidas manipulando el `localStorage` del navegador.
+
+**Filtros:** barra superior con los 10 filtros pedidos; el botón "Consultar" arma los params server-side soportados (`date_from`, `date_to`, `client`, `state`) y dispara `tripsApi.list()`; el resto de filtros (placa, tipo material, tipo vehículo, medio de pago, N° vale, estado de facturación) se aplican client-side sobre el array ya recibido, antes de pasarlo a la tabla. "Limpiar filtros" resetea todo el `FilterState` y vacía los resultados (vuelve al estado "sin consulta"). Sin auto-fetch al montar — se muestra el estado vacío inicial hasta el primer click en "Consultar". Badge en el botón cuenta cuántos de los 10 filtros tienen un valor no vacío.
+
+**Filtros inline por columna:** input `h-6 text-xs` bajo cada header visible, usando `columnFilters` de TanStack Table con un `filterFn` de `includesString` case-insensitive; operan solo sobre el resultado ya cargado (no vuelven a pegarle al backend).
+
+**Tabla:** `useVueTable` directo (no `DataTable.vue`) con `getCoreRowModel`, `getSortedRowModel`, `getFilteredRowModel`, `getPaginationRowModel`. Paginación 25/50/100 con contador "Mostrando X–Y de Z resultados". Filas anuladas (`state=false`) con `opacity-50 line-through` + badge rojo "Anulado". Footer con total de viajes (post filtros inline) y suma de `value` (solo si la columna Valor está visible para el rol actual).
+
+**Exportación:** Excel de 1 hoja con SheetJS (misma dependencia instalada en la Parte 7), `value` como número. PDF vía ventana de impresión (`printReport.ts`, mismo patrón que `printDailyReport.ts` y `printVoucher.ts`), horizontal, incluye resumen de filtros activos. Ambos exports usan exactamente las columnas visibles para el rol + filtros inline aplicados (no la data cruda del backend, no las columnas ocultas).
+
+### Verificación en navegador
+
+Probado en vivo contra el backend real (`localhost:8000`) con usuario `admin` (`superuser`), navegando siempre por clicks in-app (lección de la Parte 7: `navigate`/F5 pierde el `user` en memoria por el gap de `auth.store.ts`, no por un bug de esta página):
+- Estado inicial "sin consulta" confirmado (sin auto-fetch al entrar a la ruta)
+- "Consultar" sin filtros trajo 26 viajes, las 18 columnas se renderizaron con las rutas anidadas correctas (incluyendo `N° Factura` resuelto vía el lookup de `invoicesApi.list()` — se vieron valores reales como `1` para viajes con `invoice` asignado)
+- Filtro inline en "Cliente" con texto "CONSTRUCTORA" redujo 26→17 resultados y recalculó el badge de conteo y el footer en tiempo real
+- Orden ascendente/descendente por "Valor" confirmado (clic en header invierte el orden de las filas)
+- Dropdown "Columnas": desmarcar "N° Vale" ocultó la columna de la tabla inmediatamente; `localStorage['sigmo_columns_general']` se actualizó con las 18 claves (todas `true` salvo `voucher_num: false` tras el toggle)
+- "Exportar Excel" y "Exportar PDF" ejecutados sin errores de consola
+- "Limpiar filtros" volvió correctamente al estado inicial "sin consulta", vaciando la tabla y todos los inputs
+- Filtros server-side verificados por inspección de red: `GET /api/trips/?date_from=2026-06-01&state=true` — solo los params confirmados en el análisis, nada más
+- Badge "Consultar (2 filtros activos)" contó correctamente `date_from` + `state`
+- Sin errores de consola en ningún momento
+
+**No verificado con `cashier` real** (mismo gap ya señalado en la Parte 7: existe `cajero1` en el entorno pero sin credenciales disponibles). La restricción de columnas para `cashier` se verificó por inspección de código y es, además, defensiva: el guard de `router/index.ts` ya bloquea `cashier` en `allowedRoles` de `reports/general`, así que ese rol no puede llegar a esta página en el estado actual del router (ver nota en el análisis).
+
+### Seguridad implementada
+
+| Medida | Estado |
+|--------|--------|
+| Columnas restringidas nunca visibles para `cashier`, incluso manipulando `localStorage` | ✅ Filtro de rol aplicado después de leer preferencia guardada, nunca antes |
+| Export usa el mismo `COLUMN_CONFIG` filtrado por rol que la tabla | ✅ Una sola fuente de verdad para ambas cosas |
+| Página 100% de solo lectura | ✅ Sin formularios ni mutaciones |
+| Filtro "Estado del viaje" oculto para roles sin acceso a la columna `state` | ✅ Mismo array de roles que la columna |
+| Errores de backend vía `getApiErrorMessage()` | ✅ |
+| Sin parámetros no soportados enviados al backend | ✅ Solo `date_from`, `date_to`, `client`, `state` |
+| Sin auto-fetch al montar | ✅ Estado vacío inicial explícito |
+| Sin `console.log` en el código final | ✅ |
+
+### Pendiente para Parte 9
+
+- **RF-44 Reporte por Rango de Fechas**
+- ~~RF-46 Dashboard~~ — implementado en la Parte 9
+- **Gap heredado (real, confirmado):** `authStore.initialize()` en `auth.store.ts` no restaura `user` al recargar la página (solo el token) — cualquier F5 o deep-link deja el UI basado en rol silenciosamente roto hasta volver a loguearse. Fix sugerido: llamar a un endpoint `/me/` (o reutilizar `/api/users/{id}/` con el `user_id` del JWT) dentro de `initialize()` antes de resolver. Reportado como tarea aparte — fuera de alcance de la Parte 7 (auth store explícitamente prohibido de tocar)
+- **Gap heredado:** `TripDetailView.patch` no reversa el `AdvanceMovement` al anular un viaje pagado con anticipo (ver nota de integridad arriba)
+
+---
+
+## Parte 9 — Análisis: Dashboard
+
+### Endpoints y campos confirmados
+
+**`GET /api/trips/`** (`TripReadSerializer`): sin campo de hora/timestamp — `date` y `date_register` son ambos `DateField`, no `DateTimeField`. **No existe ninguna columna de hora en el modelo `Trip`.** La columna "Hora" pedida para "Últimos viajes registrados hoy" no tiene dato que mostrar; se usa `date_register` (fecha) en su lugar y se documenta el gap. El orden "más reciente primero" tampoco puede basarse en un timestamp real — se usa `voucher_num` descendente como proxy (es autoincremental y correlaciona con el orden de creación, confirmado en `TripListCreateView.post`: `next_voucher = last_trip.voucher_num + 1`).
+
+**`GET /api/advances/`** (`AdvanceSerializer`): `value` = valor original depositado (campo del modelo, no calculado). `available_balance` = `SerializerMethodField` calculado como `Σingresos − Σegresos` de `movements`. `movements` viene anidado (`AdvanceMovementSerializer`), cada uno con su propio `date`. No existe un campo "fecha del último movimiento" pre-calculado — se deriva client-side como el `max(movements.map(m => m.date))` por anticipo.
+
+**`GET /api/invoices/`**: sin parámro de búsqueda por `number` (`InvoiceListCreateView.get` no acepta query params, devuelve todas). Para "buscar por número" hay que traer la lista completa y filtrar client-side — exactamente como indica el prompt.
+
+**Hallazgo bloqueante: `Invoice.number` tiene `max_length=15`** (`apps/invoices/models.py`), y el texto pedido literalmente en el prompt, `"No requiere factura"`, tiene 19 caracteres — **excede el límite y el backend rechazaría la creación con 400** en el primer uso de "Validar". Se consultó al usuario, que eligió `"NO FACTURA"` (10 caracteres) como reemplazo. Se documenta aquí porque es un dato de negocio permanente (aparecerá en el módulo de Facturación) y no una decisión puramente técnica.
+
+**`GET /api/expenses/`**: confirmado en la Parte 6, filtro `date` exacto soportado.
+
+**`GET /api/cash-closing/today/`**: confirmado en la Parte 7, agrega ya todo lo necesario para las tarjetas KPI de "Resumen del día" (`total_trips`, `total_expenses`, `payment_details`) pero **no incluye las filas de viaje individuales**, que además hacen falta para la tabla "Últimos viajes registrados hoy". Además, la lista de query keys exigida por el prompt para esta parte (`['dashboard','trips-today']`, `['dashboard','expenses-today']`, `['dashboard','advances']`, `['dashboard','trips-unfactured']`) no incluye una key de cierre de caja. Decisión: **no se reutiliza `cashClosingApi.today()`**; en su lugar, `tripsApi.list({ date: hoy, state: 'true' })` + `expensesApi.list({ date: hoy })` (las dos keys mandatadas) alimentan tanto las tarjetas KPI como el desglose por medio de pago y la tabla de últimos viajes, con el mismo cálculo client-side que ya usa `DailyReportPage.vue` (Parte 7) — evita pedir el mismo día dos veces por dos endpoints distintos y respeta las query keys exigidas al pie de la letra.
+
+### Secciones por rol y fuente de datos
+
+| Rol | Secciones | Query keys usadas |
+|---|---|---|
+| `auditor` | Solo pantalla de bienvenida | Ninguna — cero llamadas API |
+| `cashier` | Resumen del día + últimos 5 viajes | `trips-today`, `expenses-today` |
+| `commercial_admin` | Resumen del día + Anticipos próximos a agotarse | `trips-today`, `expenses-today`, `advances` |
+| `accountant` | Anticipos finalizados + Viajes sin facturar | `advances`, `trips-unfactured` |
+| `superuser` | Las 4 secciones completas | Las 4 keys |
+
+Cada `useQuery` tiene `enabled` condicionado al rol actual, así que un `cashier` nunca dispara las queries de `advances` ni `trips-unfactured` (ni siquiera en segundo plano) — no es solo un `v-if` que oculta el resultado.
+
+**"Ver detalle" de anticipos próximos a agotarse → `/advances` con cliente preseleccionado:** revisado `AdvancesPage.vue` — no lee ningún query param de la URL para preseleccionar cliente, y está fuera de alcance modificarlo. El botón navega a `/advances` sin preselección; se documenta como limitación conocida en vez de implementar un query param que la página de destino ignoraría.
+
+**"Validar" (marcar viaje como no requiere factura):** flujo implementado exactamente como se pidió, con el texto corregido a `"NO FACTURA"`: `invoicesApi.list()` → buscar `number === 'NO FACTURA'` → si no existe, `invoicesApi.create({ number: 'NO FACTURA' })` → `tripsApi.patch(id, { invoice })`. El ID resultante se cachea en un `ref` de componente (`noFacturaInvoiceId`) para no repetir el lookup en clics subsiguientes durante la misma sesión de la página.
+
+**Hallazgo: el link "Ver todos los viajes de hoy" no puede apuntar siempre a `/trips`.** `router/index.ts` restringe `/trips` a `allowedRoles: ['superuser', 'cashier']`, pero `commercial_admin` también ve la sección "Resumen del día" (por instrucción explícita: "Same as cashier sections above, plus..."). Si el link apuntara siempre a `/trips`, un `commercial_admin` haría clic y el guard de rutas lo rebotaría a `/unauthorized`. Ampliar `allowedRoles` de `/trips` está fuera de alcance (cambiaría permisos reales del módulo de Viajes, no solo un link del dashboard) y modificar el módulo de Trips está explícitamente prohibido. Decisión: el destino del link se calcula por rol — `superuser`/`cashier` → `/trips`; `commercial_admin` → `/reports/daily` (Reporte Diario, ya accesible para ese rol desde la Parte 7 y muestra exactamente los viajes del día).
+
+### Módulo implementado
+
+**Archivos creados/modificados:**
+- `sigmo_frontend/src/pages/DashboardPage.vue` — creado
+- `sigmo_frontend/src/router/index.ts` — ruta `''` (`/`) apunta a `DashboardPage.vue` en vez de redirigir a `/masters/clients`
+- `sigmo_frontend/src/constants/navigation.ts` — sin cambios de contenido (la entrada "Dashboard" en `/` ya existía con los roles correctos)
+
+**Nota de comportamiento:** antes de esta parte, `/` redirigía a `/masters/clients` (`redirect: '/masters/clients'`). Ahora `/` renderiza `DashboardPage.vue` directamente. El link "Dashboard" del sidebar ya apuntaba a `/` para los 5 roles, así que no requirió cambios en `navigation.ts`.
+
+**Secciones por rol:** implementadas exactamente como se describe arriba, con `v-if` sobre `authStore.user?.role` (display logic, no enforcement de permisos — el enforcement real ya vive en el router guard y en el backend).
+
+**Anticipos próximos a agotarse:** `available_balance > 0 && available_balance < value * 0.30`, orden ascendente por `available_balance`, tope 15, barra de progreso ámbar (15–30% restante) o roja (<15%).
+
+**Anticipos finalizados:** `available_balance === 0`, fecha de último movimiento derivada de `movements`, orden descendente por esa fecha, tope 15.
+
+**Viajes sin facturar:** `invoice === null && payment_detail.is_advance === false` sobre viajes activos, orden descendente por `date`, tope 15, botón "Validar" con `ConfirmDialog` reutilizado de `components/shared/`.
+
+**Estados de carga y error:** cada sección tiene su propio esqueleto y su propia tarjeta de error (ámbar, ícono de alerta, botón "Reintentar" que llama al `refetch()` de esa query puntual) — ninguna sección bloquea a las demás.
+
+### Verificación en navegador
+
+Probado en vivo contra el backend real (`localhost:8000`) con usuario `admin` (`superuser`, ve las 4 secciones):
+- Las 4 secciones renderizan en el orden correcto, sin errores de consola, con datos reales
+- "Últimos viajes registrados hoy" correctamente vacío (los viajes de prueba de partes anteriores son de días pasados, no de la fecha actual del sistema) — confirma que el filtro `date` funciona
+- Flujo "Validar" probado dos veces de punta a punta contra el backend real:
+  - 1er clic (viaje `#1025`, `id` real `25` — distinto del `voucher_num`, verificado por inspección de red): `GET /api/invoices/` → no existe "NO FACTURA" → `POST /api/invoices/` (201, crea `id=6`) → `PATCH /api/trips/25/ {invoice: 6}` (200) → toast de éxito → la fila desaparece de la tabla
+  - 2do clic (viaje `#1022`, `id` real `22`): **sin** `GET`/`POST /api/invoices/` — va directo a `PATCH /api/trips/22/` — confirma que el `ref` de caché del ID de factura funciona y evita el lookup repetido
+- Sin `console.log` en el archivo final (verificado con grep)
+
+**No verificado con roles reales `cashier`, `commercial_admin`, `accountant` ni `auditor`** (mismo gap de credenciales ya señalado en Partes 7 y 8: existen usuarios de prueba `cajero1` y `operacion` en el entorno pero sin contraseña disponible). Verificado por inspección de código:
+- Los `enabled` de cada `useQuery` están condicionados a arrays de roles explícitos — para `auditor` los cuatro son `false`
+- El destino del link "Ver todos los viajes de hoy" para `commercial_admin` (`/reports/daily`) no se pudo confirmar en navegador con ese rol específico, pero la lógica (`role === 'commercial_admin' ? '/reports/daily' : '/trips'`) es una condición simple y directa
+
+**Dato real creado (no es basura de prueba):** la factura `id=6, number="NO FACTURA"` y la validación de los viajes `#1025` y `#1022` son resultado de ejercitar la funcionalidad real tal como está diseñada — no son datos descartables como en partes anteriores, sino el comportamiento correcto y esperado del feature.
+
+### Seguridad implementada
+
+| Medida | Estado |
+|--------|--------|
+| Secciones renderizadas solo para el rol correcto (`authStore.user?.role`) | ✅ |
+| `cashier` no ve anticipos ni viajes sin facturar | ✅ Ni siquiera se disparan esas queries (`enabled` por rol) |
+| `auditor` no dispara ninguna llamada API | ✅ Verificado: ninguna `useQuery` tiene `enabled=true` para ese rol |
+| Botón "Validar" solo visible para `accountant`/`superuser` | ✅ `v-if` explícito |
+| Creación de "NO FACTURA" solo por acción explícita del usuario (nunca automática al cargar) | ✅ Solo dentro del handler de confirmación del `ConfirmDialog` |
+| Errores de backend vía `getApiErrorMessage()` | ✅ |
+| Sin `console.log` en el código final | ✅ |
+| Valores financieros no se registran en consola | ✅ |
+
+### Pendiente para Parte 10 (opcional)
+
+- **RF-44 Reporte por rango de fechas**
+- **RF-27B Certificado de disposición de material**
+- QA general cruzando todos los módulos
+- Gap heredado sin resolver: `authStore.initialize()` no restaura `user` en recarga de página (Parte 7)
+- Gap heredado sin resolver: `TripDetailView.patch` no reversa `AdvanceMovement` al anular viaje con anticipo
+- **No verificado con `cashier` real:** existe un usuario `cajero1` en el entorno de prueba pero no se dispuso de su contraseña; la ocultación de la columna "Valor" y de "Anticipos consumidos" se verificó por lógica de código (mismo patrón que `TripsPage.vue`) y en navegador solo para `superuser`

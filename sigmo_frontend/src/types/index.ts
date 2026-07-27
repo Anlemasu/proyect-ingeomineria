@@ -221,6 +221,20 @@ export interface Expense {
   date: string
 }
 
+export interface DailyReportData {
+  date: string
+  trips: Trip[]
+  expenses: Expense[]
+  advancesConsumed: Trip[]
+  summary: {
+    totalTrips: number
+    totalCollected: number
+    totalExpenses: number
+    netBalance: number
+    byPaymentMethod: { name: string; tripCount: number; total: number }[]
+  }
+}
+
 export interface ImportResult {
   success: boolean
   created: number

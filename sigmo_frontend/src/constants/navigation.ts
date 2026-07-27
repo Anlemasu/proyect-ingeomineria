@@ -173,7 +173,7 @@ export const navigation: NavItem[] = [
     children: [
       {
         type: 'leaf',
-        label: 'Reporte General',
+        label: 'Consulta de Viajes',
         path: '/reports/general',
         icon: TrendingUp,
         roles: ['superuser', 'commercial_admin', 'accountant', 'auditor'],

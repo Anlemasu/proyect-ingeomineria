@@ -26,6 +26,7 @@
     "vue": "^3.5.38",
     "vue-router": "^4.6.4",
     "vue-sonner": "^2.0.9",
+    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

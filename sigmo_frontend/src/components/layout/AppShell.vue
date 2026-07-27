@@ -6,9 +6,9 @@ import TopBar from './TopBar.vue'
 <template>
   <div class="flex min-h-screen bg-[#F8FAFC]">
     <Sidebar />
-    <div class="flex-1 flex flex-col">
+    <div class="flex-1 flex flex-col min-w-0">
       <TopBar />
-      <main class="flex-1 p-6">
+      <main class="flex-1 p-6 min-w-0">
         <router-view />
       </main>
     </div>

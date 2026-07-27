@@ -33,7 +33,7 @@ const router = createRouter({
         {
           path: '',
           name: 'home',
-          redirect: '/masters/clients',
+          component: () => import('@/pages/DashboardPage.vue'),
         },
 
         // ── Operación ──────────────────────────────────────────────────────────
@@ -132,13 +132,13 @@ const router = createRouter({
         {
           path: 'reports/general',
           name: 'reports-general',
-          component: { ...UnderConstruction, props: { module: 'Reporte General' } },
+          component: () => import('@/pages/reports/GeneralReportPage.vue'),
           meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor'] },
         },
         {
           path: 'reports/daily',
           name: 'reports-daily',
-          component: { ...UnderConstruction, props: { module: 'Reporte Diario' } },
+          component: () => import('@/pages/reports/DailyReportPage.vue'),
           meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier'] },
         },
         {
