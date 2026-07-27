@@ -1,5 +1,6 @@
 from django.db import models
 from apps.users.models import User
+from apps.common.text import uppercase_fields
 
 
 class Invoice(models.Model):
@@ -9,6 +10,10 @@ class Invoice(models.Model):
 
     class Meta:
         db_table = 'INVOICE'
+
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'number')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.number

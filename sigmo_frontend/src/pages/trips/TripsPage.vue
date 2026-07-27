@@ -360,6 +360,7 @@ const onSubmit = handleSubmit(async (values) => {
     queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
     queryClient.invalidateQueries({ queryKey: ['advance-balance', values.client] })
     queryClient.invalidateQueries({ queryKey: ['advances', values.client] })
+    queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
 
     resetForm()
 

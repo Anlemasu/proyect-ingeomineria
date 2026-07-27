@@ -17,7 +17,8 @@ export interface Client {
   abrev_name: string
   address: string
   phone: string
-  city: string | null
+  city: number | null
+  city_detail: City | null
   facturation_name: string | null
   email: string | null
   validate_certification: boolean | null
@@ -73,6 +74,12 @@ export interface PaymentMethod {
 }
 
 export interface OriginSite {
+  id: number
+  name: string
+  state: boolean
+}
+
+export interface City {
   id: number
   name: string
   state: boolean

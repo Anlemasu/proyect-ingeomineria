@@ -1,5 +1,6 @@
 from django.db import models
 from apps.users.models import User
+from apps.common.text import uppercase_fields
 from apps.clients.models import Client
 from apps.masters.models import Vehicle, MaterialType, PaymentMethod, OriginSite
 from apps.invoices.models import Invoice
@@ -29,6 +30,10 @@ class Trip(models.Model):
 
     class Meta:
         db_table = 'TRIP'
+
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'extern_voucher_num', 'certification_num')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'Viaje {self.voucher_num} - {self.client}'

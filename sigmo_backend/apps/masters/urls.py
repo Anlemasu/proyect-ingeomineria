@@ -4,6 +4,7 @@ from .views import (
     MaterialTypeListCreateView, MaterialTypeDetailView,
     PaymentMethodListCreateView, PaymentMethodDetailView,
     OriginSiteListCreateView, OriginSiteDetailView,
+    CityListCreateView, CityDetailView,
     TariffListCreateView, TariffDetailView,
     PinsDumperListCreateView, PinsDumperImportView,
     VehicleListCreateView,
@@ -22,6 +23,9 @@ urlpatterns = [
     # Orígenes
     path('origin-sites/',          OriginSiteListCreateView.as_view(), name='origin-site-list'),
     path('origin-sites/<int:pk>/', OriginSiteDetailView.as_view(),     name='origin-site-detail'),
+    # Ciudades
+    path('cities/',          CityListCreateView.as_view(), name='city-list'),
+    path('cities/<int:pk>/', CityDetailView.as_view(),      name='city-detail'),
     # Tarifas
     path('tariffs/',          TariffListCreateView.as_view(), name='tariff-list'),
     path('tariffs/<int:pk>/', TariffDetailView.as_view(),     name='tariff-detail'),

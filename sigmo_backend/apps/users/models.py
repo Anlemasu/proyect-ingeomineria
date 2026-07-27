@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.db import models
 from typing import ClassVar
+from apps.common.text import uppercase_fields
 
 
 class UserManager(BaseUserManager['User']):
@@ -54,6 +55,10 @@ class User(AbstractBaseUser):
 
     class Meta:
         db_table = '"USER"'
+
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'name')
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f'{self.username} ({self.role})'

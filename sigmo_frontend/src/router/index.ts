@@ -101,6 +101,12 @@ const router = createRouter({
           component: () => import('@/pages/masters/OriginsPage.vue'),
           meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'cashier', 'auditor'] },
         },
+        {
+          path: 'masters/cities',
+          name: 'cities',
+          component: () => import('@/pages/masters/CitiesPage.vue'),
+          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'auditor'] },
+        },
 
         // ── Finanzas ───────────────────────────────────────────────────────────
         {

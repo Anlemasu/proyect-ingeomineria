@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import VehicleType, PinsDumper, Vehicle, MaterialType, PaymentMethod, OriginSite, Tariff
+from .models import VehicleType, PinsDumper, Vehicle, MaterialType, PaymentMethod, OriginSite, City, Tariff
 
 
 # ── VehicleType (RF-14, RF-15, RF-16) ────────────────────────────────────────
@@ -159,6 +159,24 @@ class OriginSiteSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError(
                 'Ya existe un origen con este nombre.'
+            )
+        return value
+
+
+# ── City ──────────────────────────────────────────────────────────────────────
+class CitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = City
+        fields = ['id', 'name', 'state']
+
+    def validate_name(self, value):
+        # Nombre único insensible a mayúsculas
+        qs = City.objects.filter(name__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                'Ya existe una ciudad con este nombre.'
             )
         return value
 

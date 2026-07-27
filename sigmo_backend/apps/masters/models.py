@@ -1,5 +1,6 @@
 from django.db import models
 from apps.clients.models import Client
+from apps.common.text import uppercase_fields
 
 
 class VehicleType(models.Model):
@@ -11,6 +12,10 @@ class VehicleType(models.Model):
 
     class Meta:
         db_table = 'VEHICLE_TYPE'
+
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'name')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -34,6 +39,13 @@ class PinsDumper(models.Model):
     class Meta:
         db_table = 'PINS_DUMPERS'
 
+    def save(self, *args, **kwargs):
+        uppercase_fields(
+            self, 'ambiental_pin', 'propietary', 'address', 'plaque',
+            'expedition_site', 'model', 'driver',
+        )
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f'{self.plaque} - {self.ambiental_pin}'
 
@@ -46,6 +58,10 @@ class Vehicle(models.Model):
 
     class Meta:
         db_table = 'VEHICLE'
+
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'plaque')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.plaque
@@ -60,6 +76,10 @@ class MaterialType(models.Model):
     class Meta:
         db_table = 'MATERIAL_TYPE'
 
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'name')
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.name
 
@@ -73,6 +93,10 @@ class PaymentMethod(models.Model):
     class Meta:
         db_table = 'PAYMENT_METHOD'
 
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'name')
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.name
 
@@ -84,6 +108,26 @@ class OriginSite(models.Model):
 
     class Meta:
         db_table = 'ORIGIN_SITE'
+
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'name')
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class City(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=50)
+    state = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'CITY'
+
+    def save(self, *args, **kwargs):
+        uppercase_fields(self, 'name')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name

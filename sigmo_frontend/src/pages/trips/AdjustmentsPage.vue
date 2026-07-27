@@ -1,74 +1,157 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
+import { ref, computed, watch } from 'vue'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 
 import {
-  RefreshCw, Pencil, Ban, CheckCircle, AlertTriangle,
+  RefreshCw, Pencil, Ban, CheckCircle, AlertTriangle, Search,
 } from 'lucide-vue-next'
 
-import PageHeader    from '@/components/shared/PageHeader.vue'
-import CurrencyInput from '@/components/shared/CurrencyInput.vue'
+import PageHeader       from '@/components/shared/PageHeader.vue'
+import CurrencyInput    from '@/components/shared/CurrencyInput.vue'
+import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 
 import { tripsApi }          from '@/api/trips.api'
+import { clientsApi }        from '@/api/clients.api'
+import { originsApi }        from '@/api/origins.api'
+import { materialsApi }      from '@/api/materials.api'
+import { vehiclesApi }       from '@/api/vehicles.api'
 import { paymentMethodsApi } from '@/api/paymentMethods.api'
+import { advancesApi }       from '@/api/advances.api'
 import { useAuthStore }      from '@/stores/auth.store'
 import { toISODate }         from '@/utils/formatDate'
 import { formatCurrency }    from '@/utils/formatCurrency'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import type { Trip } from '@/types'
 
-const authStore = useAuthStore()
+const authStore    = useAuthStore()
+const queryClient  = useQueryClient()
 
-const role        = computed(() => authStore.user?.role ?? '')
-const canAnnul    = computed(() => role.value === 'superuser' || role.value === 'commercial_admin')
-const canDatePick = computed(() => role.value === 'superuser' || role.value === 'commercial_admin')
+const role          = computed(() => authStore.user?.role ?? '')
+const isSuperuser   = computed(() => role.value === 'superuser')
+const canAnnul      = computed(() => role.value === 'superuser' || role.value === 'commercial_admin')
+// Igual que en el formulario de registro: solo superuser/commercial_admin pueden mover la fecha del viaje
+const canChangeDate = computed(() => role.value === 'superuser' || role.value === 'commercial_admin')
 
-// ── Fecha ─────────────────────────────────────────────────────────────────────
-const today        = toISODate(new Date())
-const selectedDate = ref(today)
+const today = toISODate(new Date())
 
 // ── Queries ───────────────────────────────────────────────────────────────────
+// Los 3 roles con acceso a esta página solo ajustan viajes del día en curso
 const { data: tripsData, isLoading, refetch } = useQuery({
-  queryKey: computed(() => ['trips-adjustments', selectedDate.value]),
-  queryFn:  () => tripsApi.list({ date: selectedDate.value }).then(r => r.data),
+  queryKey: ['trips-adjustments', today],
+  queryFn:  () => tripsApi.list({ date: today }).then(r => r.data),
   refetchInterval: 30_000,
 })
 const trips = computed(() => tripsData.value ?? [])
 
+// ── Búsqueda por número de vale ───────────────────────────────────────────────
+const voucherSearch = ref('')
+const filteredTrips = computed(() => {
+  const q = voucherSearch.value.trim()
+  if (!q) return trips.value
+  return trips.value.filter(t => String(t.voucher_num).includes(q))
+})
+
+const { data: clientsData } = useQuery({
+  queryKey: ['clients'],
+  queryFn:  () => clientsApi.list({ state: 'true' }).then(r => r.data),
+})
+const { data: originsData } = useQuery({
+  queryKey: ['origins'],
+  queryFn:  () => originsApi.list().then(r => r.data),
+})
+const { data: materialsData } = useQuery({
+  queryKey: ['materials'],
+  queryFn:  () => materialsApi.list().then(r => r.data),
+})
+const { data: vehiclesData } = useQuery({
+  queryKey: ['vehicles'],
+  queryFn:  () => vehiclesApi.list().then(r => r.data),
+})
 const { data: paymentsData } = useQuery({
   queryKey: ['payments'],
   queryFn:  () => paymentMethodsApi.list().then(r => r.data),
 })
-const paymentList = computed(() => (paymentsData.value ?? []).filter(p => p.state))
+
+const clientOptions   = computed(() => (clientsData.value ?? []).filter(c => c.state).map(c => ({ id: c.id, name: c.name })))
+const originOptions   = computed(() => (originsData.value ?? []).filter(o => o.state).map(o => ({ id: o.id, name: o.name })))
+const materialOptions = computed(() => (materialsData.value ?? []).filter(m => m.state).map(m => ({ id: m.id, name: m.name })))
+const vehicleOptions  = computed(() => (vehiclesData.value ?? []).map(v => ({ id: v.id, name: v.plaque })))
+const paymentList     = computed(() => (paymentsData.value ?? []).filter(p => p.state))
 
 // ── Drawer edición ────────────────────────────────────────────────────────────
-const editTrip    = ref<Trip | null>(null)
-const editPayment = ref<number | undefined>(undefined)
-const editValue   = ref<number | undefined>(undefined)
-const editExtern  = ref('')
-const editLoading = ref(false)
+const editTrip          = ref<Trip | null>(null)
+const editClient        = ref<number | undefined>(undefined)
+const editOrigin        = ref<number | undefined>(undefined)
+const editMaterial      = ref<number | undefined>(undefined)
+const editVehicle       = ref<number | undefined>(undefined)
+const editPayment       = ref<number | undefined>(undefined)
+const editValue         = ref<number | undefined>(undefined)
+const editDate          = ref('')
+const editExtern        = ref('')
+const editJustification = ref('')
+const editLoading       = ref(false)
+
+// RF-37: el superusuario requiere justificación al ajustar un registro de un día distinto al actual
+const editRequiresJustification = computed(() =>
+  isSuperuser.value && !!editTrip.value && editTrip.value.date_register !== today
+)
 
 function openEdit(trip: Trip) {
-  editTrip.value    = trip
-  editPayment.value = trip.payment_detail?.id
-  editValue.value   = parseFloat(trip.value)
-  editExtern.value  = trip.extern_voucher_num ?? ''
+  editTrip.value          = trip
+  editClient.value        = trip.client_detail?.id
+  editOrigin.value        = trip.origin_site_detail?.id
+  editMaterial.value      = trip.material_type_detail?.id
+  editVehicle.value       = trip.vehicle_detail?.id
+  editPayment.value       = trip.payment_detail?.id
+  editValue.value         = parseFloat(trip.value)
+  editDate.value          = trip.date
+  editExtern.value        = trip.extern_voucher_num ?? ''
+  editJustification.value = ''
 }
+
+// ── Anticipo — auto-asignación al editar, igual que en el registro de viajes ──
+const { data: editAdvancesData } = useQuery({
+  queryKey: computed(() => ['advances', editClient.value]),
+  queryFn:  () => editClient.value
+    ? advancesApi.list({ client: editClient.value }).then(r => r.data)
+    : Promise.resolve([]),
+  enabled: computed(() => !!editClient.value),
+})
+const editActiveAdvance = computed(() =>
+  (editAdvancesData.value ?? []).find(a => (a.available_balance ?? 0) > 0) ?? null
+)
+const editIsAdvancePayment = computed(() =>
+  paymentList.value.find(p => p.id === editPayment.value)?.is_advance === true
+)
+const editAdvanceId = ref<number | null>(null)
+watch([editActiveAdvance, editIsAdvancePayment], ([advance, isAdvance]) => {
+  editAdvanceId.value = isAdvance ? (advance?.id ?? null) : null
+})
 
 async function saveEdit() {
   if (!editTrip.value) return
+  if (editRequiresJustification.value && !editJustification.value.trim()) {
+    toast.error('La justificación es obligatoria para ajustar un registro de un día distinto al actual')
+    return
+  }
+
   editLoading.value = true
   try {
     const patch: Record<string, unknown> = {}
+    const orig = editTrip.value
 
-    if (editPayment.value !== editTrip.value.payment_detail?.id)
-      patch.payment = editPayment.value
-    if (editValue.value !== parseFloat(editTrip.value.value))
-      patch.value = editValue.value
-    const currentExtern = editTrip.value.extern_voucher_num ?? ''
-    if (editExtern.value !== currentExtern)
-      patch.extern_voucher_num = editExtern.value.trim() || null
+    if (editClient.value    !== orig.client_detail?.id)        patch.client        = editClient.value
+    if (editOrigin.value    !== orig.origin_site_detail?.id)   patch.origin_site   = editOrigin.value
+    if (editMaterial.value  !== orig.material_type_detail?.id) patch.material_type = editMaterial.value
+    if (editVehicle.value   !== orig.vehicle_detail?.id)       patch.vehicle       = editVehicle.value
+    if (editPayment.value   !== orig.payment_detail?.id)       patch.payment       = editPayment.value
+    if (editValue.value     !== parseFloat(orig.value))        patch.value         = editValue.value
+    if (editDate.value      !== orig.date)                     patch.date          = editDate.value
+    if (editAdvanceId.value !== (orig.advance ?? null))        patch.advance       = editAdvanceId.value
+
+    const currentExtern = orig.extern_voucher_num ?? ''
+    if (editExtern.value !== currentExtern) patch.extern_voucher_num = editExtern.value.trim() || null
 
     if (Object.keys(patch).length === 0) {
       toast.info('Sin cambios que guardar')
@@ -76,10 +159,14 @@ async function saveEdit() {
       return
     }
 
-    await tripsApi.patch(editTrip.value.id, patch)
+    if (editJustification.value.trim()) patch.justification = editJustification.value.trim()
+
+    await tripsApi.patch(orig.id, patch)
     toast.success('Viaje actualizado correctamente')
     editTrip.value = null
     refetch()
+    queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
+    queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
   } catch (err) {
     toast.error(getApiErrorMessage(err))
   } finally {
@@ -112,6 +199,8 @@ async function confirmAnnul() {
     toast.success(`Viaje #${annulTrip.value.voucher_num} anulado`)
     annulTrip.value = null
     refetch()
+    queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
+    queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
   } catch (err) {
     toast.error(getApiErrorMessage(err))
   } finally {
@@ -129,16 +218,14 @@ async function confirmAnnul() {
 
     <!-- Barra de filtros -->
     <div class="flex items-center gap-3">
-      <div class="flex items-center gap-2">
-        <label class="text-sm font-medium text-gray-700">Fecha:</label>
+      <div class="relative">
+        <Search class="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
-          v-model="selectedDate"
-          type="date"
-          :readonly="!canDatePick"
-          class="px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          :class="canDatePick
-            ? 'border-gray-300 bg-white'
-            : 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'"
+          v-model="voucherSearch"
+          type="text"
+          inputmode="numeric"
+          placeholder="Buscar por N° de vale..."
+          class="pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
         />
       </div>
       <button
@@ -150,8 +237,8 @@ async function confirmAnnul() {
         <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-blue-500' : ''" />
       </button>
       <span class="text-xs text-gray-400 ml-auto">
-        {{ trips.length }} viaje{{ trips.length !== 1 ? 's' : '' }} —
-        {{ trips.filter(t => t.state).length }} activo{{ trips.filter(t => t.state).length !== 1 ? 's' : '' }}
+        {{ filteredTrips.length }} viaje{{ filteredTrips.length !== 1 ? 's' : '' }} —
+        {{ filteredTrips.filter(t => t.state).length }} activo{{ filteredTrips.filter(t => t.state).length !== 1 ? 's' : '' }}
       </span>
     </div>
 
@@ -177,13 +264,13 @@ async function confirmAnnul() {
                 <RefreshCw class="w-4 h-4 animate-spin inline-block mr-2" />Cargando viajes...
               </td>
             </tr>
-            <tr v-else-if="trips.length === 0">
+            <tr v-else-if="filteredTrips.length === 0">
               <td colspan="8" class="px-4 py-12 text-center text-xs text-gray-400">
-                Sin viajes para la fecha seleccionada
+                {{ voucherSearch.trim() ? 'Sin resultados para ese número de vale' : 'Sin viajes registrados hoy' }}
               </td>
             </tr>
             <tr
-              v-for="trip in trips"
+              v-for="trip in filteredTrips"
               :key="trip.id"
               class="hover:bg-gray-50 transition-colors"
               :class="!trip.state ? 'opacity-40' : ''"
@@ -276,16 +363,60 @@ async function confirmAnnul() {
             </div>
 
             <div class="p-6 space-y-5 flex-1 overflow-y-auto">
-              <!-- Campos no editables (referencia) -->
-              <div class="bg-gray-50 rounded-lg p-4 text-xs space-y-2 text-gray-600">
-                <div class="flex justify-between">
-                  <span>Material:</span>
-                  <span class="font-medium text-gray-900">{{ editTrip.material_type_detail?.name ?? '—' }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span>Origen:</span>
-                  <span class="font-medium text-gray-900">{{ editTrip.origin_site_detail?.name ?? '—' }}</span>
-                </div>
+              <!-- Cliente -->
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1.5">Cliente</label>
+                <SearchableSelect
+                  :options="clientOptions"
+                  v-model="editClient"
+                  placeholder="Buscar cliente..."
+                />
+              </div>
+
+              <!-- Origen -->
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1.5">Origen del material</label>
+                <SearchableSelect
+                  :options="originOptions"
+                  v-model="editOrigin"
+                  placeholder="Buscar origen..."
+                />
+              </div>
+
+              <!-- Tipo de material -->
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1.5">Tipo de material</label>
+                <select
+                  v-model="editMaterial"
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                </select>
+              </div>
+
+              <!-- Vehículo -->
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1.5">Vehículo (placa)</label>
+                <SearchableSelect
+                  :options="vehicleOptions"
+                  v-model="editVehicle"
+                  placeholder="Buscar placa..."
+                />
+              </div>
+
+              <!-- Fecha -->
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha</label>
+                <input
+                  v-model="editDate"
+                  type="date"
+                  :readonly="!canChangeDate"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  :class="canChangeDate
+                    ? 'border-gray-300 bg-white'
+                    : 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'"
+                />
+                <p v-if="!canChangeDate" class="mt-1 text-xs text-gray-400">Solo el día actual</p>
               </div>
 
               <!-- Medio de pago -->
@@ -297,6 +428,21 @@ async function confirmAnnul() {
                 >
                   <option v-for="p in paymentList" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
+              </div>
+
+              <!-- Info anticipo (auto-asignado, igual que en el registro) -->
+              <div
+                v-if="editIsAdvancePayment"
+                class="text-xs px-3 py-2 rounded-lg border"
+                :class="editActiveAdvance
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-red-50 text-red-700 border-red-200'"
+              >
+                <span v-if="editActiveAdvance">
+                  Anticipo activo: <strong>#{{ editActiveAdvance.id }}</strong> —
+                  Saldo: <strong>{{ formatCurrency(editActiveAdvance.available_balance ?? 0) }}</strong>
+                </span>
+                <span v-else>Sin anticipo disponible para este cliente</span>
               </div>
 
               <!-- Valor -->
@@ -316,13 +462,30 @@ async function confirmAnnul() {
                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              <!-- Justificación — solo cuando se ajusta un registro de otro día -->
+              <div v-if="editRequiresJustification">
+                <label class="block text-xs font-medium text-gray-700 mb-1.5">
+                  Justificación <span class="text-red-500">*</span>
+                </label>
+                <p class="mb-1.5 text-xs text-amber-600 flex items-center gap-1">
+                  <AlertTriangle class="w-3.5 h-3.5 shrink-0" />
+                  Registro de un día distinto al actual
+                </p>
+                <textarea
+                  v-model="editJustification"
+                  rows="2"
+                  placeholder="Motivo del ajuste histórico..."
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
             </div>
 
             <div class="px-6 py-4 border-t border-gray-100 shrink-0">
               <button
                 type="button"
                 @click="saveEdit"
-                :disabled="editLoading"
+                :disabled="editLoading || (editRequiresJustification && !editJustification.trim())"
                 class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 <RefreshCw v-if="editLoading" class="w-4 h-4 animate-spin" />

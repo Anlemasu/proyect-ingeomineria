@@ -89,7 +89,7 @@ class TripListCreateView(APIView):
                 next_voucher = (last_trip.voucher_num + 1) if last_trip else 1
 
                 trip = cast(Trip, serializer.save(
-                    date_register=timezone.now().date(),
+                    date_register=timezone.localdate(),
                     voucher_num=next_voucher,
                 ))
 
@@ -156,7 +156,7 @@ class TripDetailView(APIView):
 
         # RF-36: operador de caja solo puede editar registros del día en curso
         if request.user.role == 'cashier':
-            if obj.date_register != timezone.now().date():
+            if obj.date_register != timezone.localdate():
                 log_action(request, 'access_denied', 'Trip', object_id=obj.id)
                 return Response(
                     {'error': 'Solo puede modificar registros del día en curso.'},
@@ -184,7 +184,7 @@ class TripDetailView(APIView):
         incoming_fields = set(request.data.keys()) - {'justification'}
         is_invoice_only_patch = incoming_fields.issubset(INVOICE_ONLY_FIELDS)
 
-        if request.user.role == 'superuser' and obj.date_register != timezone.now().date():
+        if request.user.role == 'superuser' and obj.date_register != timezone.localdate():
             if not justification and not is_invoice_only_patch:
                 return Response(
                     {'error': 'Se requiere justificación para modificar registros históricos.'},

@@ -34,7 +34,7 @@ class DailySummaryCloseView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        today = timezone.now().date()
+        today = timezone.localdate()
         try:
             summary = execute_close(today)
             log_action(
@@ -59,7 +59,7 @@ class DailySummaryTodayView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        today = timezone.now().date()
+        today = timezone.localdate()
         trips = Trip.objects.filter(date=today, state=True)
 
         total_trips = trips.count()

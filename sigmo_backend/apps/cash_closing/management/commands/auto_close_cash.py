@@ -9,7 +9,7 @@ class Command(BaseCommand):
     help = 'Ejecuta el cierre de caja automático si no fue cerrado manualmente.'
 
     def handle(self, *args, **options):
-        today = timezone.now().date()
+        today = timezone.localdate()
         self.stdout.write(f'[auto_close_cash] Verificando cierre para {today}...')
 
         try:

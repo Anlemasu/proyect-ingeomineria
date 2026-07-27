@@ -11,7 +11,9 @@ import DataTable from '@/components/shared/DataTable.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import { clientsApi } from '@/api/clients.api'
+import { citiesApi } from '@/api/cities.api'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { usePermissions } from '@/composables/usePermissions'
 import type { Client } from '@/types'
@@ -35,6 +37,12 @@ const { data: clients, isLoading } = useQuery({
 
 const allClients = computed(() => clients.value ?? [])
 
+const { data: citiesData, refetch: refetchCities } = useQuery({
+  queryKey: ['cities'],
+  queryFn: async () => (await citiesApi.list()).data,
+})
+const cityOptions = computed(() => (citiesData.value ?? []).filter(c => c.state).map(c => ({ id: c.id, name: c.name })))
+
 const schema = toTypedSchema(z.object({
   nit: z.string()
     .min(1, 'El NIT es requerido')
@@ -45,7 +53,7 @@ const schema = toTypedSchema(z.object({
   abrev_name: z.string().min(1, 'La abreviacion es requerida').max(20).transform(s => s.trim()),
   address: z.string().min(1, 'La direccion es requerida').max(20).transform(s => s.trim()),
   phone: z.string().regex(/^\d{10}$/, 'El telefono debe tener exactamente 10 digitos'),
-  city: z.string().max(20).optional().transform(s => s?.trim() || null),
+  city: z.number().nullable().optional(),
   facturation_name: z.string().max(50).optional().transform(s => s?.trim() || null),
   email: z.string().email('Email invalido').optional().or(z.literal('')).transform(s => s?.trim() || null),
   validate_certification: z.boolean().optional(),  // ← quita el .default(false)
@@ -57,10 +65,31 @@ const { value: name, errorMessage: nameError } = useField<string>('name')
 const { value: abrev_name, errorMessage: abrevError } = useField<string>('abrev_name')
 const { value: address, errorMessage: addressError } = useField<string>('address')
 const { value: phone, errorMessage: phoneError } = useField<string>('phone')
-const { value: city } = useField<string>('city')
+const { value: cityId } = useField<number | null | undefined>('city')
 const { value: facturation_name } = useField<string>('facturation_name')
 const { value: email, errorMessage: emailError } = useField<string>('email')
 const { value: validate_certification } = useField<boolean>('validate_certification')
+
+const showCreateCity = ref(false)
+const newCityName = ref('')
+const createCityLoading = ref(false)
+
+async function createCity() {
+  const cityName = newCityName.value.trim()
+  if (!cityName) return
+  createCityLoading.value = true
+  try {
+    const res = await citiesApi.create({ name: cityName })
+    await refetchCities()
+    cityId.value = res.data.id
+    showCreateCity.value = false
+    newCityName.value = ''
+  } catch (err) {
+    toast.error(getApiErrorMessage(err))
+  } finally {
+    createCityLoading.value = false
+  }
+}
 
 function openCreate() {
   editingClient.value = null
@@ -78,7 +107,7 @@ function openEdit(client: Client) {
     abrev_name: client.abrev_name,
     address: client.address,
     phone: String(client.phone),
-    city: client.city ?? '',
+    city: client.city ?? null,
     facturation_name: client.facturation_name ?? '',
     email: client.email ?? '',
     validate_certification: client.validate_certification ?? false,
@@ -148,7 +177,11 @@ const columns: ColumnDef<Client>[] = [
   { accessorKey: 'name', header: 'Nombre empresa' },
   { accessorKey: 'abrev_name', header: 'Abreviacion' },
   { accessorKey: 'phone', header: 'Telefono' },
-  { accessorKey: 'city', header: 'Ciudad' },
+  {
+    id: 'city',
+    header: 'Ciudad',
+    cell: ({ row }) => row.original.city_detail?.name ?? '—',
+  },
   {
     accessorKey: 'state',
     header: 'Estado',
@@ -233,7 +266,14 @@ const columns: ColumnDef<Client>[] = [
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Ciudad</label>
-                <input v-model="city" type="text" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none" />
+                <SearchableSelect
+                  :options="cityOptions"
+                  v-model="cityId"
+                  clearable
+                  placeholder="Buscar ciudad..."
+                  extra-action-label="Crear ciudad"
+                  @extra-action="showCreateCity = true"
+                />
               </div>
               <div class="col-span-2">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Empresa a facturar</label>
@@ -274,5 +314,36 @@ const columns: ColumnDef<Client>[] = [
       @confirm="confirmToggle && toggleClient(confirmToggle)"
       @cancel="confirmToggle = null"
     />
+
+    <teleport to="body">
+      <div v-if="showCreateCity" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+          <h3 class="text-sm font-semibold text-gray-800 mb-4">Nueva ciudad</h3>
+          <input
+            v-model="newCityName"
+            type="text"
+            placeholder="Nombre de la ciudad"
+            class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            @keydown.enter.prevent="createCity"
+            autofocus
+          />
+          <div class="mt-4 flex gap-2 justify-end">
+            <button
+              type="button"
+              @click="showCreateCity = false; newCityName = ''"
+              class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+            >Cancelar</button>
+            <button
+              type="button"
+              @click="createCity"
+              :disabled="!newCityName.trim() || createCityLoading"
+              class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {{ createCityLoading ? 'Creando...' : 'Crear ciudad' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>

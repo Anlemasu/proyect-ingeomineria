@@ -47,6 +47,7 @@ const ALL_MODELS = [
   { value: 'MaterialType',  label: 'Tipo de Material' },
   { value: 'PaymentMethod', label: 'Medio de Pago' },
   { value: 'OriginSite',    label: 'Origen' },
+  { value: 'City',          label: 'Ciudad' },
   { value: 'Tariff',        label: 'Tarifa' },
   { value: 'PinsDumper',    label: 'PIN Ambiental' },
   { value: 'Vehicle',       label: 'Vehículo' },

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Client
 from apps.users.serializers import UserReadSerializer
+from apps.masters.serializers import CitySerializer
 
 
 class ClientSerializer(serializers.ModelSerializer):
@@ -10,6 +11,7 @@ class ClientSerializer(serializers.ModelSerializer):
     el campo 'user' se asigna automáticamente en la vista.
     """
     created_by = UserReadSerializer(source='user', read_only=True)
+    city_detail = CitySerializer(source='city', read_only=True)
 
     class Meta:
         model = Client
@@ -21,6 +23,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'address',
             'phone',
             'city',
+            'city_detail',
             'facturation_name',
             'email',
             'validate_certification',

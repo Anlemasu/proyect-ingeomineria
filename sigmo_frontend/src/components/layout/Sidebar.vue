@@ -16,8 +16,7 @@ const collapsed = ref(false)
 const openGroups = ref<Set<string>>(new Set())
 
 function isLeafActive(path: string): boolean {
-  if (path === '/') return route.path === '/'
-  return route.path.startsWith(path)
+  return route.path === path
 }
 
 function isGroupActive(group: NavGroup): boolean {

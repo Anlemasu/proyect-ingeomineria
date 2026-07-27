@@ -7,10 +7,10 @@ from typing import cast
 from django.db import transaction
 from django.utils import timezone
 
-from .models import VehicleType, MaterialType, PaymentMethod, OriginSite, Tariff, PinsDumper, Vehicle
+from .models import VehicleType, MaterialType, PaymentMethod, OriginSite, City, Tariff, PinsDumper, Vehicle
 from .serializers import (
     VehicleTypeSerializer, MaterialTypeSerializer, PaymentMethodSerializer,
-    OriginSiteSerializer, TariffSerializer, PinsDumperSerializer, VehicleSerializer
+    OriginSiteSerializer, CitySerializer, TariffSerializer, PinsDumperSerializer, VehicleSerializer
 )
 
 
@@ -288,6 +288,74 @@ class OriginSiteDetailView(APIView):
             serializer.save()
             log_action(
                 request, 'update', 'OriginSite',
+                object_id=obj.id,
+                previous_data=previous,
+                new_data=dict(serializer.data),  # type: ignore
+            )
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ── City ──────────────────────────────────────────────────────────────────────
+class CityListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        cities = City.objects.all().order_by('name')
+        serializer = CitySerializer(cities, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        if not can_manage_masters(request.user):
+            log_action(request, 'access_denied', 'City')
+            return Response(
+                {'error': 'No tiene permisos para crear ciudades.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        serializer = CitySerializer(data=request.data)
+        if serializer.is_valid():
+            obj = cast(City, serializer.save())
+            log_action(
+                request, 'create', 'City',
+                object_id=obj.id,
+                new_data=dict(serializer.data),  # type: ignore
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CityDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk):
+        try:
+            return City.objects.get(pk=pk)
+        except City.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        obj = self.get_object(pk)
+        if not obj:
+            return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(CitySerializer(obj).data)
+
+    def patch(self, request, pk):
+        if not can_manage_masters(request.user):
+            log_action(request, 'access_denied', 'City', object_id=pk)
+            return Response(
+                {'error': 'No tiene permisos para editar ciudades.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        obj = self.get_object(pk)
+        if not obj:
+            return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        previous = dict(CitySerializer(obj).data)  # type: ignore
+        serializer = CitySerializer(obj, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            log_action(
+                request, 'update', 'City',
                 object_id=obj.id,
                 previous_data=previous,
                 new_data=dict(serializer.data),  # type: ignore
