@@ -176,7 +176,7 @@ export const navigation: NavItem[] = [
         label: 'Consulta de Viajes',
         path: '/reports/general',
         icon: TrendingUp,
-        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor'],
+        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier'],
       },
       {
         type: 'leaf',

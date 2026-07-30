@@ -120,7 +120,7 @@ const columns: ColumnDef<PinsDumper>[] = [
         <button v-if="canCreate('masters')" @click="showImport = true" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">
           <Upload class="w-4 h-4" /> Importar Excel
         </button>
-        <button v-if="canCreate('masters')" @click="() => { resetForm(); showModal = true }" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700">
+        <button v-if="canCreate('masters')" @click="() => { resetForm(); showModal = true }" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600">
           <Plus class="w-4 h-4" /> Nuevo PIN
         </button>
       </div>
@@ -192,7 +192,7 @@ const columns: ColumnDef<PinsDumper>[] = [
             </div>
             <div class="col-span-2 flex justify-end gap-3 pt-2">
               <button type="button" @click="showModal = false" class="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">Cancelar</button>
-              <button type="submit" :disabled="isSubmitting" class="px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60">
+              <button type="submit" :disabled="isSubmitting" class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60">
                 {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
               </button>
             </div>
@@ -226,7 +226,7 @@ const columns: ColumnDef<PinsDumper>[] = [
               <button
                 @click="confirmImport"
                 :disabled="!importFile || !!fileError || importPending"
-                class="px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60"
+                class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60"
               >
                 {{ importPending ? 'Importando...' : 'Confirmar importacion' }}
               </button>
@@ -240,9 +240,9 @@ const columns: ColumnDef<PinsDumper>[] = [
                 <p class="text-2xl font-bold text-green-700">{{ importResult.created }}</p>
                 <p class="text-xs text-green-600">Creados</p>
               </div>
-              <div class="bg-blue-50 rounded-lg p-3 text-center">
-                <p class="text-2xl font-bold text-blue-700">{{ importResult.updated }}</p>
-                <p class="text-xs text-blue-600">Actualizados</p>
+              <div class="bg-gold-50 rounded-lg p-3 text-center">
+                <p class="text-2xl font-bold text-gold-800">{{ importResult.updated }}</p>
+                <p class="text-xs text-gold-700">Actualizados</p>
               </div>
               <div class="bg-red-50 rounded-lg p-3 text-center">
                 <p class="text-2xl font-bold text-red-700">{{ importResult.rejected_count }}</p>
@@ -276,7 +276,7 @@ const columns: ColumnDef<PinsDumper>[] = [
             </div>
 
             <div class="flex justify-end">
-              <button @click="() => { showImport = false; importResult = null; importFile = null }" class="px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700">
+              <button @click="() => { showImport = false; importResult = null; importFile = null }" class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600">
                 Cerrar
               </button>
             </div>

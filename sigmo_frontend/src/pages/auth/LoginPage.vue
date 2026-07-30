@@ -44,42 +44,43 @@ const onSubmit = handleSubmit(async (values) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#F8FAFC] flex items-center justify-center px-4">
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 w-full max-w-sm">
+  <div class="min-h-screen bg-white flex items-center justify-center px-4">
+    <div class="bg-white rounded-lg shadow-sm border border-stone-200 p-8 w-full max-w-sm">
       <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold text-[#1E40AF]">SIGMO</h1>
-        <p class="text-gray-500 text-sm mt-1">Sistema de Información de Gestión Minera</p>
+        <img src="/logo_transparente.png" alt="Ingeominería" class="h-14 w-auto mx-auto mb-3" />
+        <h1 class="text-2xl font-bold text-stone-900">SIGMO</h1>
+        <p class="text-stone-500 text-sm mt-1">Sistema de Información de Gestión Minera</p>
       </div>
 
       <form @submit.prevent="onSubmit" class="space-y-5" novalidate>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
+          <label class="block text-sm font-medium text-stone-700 mb-1">Usuario</label>
           <input
             v-model="username"
             type="text"
             autocomplete="username"
-            class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            :class="usernameError ? 'border-red-400' : 'border-gray-300'"
+            class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
+            :class="usernameError ? 'border-red-400' : 'border-stone-300'"
             placeholder="Ingresa tu usuario"
           />
           <p v-if="usernameError" class="mt-1 text-xs text-red-600">{{ usernameError }}</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+          <label class="block text-sm font-medium text-stone-700 mb-1">Contraseña</label>
           <div class="relative">
             <input
               v-model="password"
               :type="showPassword ? 'text' : 'password'"
               autocomplete="current-password"
-              class="w-full px-3 py-2 pr-10 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              :class="passwordError ? 'border-red-400' : 'border-gray-300'"
+              class="w-full px-3 py-2 pr-10 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
+              :class="passwordError ? 'border-red-400' : 'border-stone-300'"
               placeholder="Ingresa tu contraseña"
             />
             <button
               type="button"
               tabindex="-1"
-              class="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600"
+              class="absolute inset-y-0 right-3 flex items-center text-stone-400 hover:text-stone-600"
               @click="showPassword = !showPassword"
             >
               <EyeOff v-if="showPassword" class="w-4 h-4" />
@@ -96,7 +97,7 @@ const onSubmit = handleSubmit(async (values) => {
         <button
           type="submit"
           :disabled="isSubmitting"
-          class="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60 transition-colors"
+          class="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-semibold text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60 transition-colors"
         >
           <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
           {{ isSubmitting ? 'Iniciando sesión...' : 'Iniciar sesión' }}

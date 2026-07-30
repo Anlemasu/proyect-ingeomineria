@@ -26,7 +26,7 @@ import { pinsApi }           from '@/api/pins.api'
 import { tripsApi }          from '@/api/trips.api'
 
 import { useAuthStore }       from '@/stores/auth.store'
-import { toISODate }          from '@/utils/formatDate'
+import { toISODate, formatDate } from '@/utils/formatDate'
 import { formatCurrency }     from '@/utils/formatCurrency'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { printVoucher }       from '@/utils/printVoucher'
@@ -442,7 +442,7 @@ const onSubmit = handleSubmit(async (values) => {
               v-model="tripDate"
               type="date"
               :readonly="!canChangeDate"
-              class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
               :class="canChangeDate
                 ? 'border-gray-300 bg-white'
                 : 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'"
@@ -463,7 +463,7 @@ const onSubmit = handleSubmit(async (values) => {
                 type="text"
                 maxlength="6"
                 placeholder="ABC123"
-                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase tracking-widest"
+                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 font-mono uppercase tracking-widest"
               />
               <div v-if="pinLoading" class="absolute right-3 top-2.5">
                 <RefreshCw class="w-4 h-4 text-gray-400 animate-spin" />
@@ -498,7 +498,7 @@ const onSubmit = handleSubmit(async (values) => {
             </label>
             <select
               v-model="materialId"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
             >
               <option :value="undefined" disabled>Seleccionar...</option>
               <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
@@ -513,7 +513,7 @@ const onSubmit = handleSubmit(async (values) => {
             </label>
             <select
               v-model="vehicleTypeId"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
             >
               <option :value="undefined" disabled>Seleccionar...</option>
               <option v-for="vt in vehicleTypeOptions" :key="vt.id" :value="vt.id">{{ vt.name }}</option>
@@ -536,7 +536,7 @@ const onSubmit = handleSubmit(async (values) => {
                 v-if="tariffMode === 'client' || tariffMode === 'general'"
                 type="button"
                 @click="valueEditable = !valueEditable"
-                class="shrink-0 p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                class="shrink-0 p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
                 :title="valueEditable ? 'Usar tarifa' : 'Editar manualmente'"
               >
                 <Pencil class="w-3.5 h-3.5" />
@@ -544,7 +544,7 @@ const onSubmit = handleSubmit(async (values) => {
             </div>
             <div class="mt-1.5 h-4">
               <span v-if="tariffLoading" class="text-xs text-gray-400">Buscando tarifa...</span>
-              <span v-else-if="tariffMode === 'client'" class="inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+              <span v-else-if="tariffMode === 'client'" class="inline-flex items-center gap-1 text-xs text-gold-700 font-medium">
                 <Info class="w-3 h-3" /> Tarifa del cliente
               </span>
               <span v-else-if="tariffMode === 'general'" class="inline-flex items-center gap-1 text-xs text-gray-500 font-medium">
@@ -562,7 +562,7 @@ const onSubmit = handleSubmit(async (values) => {
             </label>
             <select
               v-model="paymentId"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
             >
               <option :value="undefined" disabled>Seleccionar...</option>
               <option v-for="p in paymentList" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -578,7 +578,7 @@ const onSubmit = handleSubmit(async (values) => {
               type="text"
               maxlength="20"
               placeholder="Opcional"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
             />
             <p v-if="externError" class="mt-1 text-xs text-red-500">{{ externError }}</p>
           </div>
@@ -591,7 +591,7 @@ const onSubmit = handleSubmit(async (values) => {
               rows="2"
               maxlength="500"
               placeholder="Observaciones opcionales (máx. 500 caracteres)"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none"
             />
             <p v-if="observationsError" class="mt-1 text-xs text-red-500">{{ observationsError }}</p>
           </div>
@@ -662,7 +662,7 @@ const onSubmit = handleSubmit(async (values) => {
           <button
             type="submit"
             :disabled="isSubmitting || !canSubmit"
-            class="px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
+            class="px-6 py-2.5 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 active:bg-gold-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
           >
             <RefreshCw v-if="isSubmitting" class="w-4 h-4 animate-spin" />
             {{ isSubmitting ? 'Registrando...' : 'Registrar Viaje' }}
@@ -680,7 +680,7 @@ const onSubmit = handleSubmit(async (values) => {
             v-model="newOriginName"
             type="text"
             placeholder="Nombre del origen"
-            class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
             @keydown.enter.prevent="createOrigin"
             autofocus
           />
@@ -694,7 +694,7 @@ const onSubmit = handleSubmit(async (values) => {
               type="button"
               @click="createOrigin"
               :disabled="!newOriginName.trim() || createOriginLoading"
-              class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              class="px-4 py-2 bg-gold-500 text-stone-900 text-sm font-medium rounded-lg hover:bg-gold-600 disabled:opacity-50"
             >
               {{ createOriginLoading ? 'Creando...' : 'Crear origen' }}
             </button>
@@ -713,10 +713,10 @@ const onSubmit = handleSubmit(async (values) => {
         <button
           type="button"
           @click="refetchTrips()"
-          class="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          class="p-2 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
           title="Actualizar ahora"
         >
-          <RefreshCw class="w-4 h-4" :class="tripsLoading ? 'animate-spin text-blue-500' : ''" />
+          <RefreshCw class="w-4 h-4" :class="tripsLoading ? 'animate-spin text-gold-600' : ''" />
         </button>
       </div>
 
@@ -754,9 +754,9 @@ const onSubmit = handleSubmit(async (values) => {
               :class="!trip.state ? 'opacity-40' : ''"
             >
               <td class="px-4 py-3">
-                <span class="font-mono font-bold text-blue-700">#{{ trip.voucher_num }}</span>
+                <span class="font-mono font-bold text-gold-800">#{{ trip.voucher_num }}</span>
               </td>
-              <td class="px-4 py-3 text-gray-600 text-xs">{{ trip.date_register }}</td>
+              <td class="px-4 py-3 text-gray-600 text-xs">{{ formatDate(trip.date_register) }}</td>
               <td class="px-4 py-3 font-medium text-gray-900 max-w-[160px] truncate">
                 {{ trip.client_detail?.name ?? '—' }}
               </td>
@@ -771,7 +771,7 @@ const onSubmit = handleSubmit(async (values) => {
                   <button
                     type="button"
                     @click="detailTrip = trip"
-                    class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                    class="p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
                     title="Ver detalle"
                   >
                     <Eye class="w-4 h-4" />
@@ -779,7 +779,7 @@ const onSubmit = handleSubmit(async (values) => {
                   <button
                     type="button"
                     @click="printVoucher(trip, trip.vehicle_detail?.dumper_detail?.ambiental_pin ?? '0', null)"
-                    class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                    class="p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
                     title="Reimprimir vale"
                   >
                     <Printer class="w-4 h-4" />
@@ -824,7 +824,7 @@ const onSubmit = handleSubmit(async (values) => {
               <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
                 <div>
                   <h3 class="text-sm font-semibold text-gray-800">Vale #{{ detailTrip.voucher_num }}</h3>
-                  <p class="text-xs text-gray-500 mt-0.5">{{ detailTrip.date_register }}</p>
+                  <p class="text-xs text-gray-500 mt-0.5">{{ formatDate(detailTrip.date_register) }}</p>
                 </div>
                 <button type="button" @click="detailTrip = null" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
               </div>
@@ -839,7 +839,7 @@ const onSubmit = handleSubmit(async (values) => {
                   </div>
                   <div>
                     <p class="text-xs text-gray-500 mb-0.5">Fecha</p>
-                    <p class="font-medium text-gray-900">{{ detailTrip.date_register }}</p>
+                    <p class="font-medium text-gray-900">{{ formatDate(detailTrip.date_register) }}</p>
                   </div>
                   <div>
                     <p class="text-xs text-gray-500 mb-0.5">Placa</p>
@@ -879,7 +879,7 @@ const onSubmit = handleSubmit(async (values) => {
                 <button
                   type="button"
                   @click="printVoucher(detailTrip!, detailTrip!.vehicle_detail?.dumper_detail?.ambiental_pin ?? '0', null)"
-                  class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                  class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gold-500 text-stone-900 text-sm font-medium rounded-lg hover:bg-gold-600 transition-colors"
                 >
                   <Printer class="w-4 h-4" /> Reimprimir Vale
                 </button>

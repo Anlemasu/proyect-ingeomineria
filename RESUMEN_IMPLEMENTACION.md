@@ -727,4 +727,107 @@ Probado en vivo contra el backend real (`localhost:8000`) con usuario `admin` (`
 - QA general cruzando todos los módulos
 - Gap heredado sin resolver: `authStore.initialize()` no restaura `user` en recarga de página (Parte 7)
 - Gap heredado sin resolver: `TripDetailView.patch` no reversa `AdvanceMovement` al anular viaje con anticipo
+
+---
+
+## Parte 10 — Análisis: Ajustes Consulta de Viajes
+
+### Entorno de backend — hallazgo importante
+
+En partes anteriores (7–9) se había documentado que Django no estaba instalado localmente y que la base de datos (PostgreSQL) no era accesible desde este entorno, por lo que la verificación se hacía solo contra el backend ya corriendo en `localhost:8000` (proceso gestionado aparte). **Para esta parte se encontró un virtualenv en `C:\Proyectos\proyect-ingeomineria\venv` con Django 6.0.5 instalado y conectividad real a la base de datos** (`python manage.py check` → "System check identified no issues"). Esto permitió ejecutar `makemigrations`/`migrate` de verdad en esta parte, a diferencia de partes anteriores.
+
+### Estado actual confirmado antes de modificar
+
+- `Trip.date_register` (`apps/trips/models.py`): `models.DateField()`, sin `null`/`blank`/`default` — confirmado, se cambia únicamente el tipo a `DateTimeField()`.
+- `TripReadSerializer` ya incluye `date_register` en `fields` (`apps/trips/serializers.py`) — DRF serializa `DateTimeField` automáticamente como ISO 8601, no requiere cambios en el serializer.
+- `TripWriteSerializer` NO incluye `date_register` — se asigna únicamente server-side en la vista, nunca desde el cliente. Confirmado, sin cambios necesarios ahí.
+- Migraciones existentes: `0001_initial` (creó `date_register` como `DateField`) y `0002_alter_trip_id_delete_transfer` (no relacionada). La nueva migración es `0003`.
+- **Corrección al enunciado del prompt:** el código real no usa `timezone.now().date()` en ningún lado — usa el helper equivalente `timezone.localdate()` (idéntico en efecto: hoy en la zona horaria local configurada). `date_register` se asigna en un solo lugar de `views.py`: `TripListCreateView.post`, línea `date_register=timezone.localdate()` (dentro del `transaction.atomic()`, al crear el viaje).
+- Comparaciones de "mismo día" contra `date_register` en `views.py` (`TripDetailView.patch`), dos ocurrencias, ambas con `timezone.localdate()`:
+  1. RF-36 (cashier solo edita el día en curso): `if obj.date_register != timezone.localdate():`
+  2. RF-37 (superusuario requiere justificación para ajustar histórico): `if request.user.role == 'superuser' and obj.date_register != timezone.localdate():`
+- **Verificación empírica crítica antes de aplicar el fix:** en Python, `datetime.date(...) == datetime.datetime(...)` es **siempre `False`** aunque sea el mismo día — no lanza excepción, simplemente nunca son iguales (se confirmó con `python -c "..."`). Esto significa que sin corregir estas dos comparaciones, **ambas se habrían roto silenciosamente**: la comparación número 1 habría bloqueado a `cashier` de editar cualquier viaje (incluidos los del propio día), y la número 2 habría exigido justificación a `superuser` en el 100% de las ediciones, incluidas las del día en curso. No es un detalle cosmético — es una regresión funcional severa que el prompt ya anticipaba correctamente pedir corregir.
+- El filtro `date` del `GET /api/trips/` ya opera sobre el campo `date` (fecha de negocio del viaje), **no** sobre `date_register` — confirmado, sin cambios.
+- `TIME_ZONE = 'America/Bogota'` y `USE_TZ = True` en `settings.py` — Django guarda todo internamente en UTC y DRF serializa en UTC (`...Z`); por eso `formatTime()` en el frontend convierte explícitamente a `America/Bogota` en vez de confiar en la hora del navegador o del servidor.
+
+### Cambios de backend aplicados
+
+1. **Modelo** (`apps/trips/models.py`): `date_register = models.DateField()` → `date_register = models.DateTimeField()`. Ningún otro campo tocado.
+2. **Migración**: generada con `python manage.py makemigrations trips --name="change_date_register_to_datetimefield"` → crea `0003_change_date_register_to_datetimefield.py`. Se verificó que la migración generada contiene **únicamente** una operación `AlterField` sobre `date_register` antes de aplicarla.
+3. **Migración aplicada**: `python manage.py migrate` — ejecutada contra la base de datos real. Los viajes históricos ya existentes quedan con `date_register` a medianoche de su fecha original (verificado en navegador: se muestra consistentemente como "19:00" en hora de Bogotá — Postgres interpretó la fecha naive como medianoche UTC al convertir la columna, y UTC-5 desplaza esa medianoche al "19:00" del día anterior en hora local), ya que un `DateField` no tenía componente de hora que preservar. Esto es inevitable y se documenta como comportamiento esperado, no un bug — ningún viaje histórico tenía una hora real que recuperar.
+4. **`views.py` — creación de viaje**: `date_register=timezone.localdate()` → `date_register=timezone.now()` en `TripListCreateView.post`.
+5. **`views.py` — comparaciones de mismo día**: ambas ocurrencias listadas arriba cambiadas de `obj.date_register != timezone.localdate()` a `obj.date_register.date() != timezone.localdate()`.
+6. **Ningún otro uso de `date_register` en el archivo quedó sin revisar** — confirmado con `grep -n "date_register\|timezone\." apps/trips/views.py`: solo 4 líneas en todo el archivo (el `order_by('-date_register')` del listado, que no necesita cambios porque ordenar por un `DateTimeField` funciona igual, y las 3 ya corregidas).
+7. **Filtro `date` confirmado sin cambios** — sigue filtrando por el campo `date`, nunca por `date_register`.
+
+### Verificación backend
+
+- `python manage.py showmigrations trips` → las 3 migraciones (`0001`, `0002`, `0003`) aparecen aplicadas (`[X]`).
+- Se registró un viaje de prueba nuevo (#1027) vía la UI real y se confirmó por API que `date_register` llega como datetime completo con offset explícito: `"2026-07-30T00:34:10.459975-05:00"`, no solo fecha.
+- Viajes históricos muestran consistentemente "19:00" al formatear con `formatTime()` — consistente con lo documentado en el punto 3 de arriba.
+
+### Cambios de frontend
+
+**`formatTime()`** (`src/utils/formatDate.ts`): agregada tal como se especificó, usando timezone `America/Bogota` explícito — necesario porque el backend serializa en UTC y el navegador del usuario podría estar en cualquier zona horaria; forzar `America/Bogota` garantiza que la hora mostrada sea siempre la hora real de Bogotá sin depender de la configuración del dispositivo. Maneja `null`/`undefined`/parseo inválido devolviendo `'—'` sin lanzar excepción.
+
+**`Trip` interface** (`src/types/index.ts`): sin cambio de tipo (sigue siendo `string`), se agregó el comentario aclaratorio pedido.
+
+**Columna de Consulta de Viajes** (`GeneralReportPage.vue`, Parte 8): en vez de eliminar la entrada `date_register` de `COLUMN_CONFIG` y crear una nueva, se **reetiquetó la misma entrada** (mismo `key: 'date_register'`) de `label: 'Fecha de registro'` a `label: 'Hora'`, y su `cell`/`accessorFn` pasó de `formatDate` a `formatTime`. Mantener el mismo `key` (en vez de borrar+recrear) evita romper `columnVisibility`/`localStorage` (que indexan por `key`) y ya queda ubicada inmediatamente después de "Fecha del viaje" sin reordenar nada, porque esa ya era su posición. Se aplicó el mismo cambio de renderer en `exportGeneralQueryExcel.ts` y `printReport.ts` (encabezado "Fecha de registro" → "Hora", `formatDate` → `formatTime`).
+
+**Rol `cashier` agregado a Consulta de Viajes:**
+- `navigation.ts`: `'cashier'` agregado al array `roles` de la entrada `/reports/general`.
+- `router/index.ts`: `'cashier'` agregado a `meta.allowedRoles` de la ruta `reports/general`.
+
+**Restricción de columnas para `cashier` — ya implementada desde la Parte 8, verificada de nuevo:** `GeneralReportPage.vue` ya usaba exactamente el patrón pedido (`allowedKeys` computado por rol, usado tanto para las columnas de la tabla como para las opciones del dropdown "Columnas", y `sanitizeVisibility()` aplicado tanto al cargar `localStorage` como en cada cambio posterior). `cashier` no está en `RESTRICTED_ROLES`, así que ya solo veía las columnas `roles: 'all'` — no hizo falta tocar esa lógica, solo se sumó el rol a navegación/router para que pudiera llegar a la página.
+
+### Verificación en navegador
+
+**Nota sobre el entorno de pruebas:** otro chat ya tenía un servidor de desarrollo corriendo en el puerto 5173 (el único origen permitido en `CORS_ALLOWED_ORIGINS` del backend). Para esta parte se levantó una instancia propia del frontend en el puerto 5199 (`.claude/launch.json` actualizado con `--port 5199 --strictPort` tras comprobar que el mecanismo `autoPort` del harness no es compatible con el propio fallback de puertos de Vite) y se agregó `http://localhost:5199` a `CORS_ALLOWED_ORIGINS` **temporalmente**, solo para poder ejecutar las pruebas contra el backend real. Esa línea se revirtió (`git diff` limpio en `settings.py`) inmediatamente después de terminar la verificación.
+
+Probado en vivo contra el backend real con usuario `admin` (`superuser`):
+- Se registró un viaje nuevo real (**#1027**, `id` real `27`) vía el formulario de `/trips` — el campo "Fecha" de la tabla "Viajes de hoy" mostró `30/07/2026` (fecha formateada), **no** el datetime ISO crudo, confirmando el fix en `TripsPage.vue`
+- Confirmado por API (`fetch` directo con el token de sesión) que `date_register` del viaje nuevo es un datetime completo: `"2026-07-30T00:34:10.459975-05:00"`
+- En **Consulta de Viajes**: la columna "Hora" aparece inmediatamente después de "Fecha del viaje", muestra `00:34` para el viaje nuevo y `19:00` para todos los viajes históricos (artefacto esperado de la migración, ver arriba); el dropdown "Columnas" y el filtro inline bajo el header también muestran la etiqueta "Hora" (no quedó ningún rastro de "Fecha de registro")
+- "Exportar Excel" y "Exportar PDF" desde Consulta de Viajes ejecutados sin errores de consola
+- En **Reporte Diario**: la columna "Hora registro" ahora muestra `00:34` en vez de una fecha — el encabezado por fin coincide con el dato mostrado
+- En **Ajustes del Día**: se abrió el editor del viaje `#1027` (creado hoy) como `superuser` y **no** apareció el campo "Justificación" (`editRequiresJustification` correctamente `false`); se guardó un cambio real (`N° Vale externo`) y la petición `PATCH /api/trips/27/` devolvió `200 OK` sin exigir justificación — confirma en conjunto el fix del frontend (`AdjustmentsPage.vue`) y el del backend (`obj.date_register.date() != timezone.localdate()`) trabajando juntos correctamente. Antes de estos dos fixes, esta misma acción habría fallado (o habría exigido justificación indebidamente) para cualquier viaje, incluidos los del propio día
+- Sin errores de consola en ningún punto de las pruebas
+
+**No verificado con `cashier` real** (misma limitación de credenciales de partes anteriores: existe `cajero1` en el entorno pero sin contraseña disponible). El acceso de `cashier` a `/reports/general` se verificó por inspección de código (roles agregados en `navigation.ts` y `router/index.ts`) y por el hecho de que la lógica de restricción de columnas —ya usada y probada desde la Parte 8— es agnóstica al rol específico, solo depende de si el rol aparece en `RESTRICTED_ROLES`.
+
+**Dato de prueba real, no descartable:** el viaje `#1027` (placa `DTT999`) y su edición (`N° Vale externo = "TESTOK"`) son resultado de ejercitar la funcionalidad real, igual que en partes anteriores — no se revirtieron.
+
+### Módulos revisados por impacto (`date_register`)
+
+| Archivo | Uso encontrado | Acción |
+|---|---|---|
+| `TripsPage.vue` (tabla "Viajes de hoy", líneas ~759, y drawer de detalle ~827/842) | Interpolación **directa sin formatear**: `{{ trip.date_register }}` bajo una columna/etiqueta llamada "Fecha" | **Corregido** — envuelto en `formatDate()` para seguir mostrando solo la fecha (la etiqueta dice "Fecha", no "Hora"; no se agregó columna de hora nueva porque no fue pedida para esta página). Sin el fix, tras la migración se vería el datetime ISO crudo en pantalla |
+| `AdjustmentsPage.vue` (línea 97, `editRequiresJustification`) | `editTrip.value.date_register !== today` — comparación de mismo día en frontend | **Corregido** a `editTrip.value.date_register.split('T')[0] !== today`. Sin este fix, la comparación de string siempre sería `true` (longitudes distintas), forzando justificación obligatoria en **todos** los ajustes de superusuario, incluso los del propio día — regresión real, no cosmética |
+| `DailyReportPage.vue` (Parte 7, columna "Hora registro") | Ya estaba etiquetada "Hora registro" pero renderizaba con `formatDate()` porque no existía dato de hora real (limitación documentada en la Parte 7) | **Corregido** a `formatTime()` — ahora la columna cumple lo que su propio encabezado siempre dijo |
+| `exportDailyReportExcel.ts` / `printDailyReport.ts` (Parte 7) | Encabezado "Fecha registro" con `formatDate(t.date_register)` en la hoja/tabla de viajes | **Corregido** — encabezado renombrado a "Hora registro" y valor con `formatTime()`, consistente con el cambio de `DailyReportPage.vue` |
+| `printVoucher.ts` (vale impreso al registrar un viaje) | `format(parseISO(trip.date_register), 'dd/MM/yyyy')` | **Sin cambios necesarios** — `parseISO` interpreta igual de bien un datetime ISO completo que una fecha sola, y el formato de salida `'dd/MM/yyyy'` solo usa la porción de fecha; sigue funcionando sin tocar nada |
+| `CashClosingPage.vue` | Ningún uso de `date_register` (usa `cashClosingApi.today()`, que no expone ese campo) | **Sin impacto**, confirmado por búsqueda exhaustiva |
+| `AuditLogPage.vue` (`FIELD_LABEL['date_register']`) | Etiqueta genérica para el visor de diffs del log de auditoría, aplicable a cualquier entidad | **No tocado** — es el módulo de Auditoría, explícitamente prohibido de modificar en esta parte. El diff ahora mostrará el datetime crudo como texto en vez de solo la fecha para los registros de `Trip`; funcional pero no especialmente formateado. Documentado como limitación conocida, no corregido por estar fuera de alcance |
+| `DashboardPage.vue` (Parte 9, "Últimos viajes registrados hoy") | Columna ya etiquetada "Hora" pero renderizada con `formatDate()` (mismo compromiso documentado en la Parte 9 por falta de dato de hora real) | **No tocado** — el módulo Dashboard está explícitamente prohibido de modificar en esta parte, aunque ahora técnicamente podría mostrar la hora real. Queda como mejora obvia pendiente para una futura parte |
+| `types/index.ts` → `PinsDumper.date_register` | Campo homónimo de un modelo **distinto** (`PinsDumper`, no `Trip`) | **No relacionado, no tocado** |
+| `PinsPage.vue` | Usa `date_register` de `PinsDumper`, no de `Trip` | **No relacionado, no tocado** |
+
+### Seguridad
+
+| Medida | Estado |
+|--------|--------|
+| Restricción de columnas para `cashier` aplicada a nivel de `computed` (`allowedKeys`), nunca vía CSS | ✅ Ya existía desde la Parte 8, confirmado de nuevo |
+| `localStorage` de columnas saneado contra el rol actual al montar | ✅ Ya existía desde la Parte 8 (`sanitizeVisibility` en `loadInitialVisibility`) |
+| `formatTime()` nunca lanza excepción — devuelve `'—'` ante entrada inválida | ✅ |
+| Migración de backend verificada (formato datetime real en la API) antes de dar por buenos los cambios de frontend | ✅ Confirmado con una prueba real de creación de viaje |
+| Comparaciones de mismo día en backend usan `.date()` sobre el datetime | ✅ Ambas ocurrencias en `views.py` corregidas |
+| Ningún campo del modelo `Trip` distinto a `date_register` fue modificado | ✅ |
+| Sin `console.log` en el código final | ✅ |
+
+### Pendiente
+
+- Actualizar `DashboardPage.vue` para que su columna "Hora" use `formatTime()` en vez de `formatDate()` ahora que el dato real existe — no se hizo en esta parte por estar el módulo Dashboard explícitamente fuera de alcance
+- `AuditLogPage.vue`: el diff de auditoría muestra el datetime crudo sin formatear para cambios en `Trip.date_register` — cosmético, no bloqueante
+- RF-44 Reporte por rango de fechas
+- RF-27B Certificado de disposición de material
 - **No verificado con `cashier` real:** existe un usuario `cajero1` en el entorno de prueba pero no se dispuso de su contraseña; la ocultación de la columna "Valor" y de "Anticipos consumidos" se verificó por lógica de código (mismo patrón que `TripsPage.vue`) y en navegador solo para `superuser`

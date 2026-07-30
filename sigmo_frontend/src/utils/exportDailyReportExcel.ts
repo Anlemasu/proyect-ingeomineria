@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import type { DailyReportData } from '@/types'
-import { formatDate } from '@/utils/formatDate'
+import { formatDate, formatTime } from '@/utils/formatDate'
 
 export function exportDailyReportExcel(date: string, data: DailyReportData): void {
   const wb = XLSX.utils.book_new()
@@ -24,13 +24,13 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
 
   // ── Sheet 2: Viajes ──────────────────────────────────────────────────────
   const viajesHeader = [
-    'N° Vale', 'Fecha registro', 'Cliente', 'Placa', 'PIN Ambiental', 'Origen',
+    'N° Vale', 'Hora registro', 'Cliente', 'Placa', 'PIN Ambiental', 'Origen',
     'Tipo Material', 'Tipo Vehículo', 'Valor', 'Medio de Pago',
     'N° Vale Externo', 'N° Factura', 'Estado',
   ]
   const viajesRows = data.trips.map(t => [
     t.voucher_num,
-    formatDate(t.date_register),
+    formatTime(t.date_register),
     t.client_detail?.name ?? '—',
     t.vehicle_detail?.plaque ?? '—',
     t.vehicle_detail?.dumper_detail?.ambiental_pin ?? '0',

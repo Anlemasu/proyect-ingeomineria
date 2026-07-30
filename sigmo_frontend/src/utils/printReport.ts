@@ -1,6 +1,6 @@
 import type { Trip } from '@/types'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate } from '@/utils/formatDate'
+import { formatDate, formatTime } from '@/utils/formatDate'
 import { format } from 'date-fns'
 
 interface ColumnLite {
@@ -19,7 +19,7 @@ function resolveDisplayValue(t: Trip, key: string, invoiceNumberMap: Record<numb
   switch (key) {
     case 'voucher_num': return `#${t.voucher_num}`
     case 'date': return formatDate(t.date)
-    case 'date_register': return formatDate(t.date_register)
+    case 'date_register': return formatTime(t.date_register)
     case 'client_detail.name': return t.client_detail?.name ?? '—'
     case 'origin_site_detail.name': return t.origin_site_detail?.name ?? '—'
     case 'vehicle_detail.plaque': return t.vehicle_detail?.plaque ?? '—'

@@ -247,7 +247,7 @@ const registroColumns: ColumnDef<ARow>[] = [
       const adv = info.row.original as unknown as Advance
       return h('div', { class: 'flex items-center gap-1' }, [
         h('button', {
-          class: 'p-1 text-gray-400 hover:text-blue-600 transition-colors',
+          class: 'p-1 text-gray-400 hover:text-gold-700 transition-colors',
           title: 'Ver detalle',
           onClick: () => openDetail(adv),
         }, h(Eye, { class: 'w-4 h-4' })),
@@ -329,7 +329,7 @@ const estadoAdvanceColumns: ColumnDef<ARow>[] = [
     id: 'actions',
     header: '',
     cell: info => h('button', {
-      class: 'p-1 text-gray-400 hover:text-blue-600 transition-colors',
+      class: 'p-1 text-gray-400 hover:text-gold-700 transition-colors',
       title: 'Ver detalle',
       onClick: () => openDetail(info.row.original as unknown as Advance),
     }, h(Eye, { class: 'w-4 h-4' })),
@@ -473,7 +473,7 @@ watch(activeTab, () => {
       <div class="flex flex-wrap gap-2">
         <button
           v-if="canManage && activeTab === 'registro'"
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-500 text-stone-900 text-sm font-medium hover:bg-gold-600 transition-colors"
           @click="openCreate"
         >
           <Plus class="w-4 h-4" />
@@ -526,7 +526,7 @@ watch(activeTab, () => {
           :key="tab.id"
           class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
           :class="activeTab === tab.id
-            ? 'border-blue-600 text-blue-600'
+            ? 'border-gold-500 text-gold-700'
             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
           @click="activeTab = tab.id"
         >
@@ -550,7 +550,7 @@ watch(activeTab, () => {
         <label class="block text-sm font-medium text-gray-700 mb-1">Seleccionar cliente</label>
         <select
           v-model="selectedClientId"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
         >
           <option value="">— Selecciona un cliente —</option>
           <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
@@ -574,12 +574,12 @@ watch(activeTab, () => {
           </div>
           <div
             class="rounded-xl border p-5"
-            :class="selectedClientBalance < 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'"
+            :class="selectedClientBalance < 0 ? 'bg-red-50 border-red-200' : 'bg-gold-50 border-gold-200'"
           >
             <p class="text-xs text-gray-500 uppercase tracking-wide">Saldo Disponible</p>
             <p
               class="mt-1 text-2xl font-semibold"
-              :class="selectedClientBalance < 0 ? 'text-red-600' : 'text-blue-700'"
+              :class="selectedClientBalance < 0 ? 'text-red-600' : 'text-gold-800'"
             >
               {{ formatCurrency(selectedClientBalance) }}
             </p>
@@ -624,7 +624,7 @@ watch(activeTab, () => {
           <label class="block text-xs text-gray-500 mb-1">Cliente</label>
           <select
             v-model="filterClientId"
-            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
           >
             <option value="">Todos</option>
             <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
@@ -635,7 +635,7 @@ watch(activeTab, () => {
           <input
             v-model="filterDateFrom"
             type="date"
-            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
           />
         </div>
         <div>
@@ -643,7 +643,7 @@ watch(activeTab, () => {
           <input
             v-model="filterDateTo"
             type="date"
-            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
           />
         </div>
         <div class="flex items-end">
@@ -826,7 +826,7 @@ watch(activeTab, () => {
             </label>
             <select
               v-model="clientId"
-              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
               :class="clientError ? 'border-red-400' : 'border-gray-300'"
             >
               <option :value="undefined">— Selecciona un cliente —</option>
@@ -849,7 +849,7 @@ watch(activeTab, () => {
             <input
               v-model="dateVal"
               type="date"
-              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
               :class="dateError ? 'border-red-400' : 'border-gray-300'"
             />
             <p v-if="dateError" class="mt-1 text-xs text-red-500">{{ dateError }}</p>
@@ -879,7 +879,7 @@ watch(activeTab, () => {
               step="1"
               min="1"
               placeholder="Ej: 123456"
-              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
               :class="transferNumError ? 'border-red-400' : 'border-gray-300'"
             />
             <p v-if="transferNumError" class="mt-1 text-xs text-red-500">{{ transferNumError }}</p>
@@ -894,7 +894,7 @@ watch(activeTab, () => {
               step="1"
               min="0"
               placeholder="0"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
               :class="tripsQtyError ? 'border-red-400' : 'border-gray-300'"
             />
             <p v-if="tripsQtyError" class="mt-1 text-xs text-red-500">{{ tripsQtyError }}</p>
@@ -910,7 +910,7 @@ watch(activeTab, () => {
               step="1"
               min="1"
               placeholder="Opcional"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
             />
           </div>
 
@@ -921,7 +921,7 @@ watch(activeTab, () => {
               v-model="observations"
               rows="3"
               placeholder="Opcional"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none"
             />
           </div>
 
@@ -937,7 +937,7 @@ watch(activeTab, () => {
             <button
               type="submit"
               :disabled="isSubmitting"
-              class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              class="px-4 py-2 text-sm font-medium bg-gold-500 text-stone-900 rounded-lg hover:bg-gold-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {{ isSubmitting ? 'Guardando...' : (editingAdvance ? 'Guardar cambios' : 'Registrar') }}
             </button>

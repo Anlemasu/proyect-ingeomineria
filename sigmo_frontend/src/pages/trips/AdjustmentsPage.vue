@@ -94,7 +94,7 @@ const editLoading       = ref(false)
 
 // RF-37: el superusuario requiere justificación al ajustar un registro de un día distinto al actual
 const editRequiresJustification = computed(() =>
-  isSuperuser.value && !!editTrip.value && editTrip.value.date_register !== today
+  isSuperuser.value && !!editTrip.value && editTrip.value.date_register.split('T')[0] !== today
 )
 
 function openEdit(trip: Trip) {
@@ -225,16 +225,16 @@ async function confirmAnnul() {
           type="text"
           inputmode="numeric"
           placeholder="Buscar por N° de vale..."
-          class="pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-56"
+          class="pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 w-full sm:w-56"
         />
       </div>
       <button
         type="button"
         @click="refetch()"
-        class="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+        class="p-2 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
         title="Actualizar"
       >
-        <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-blue-500' : ''" />
+        <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-gold-600' : ''" />
       </button>
       <span class="text-xs text-gray-400 sm:ml-auto">
         {{ filteredTrips.length }} viaje{{ filteredTrips.length !== 1 ? 's' : '' }} —
@@ -276,7 +276,7 @@ async function confirmAnnul() {
               :class="!trip.state ? 'opacity-40' : ''"
             >
               <td class="px-4 py-3">
-                <span class="font-mono font-bold text-blue-700">#{{ trip.voucher_num }}</span>
+                <span class="font-mono font-bold text-gold-800">#{{ trip.voucher_num }}</span>
               </td>
               <td class="px-4 py-3 font-medium text-gray-900 max-w-[150px] truncate">
                 {{ trip.client_detail?.name ?? '—' }}
@@ -310,7 +310,7 @@ async function confirmAnnul() {
                   <button
                     type="button"
                     @click="openEdit(trip)"
-                    class="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                    class="p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
                     title="Editar viaje"
                   >
                     <Pencil class="w-4 h-4" />
@@ -388,7 +388,7 @@ async function confirmAnnul() {
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Tipo de material</label>
                 <select
                   v-model="editMaterial"
-                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
                 >
                   <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
@@ -411,7 +411,7 @@ async function confirmAnnul() {
                   v-model="editDate"
                   type="date"
                   :readonly="!canChangeDate"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                   :class="canChangeDate
                     ? 'border-gray-300 bg-white'
                     : 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'"
@@ -424,7 +424,7 @@ async function confirmAnnul() {
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Medio de pago</label>
                 <select
                   v-model="editPayment"
-                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
                 >
                   <option v-for="p in paymentList" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
@@ -459,7 +459,7 @@ async function confirmAnnul() {
                   type="text"
                   maxlength="20"
                   placeholder="Opcional"
-                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 />
               </div>
 
@@ -476,7 +476,7 @@ async function confirmAnnul() {
                   v-model="editJustification"
                   rows="2"
                   placeholder="Motivo del ajuste histórico..."
-                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none"
                 />
               </div>
             </div>
@@ -486,7 +486,7 @@ async function confirmAnnul() {
                 type="button"
                 @click="saveEdit"
                 :disabled="editLoading || (editRequiresJustification && !editJustification.trim())"
-                class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 disabled:opacity-50 transition-colors"
               >
                 <RefreshCw v-if="editLoading" class="w-4 h-4 animate-spin" />
                 {{ editLoading ? 'Guardando...' : 'Guardar cambios' }}

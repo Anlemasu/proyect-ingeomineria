@@ -228,7 +228,7 @@ const invoicedColumns: ColumnDef<ARow>[] = [
       const invoiceId = info.getValue() as number | null
       if (!invoiceId) return '—'
       const inv = invoices.value.find(i => i.id === invoiceId)
-      return inv ? h('span', { class: 'font-medium text-blue-600' }, inv.number) : `#${invoiceId}`
+      return inv ? h('span', { class: 'font-medium text-gold-700' }, inv.number) : `#${invoiceId}`
     },
   },
   {
@@ -282,7 +282,7 @@ watch(activeTab, () => {
         <button
           class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
           :class="activeTab === 'pending'
-            ? 'border-blue-600 text-blue-600'
+            ? 'border-gold-500 text-gold-700'
             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
           @click="activeTab = 'pending'"
         >
@@ -297,7 +297,7 @@ watch(activeTab, () => {
         <button
           class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
           :class="activeTab === 'invoiced'
-            ? 'border-blue-600 text-blue-600'
+            ? 'border-gold-500 text-gold-700'
             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
           @click="activeTab = 'invoiced'"
         >
@@ -312,7 +312,7 @@ watch(activeTab, () => {
         <label class="block text-xs text-gray-500 mb-1">Cliente</label>
         <select
           v-model="filterClient"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
         >
           <option value="">Todos</option>
           <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
@@ -323,7 +323,7 @@ watch(activeTab, () => {
         <input
           v-model="filterDateFrom"
           type="date"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
         />
       </div>
       <div>
@@ -331,7 +331,7 @@ watch(activeTab, () => {
         <input
           v-model="filterDateTo"
           type="date"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
         />
       </div>
       <!-- Método de pago (ambas tabs) -->
@@ -339,7 +339,7 @@ watch(activeTab, () => {
         <label class="block text-xs text-gray-500 mb-1">Medio de pago</label>
         <select
           v-model="filterPayment"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
         >
           <option value="">Todos</option>
           <option v-for="pm in paymentMethods" :key="pm.id" :value="pm.id">{{ pm.name }}</option>
@@ -350,7 +350,7 @@ watch(activeTab, () => {
         <label class="block text-xs text-gray-500 mb-1">Factura</label>
         <select
           v-model="filterInvoice"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
         >
           <option value="">Todas</option>
           <option v-for="inv in invoices" :key="inv.id" :value="inv.id">{{ inv.number }}</option>
@@ -381,10 +381,10 @@ watch(activeTab, () => {
                     :title="allSelected ? 'Deseleccionar todo' : 'Seleccionar todo'"
                     @click="toggleAll"
                   >
-                    <CheckSquare v-if="allSelected" class="w-4 h-4 text-blue-600" />
+                    <CheckSquare v-if="allSelected" class="w-4 h-4 text-gold-700" />
                     <div
                       v-else-if="someSelected"
-                      class="w-4 h-4 rounded border-2 border-blue-400 bg-blue-100"
+                      class="w-4 h-4 rounded border-2 border-gold-400 bg-gold-100"
                     />
                     <Square v-else class="w-4 h-4 text-gray-400" />
                   </button>
@@ -405,11 +405,11 @@ watch(activeTab, () => {
                     {{ col.label }}
                     <ChevronUp
                       v-if="sortKey === col.key && sortDir === 'asc'"
-                      class="w-3 h-3 text-blue-500"
+                      class="w-3 h-3 text-gold-600"
                     />
                     <ChevronDown
                       v-else-if="sortKey === col.key && sortDir === 'desc'"
-                      class="w-3 h-3 text-blue-500"
+                      class="w-3 h-3 text-gold-600"
                     />
                     <ChevronDown v-else class="w-3 h-3 text-gray-300" />
                   </span>
@@ -441,12 +441,12 @@ watch(activeTab, () => {
                 v-for="trip in sortedPending"
                 :key="trip.id"
                 class="border-b border-gray-100 transition-colors cursor-pointer"
-                :class="selectedIds.has(trip.id) ? 'bg-blue-50' : 'hover:bg-gray-50'"
+                :class="selectedIds.has(trip.id) ? 'bg-gold-50' : 'hover:bg-gray-50'"
                 @click="toggleTrip(trip.id)"
               >
                 <td class="px-4 py-3">
                   <div class="flex items-center justify-center">
-                    <CheckSquare v-if="selectedIds.has(trip.id)" class="w-4 h-4 text-blue-600" />
+                    <CheckSquare v-if="selectedIds.has(trip.id)" class="w-4 h-4 text-gold-700" />
                     <Square v-else class="w-4 h-4 text-gray-300" />
                   </div>
                 </td>
@@ -466,10 +466,10 @@ watch(activeTab, () => {
       <Transition name="slide-up">
         <div
           v-if="selectedIds.size > 0"
-          class="sticky bottom-0 mt-0 bg-white border border-blue-200 rounded-xl shadow-lg px-5 py-4 flex items-center justify-between gap-4"
+          class="sticky bottom-0 mt-0 bg-white border border-gold-200 rounded-xl shadow-lg px-5 py-4 flex items-center justify-between gap-4"
         >
           <div class="text-sm text-gray-700">
-            <span class="font-semibold text-blue-700">{{ selectedIds.size }}</span>
+            <span class="font-semibold text-gold-800">{{ selectedIds.size }}</span>
             viaje{{ selectedIds.size !== 1 ? 's' : '' }} seleccionado{{ selectedIds.size !== 1 ? 's' : '' }}
             <span class="mx-2 text-gray-300">|</span>
             Total:
@@ -484,7 +484,7 @@ watch(activeTab, () => {
             </button>
             <button
               v-if="canManage"
-              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gold-500 text-stone-900 text-sm font-medium hover:bg-gold-600 transition-colors"
               @click="openInvoiceModal"
             >
               <FileText class="w-4 h-4" />
@@ -533,23 +533,23 @@ watch(activeTab, () => {
           <div class="flex gap-3">
             <label
               class="flex-1 flex items-center gap-2 rounded-lg border-2 px-4 py-3 cursor-pointer transition-colors"
-              :class="invoiceMode === 'new' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
+              :class="invoiceMode === 'new' ? 'border-gold-500 bg-gold-50' : 'border-gray-200 hover:border-gray-300'"
             >
               <input v-model="invoiceMode" type="radio" value="new" class="sr-only" />
               <span
                 class="w-4 h-4 rounded-full border-2 flex-shrink-0"
-                :class="invoiceMode === 'new' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'"
+                :class="invoiceMode === 'new' ? 'border-gold-500 bg-gold-500' : 'border-gray-300'"
               />
               <span class="text-sm font-medium text-gray-800">Nueva factura</span>
             </label>
             <label
               class="flex-1 flex items-center gap-2 rounded-lg border-2 px-4 py-3 cursor-pointer transition-colors"
-              :class="invoiceMode === 'existing' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
+              :class="invoiceMode === 'existing' ? 'border-gold-500 bg-gold-50' : 'border-gray-200 hover:border-gray-300'"
             >
               <input v-model="invoiceMode" type="radio" value="existing" class="sr-only" />
               <span
                 class="w-4 h-4 rounded-full border-2 flex-shrink-0"
-                :class="invoiceMode === 'existing' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'"
+                :class="invoiceMode === 'existing' ? 'border-gold-500 bg-gold-500' : 'border-gray-300'"
               />
               <span class="text-sm font-medium text-gray-800">Factura existente</span>
             </label>
@@ -565,7 +565,7 @@ watch(activeTab, () => {
               type="text"
               maxlength="15"
               placeholder="Ej: FAC-2024-001"
-              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
               :class="invoiceNumberError ? 'border-red-400' : 'border-gray-300'"
               @input="invoiceNumberError = ''"
             />
@@ -580,7 +580,7 @@ watch(activeTab, () => {
             </label>
             <select
               v-model="existingInvoiceId"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
             >
               <option value="">— Selecciona una factura —</option>
               <option v-for="inv in invoices" :key="inv.id" :value="inv.id">
@@ -618,7 +618,7 @@ watch(activeTab, () => {
           </button>
           <button
             :disabled="assignMutation.isPending.value"
-            class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            class="px-4 py-2 text-sm font-medium bg-gold-500 text-stone-900 rounded-lg hover:bg-gold-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             @click="assignMutation.mutate()"
           >
             {{ assignMutation.isPending.value ? 'Asignando...' : 'Confirmar asignación' }}

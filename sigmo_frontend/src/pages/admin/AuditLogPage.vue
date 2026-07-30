@@ -287,7 +287,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
     header: '',
     cell: ({ row }) =>
       h('button', {
-        class: 'p-1 text-gray-400 hover:text-blue-600 transition-colors',
+        class: 'p-1 text-gray-400 hover:text-gold-700 transition-colors',
         title: 'Ver detalle completo',
         onClick: () => openDetail(row.original),
       }, h(Eye, { class: 'w-4 h-4' })),
@@ -316,7 +316,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Usuario</label>
           <select v-model="filters.user"
-            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400">
             <option value="">Todos</option>
             <option v-for="u in uniqueUsers" :key="u.id" :value="String(u.id)">{{ u.name }}</option>
           </select>
@@ -325,7 +325,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Tipo de acción</label>
           <select v-model="filters.action"
-            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400">
             <option value="">Todas</option>
             <option v-for="a in ALL_ACTIONS" :key="a.value" :value="a.value">{{ a.label }}</option>
           </select>
@@ -334,7 +334,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Entidad</label>
           <select v-model="filters.model"
-            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400">
             <option value="">Todas</option>
             <option v-for="m in ALL_MODELS" :key="m.value" :value="m.value">{{ m.label }}</option>
           </select>
@@ -343,13 +343,13 @@ const columns: ColumnDef<AuditLogEntry>[] = [
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Fecha desde</label>
           <input v-model="filters.date_from" type="date"
-            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
         </div>
 
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Fecha hasta</label>
           <input v-model="filters.date_to" type="date"
-            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
         </div>
 
         <div class="flex items-end">

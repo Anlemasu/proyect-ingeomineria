@@ -59,20 +59,25 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
   />
 
   <aside
-    class="fixed inset-y-0 left-0 z-40 w-64 flex flex-col min-h-screen bg-slate-800 transition-transform duration-300 flex-shrink-0 lg:static lg:transition-all"
+    class="fixed inset-y-0 left-0 z-40 w-64 flex flex-col h-screen bg-stone-900 transition-all duration-300 flex-shrink-0"
     :class="[sidebarWidth, isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0']"
   >
     <!-- Logo -->
     <div
-      class="flex items-center justify-between border-b border-slate-700 transition-all duration-300"
+      class="flex items-center justify-between border-b border-stone-800 transition-all duration-300"
       :class="collapsed ? 'p-4 lg:justify-center' : 'px-5 py-4'"
     >
-      <div class="flex items-center">
-        <span class="text-white font-bold text-lg flex-shrink-0">S</span>
-        <span v-if="!collapsed" class="text-white font-bold text-lg ml-0.5">IGMO</span>
+      <div class="flex items-center gap-2 min-w-0">
+        <img
+          src="/logo_amarillo.jpeg"
+          alt="Ingeominería"
+          class="rounded-md flex-shrink-0"
+          :class="collapsed ? 'w-10 h-10 object-cover' : 'h-11 w-auto object-contain'"
+        />
+        <span v-if="!collapsed" class="text-white font-bold text-lg truncate">SIGMO</span>
       </div>
       <button
-        class="text-slate-300 hover:text-white lg:hidden"
+        class="text-stone-300 hover:text-white lg:hidden"
         @click="close"
       >
         <X class="w-5 h-5" />
@@ -88,10 +93,10 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
           v-if="item.type === 'leaf'"
           :to="(item as NavLeaf).path"
           :title="collapsed ? item.label : undefined"
-          class="flex items-center gap-3 mx-2 px-3 py-2 rounded-md text-sm transition-colors"
+          class="flex items-center gap-3 mx-2 px-3 py-2 rounded-md text-sm border-l-2 transition-colors"
           :class="isLeafActive((item as NavLeaf).path)
-            ? 'bg-blue-600 text-white'
-            : 'text-slate-300 hover:bg-slate-700 hover:text-white'"
+            ? 'bg-stone-800 text-gold-400 border-gold-500'
+            : 'border-transparent text-stone-300 hover:bg-stone-800 hover:text-white'"
         >
           <component :is="item.icon" class="w-4 h-4 flex-shrink-0" />
           <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
@@ -104,8 +109,8 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
             class="flex items-center gap-3 w-full mx-2 px-3 py-2 rounded-md text-sm transition-colors"
             :class="[
               isGroupActive(item as NavGroup) && !openGroups.has(item.label)
-                ? 'text-blue-400'
-                : 'text-slate-300 hover:bg-slate-700 hover:text-white',
+                ? 'text-gold-400'
+                : 'text-stone-300 hover:bg-stone-800 hover:text-white',
               'w-[calc(100%-16px)]',
             ]"
             @click="toggleGroup(item.label)"
@@ -131,10 +136,10 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
               v-for="child in (item as NavGroup).children"
               :key="child.path"
               :to="child.path"
-              class="flex items-center gap-3 mx-2 pl-9 pr-3 py-2 rounded-md text-sm transition-colors"
+              class="flex items-center gap-3 mx-2 pl-9 pr-3 py-2 rounded-md text-sm border-l-2 transition-colors"
               :class="isLeafActive(child.path)
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'"
+                ? 'bg-stone-800 text-gold-400 border-gold-500'
+                : 'border-transparent text-stone-400 hover:bg-stone-800 hover:text-white'"
             >
               <component :is="child.icon" class="w-3.5 h-3.5 flex-shrink-0" />
               <span class="truncate">{{ child.label }}</span>
@@ -150,8 +155,8 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
               :title="child.label"
               class="flex items-center justify-center mx-2 px-3 py-2 rounded-md text-sm transition-colors"
               :class="isLeafActive(child.path)
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:bg-slate-700 hover:text-white'"
+                ? 'bg-stone-800 text-gold-400'
+                : 'text-stone-400 hover:bg-stone-800 hover:text-white'"
             >
               <component :is="child.icon" class="w-3.5 h-3.5" />
             </router-link>
@@ -162,11 +167,11 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
     </nav>
 
     <!-- Bottom: collapse toggle + logout -->
-    <div class="border-t border-slate-700 p-2 space-y-1">
+    <div class="border-t border-stone-800 p-2 space-y-1">
       <button
         @click="logout"
         :title="collapsed ? 'Cerrar sesión' : undefined"
-        class="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+        class="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-stone-300 hover:bg-stone-800 hover:text-white transition-colors"
         :class="collapsed ? 'justify-center' : ''"
       >
         <LogOut class="w-4 h-4 flex-shrink-0" />
@@ -176,7 +181,7 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
       <button
         @click="collapsed = !collapsed"
         :title="collapsed ? 'Expandir menú' : 'Colapsar menú'"
-        class="hidden lg:flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+        class="hidden lg:flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-stone-400 hover:bg-stone-800 hover:text-white transition-colors"
         :class="collapsed ? 'justify-center' : ''"
       >
         <ChevronLeft v-if="!collapsed" class="w-4 h-4" />

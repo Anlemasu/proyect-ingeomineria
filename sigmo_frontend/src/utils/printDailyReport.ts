@@ -1,6 +1,6 @@
 import type { DailyReportData } from '@/types'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate } from '@/utils/formatDate'
+import { formatDate, formatTime } from '@/utils/formatDate'
 import { format } from 'date-fns'
 
 function escapeHtml(value: unknown): string {
@@ -55,7 +55,7 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
   const tripRows = data.trips.map(t => `
     <tr>
       <td>${t.voucher_num}</td>
-      <td>${formatDate(t.date_register)}</td>
+      <td>${formatTime(t.date_register)}</td>
       <td>${escapeHtml(t.client_detail?.name)}</td>
       <td>${escapeHtml(t.vehicle_detail?.plaque)}</td>
       <td>${escapeHtml(t.vehicle_detail?.dumper_detail?.ambiental_pin ?? '0')}</td>
@@ -72,7 +72,7 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
   const tripsTable = `
     <table>
       <thead><tr>
-        <th>N° Vale</th><th>Fecha registro</th><th>Cliente</th><th>Placa</th><th>PIN Ambiental</th>
+        <th>N° Vale</th><th>Hora registro</th><th>Cliente</th><th>Placa</th><th>PIN Ambiental</th>
         <th>Origen</th><th>Tipo Material</th><th>Tipo Vehículo</th><th class="num">Valor</th>
         <th>Medio de Pago</th><th>N° Vale Externo</th><th>N° Factura</th><th>Estado</th>
       </tr></thead>

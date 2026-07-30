@@ -192,7 +192,7 @@ const columns: ColumnDef<Client>[] = [
     header: 'Acciones',
     cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
       canEdit('clients') ? h('button', {
-        class: 'p-1 text-gray-500 hover:text-blue-600',
+        class: 'p-1 text-gray-500 hover:text-gold-700',
         title: 'Editar',
         onClick: () => openEdit(row.original),
       }, h(Pencil, { class: 'w-4 h-4' })) : null,
@@ -213,7 +213,7 @@ const columns: ColumnDef<Client>[] = [
       <button
         v-if="canCreate('clients')"
         @click="openCreate"
-        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700"
+        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600"
       >
         <Plus class="w-4 h-4" />
         Nuevo cliente
@@ -237,7 +237,7 @@ const columns: ColumnDef<Client>[] = [
                   v-model="nit"
                   type="text"
                   :disabled="!!editingClient"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 disabled:bg-gray-100"
                   :class="(nitError || nitDuplicate) ? 'border-red-400' : 'border-gray-300'"
                   @blur="checkNit(nit ?? '')"
                 />
@@ -246,22 +246,22 @@ const columns: ColumnDef<Client>[] = [
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Nombre empresa *</label>
-                <input v-model="name" type="text" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" :class="nameError ? 'border-red-400' : 'border-gray-300'" />
+                <input v-model="name" type="text" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" :class="nameError ? 'border-red-400' : 'border-gray-300'" />
                 <p v-if="nameError" class="mt-1 text-xs text-red-600">{{ nameError }}</p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Abreviacion *</label>
-                <input v-model="abrev_name" type="text" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" :class="abrevError ? 'border-red-400' : 'border-gray-300'" />
+                <input v-model="abrev_name" type="text" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" :class="abrevError ? 'border-red-400' : 'border-gray-300'" />
                 <p v-if="abrevError" class="mt-1 text-xs text-red-600">{{ abrevError }}</p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Direccion *</label>
-                <input v-model="address" type="text" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" :class="addressError ? 'border-red-400' : 'border-gray-300'" />
+                <input v-model="address" type="text" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" :class="addressError ? 'border-red-400' : 'border-gray-300'" />
                 <p v-if="addressError" class="mt-1 text-xs text-red-600">{{ addressError }}</p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Telefono *</label>
-                <input v-model="phone" type="text" inputmode="numeric" maxlength="10" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" :class="phoneError ? 'border-red-400' : 'border-gray-300'" />
+                <input v-model="phone" type="text" inputmode="numeric" maxlength="10" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" :class="phoneError ? 'border-red-400' : 'border-gray-300'" />
                 <p v-if="phoneError" class="mt-1 text-xs text-red-600">{{ phoneError }}</p>
               </div>
               <div>
@@ -296,7 +296,7 @@ const columns: ColumnDef<Client>[] = [
               <button
                 type="submit"
                 :disabled="isSubmitting || !!nitDuplicate"
-                class="px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60"
+                class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60"
               >
                 {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
               </button>
@@ -323,7 +323,7 @@ const columns: ColumnDef<Client>[] = [
             v-model="newCityName"
             type="text"
             placeholder="Nombre de la ciudad"
-            class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
             @keydown.enter.prevent="createCity"
             autofocus
           />
@@ -337,7 +337,7 @@ const columns: ColumnDef<Client>[] = [
               type="button"
               @click="createCity"
               :disabled="!newCityName.trim() || createCityLoading"
-              class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              class="px-4 py-2 bg-gold-500 text-stone-900 text-sm font-medium rounded-lg hover:bg-gold-600 disabled:opacity-50"
             >
               {{ createCityLoading ? 'Creando...' : 'Crear ciudad' }}
             </button>

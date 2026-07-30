@@ -290,7 +290,7 @@ const columns: ColumnDef<User>[] = [
       const isSelf = authStore.user?.id === u.id
       return h('div', { class: 'flex items-center gap-2' }, [
         h('button', {
-          class: 'p-1 text-gray-500 hover:text-blue-600',
+          class: 'p-1 text-gray-500 hover:text-gold-700',
           title: 'Editar',
           onClick: () => openEdit(u),
         }, h(Pencil, { class: 'w-4 h-4' })),
@@ -323,7 +323,7 @@ const columns: ColumnDef<User>[] = [
       <PageHeader title="Usuarios" description="Gestión de usuarios del sistema" />
       <button
         @click="openCreate"
-        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700"
+        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600"
       >
         <Plus class="w-4 h-4" />
         Nuevo usuario
@@ -343,7 +343,7 @@ const columns: ColumnDef<User>[] = [
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
               <input v-model="createName" type="text"
-                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 :class="createNameError ? 'border-red-400' : 'border-gray-300'" />
               <p v-if="createNameError" class="mt-1 text-xs text-red-600">{{ createNameError }}</p>
             </div>
@@ -351,7 +351,7 @@ const columns: ColumnDef<User>[] = [
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Correo electrónico *</label>
               <input v-model="createEmail" type="email"
-                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 :class="createEmailError ? 'border-red-400' : 'border-gray-300'" />
               <p v-if="createEmailError" class="mt-1 text-xs text-red-600">{{ createEmailError }}</p>
             </div>
@@ -359,7 +359,7 @@ const columns: ColumnDef<User>[] = [
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de usuario *</label>
               <input v-model="createUsername" type="text" autocomplete="off"
-                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 :class="createUsernameError ? 'border-red-400' : 'border-gray-300'" />
               <p v-if="createUsernameError" class="mt-1 text-xs text-red-600">{{ createUsernameError }}</p>
             </div>
@@ -370,7 +370,7 @@ const columns: ColumnDef<User>[] = [
                 <input v-model="createPassword"
                   :type="showPassword ? 'text' : 'password'"
                   autocomplete="new-password"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 pr-10"
                   :class="createPasswordError ? 'border-red-400' : 'border-gray-300'" />
                 <button type="button" @click="showPassword = !showPassword"
                   class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600">
@@ -388,7 +388,7 @@ const columns: ColumnDef<User>[] = [
                 <input v-model="createPasswordConfirm"
                   :type="showConfirmPassword ? 'text' : 'password'"
                   autocomplete="new-password"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 pr-10"
                   :class="createPasswordConfirmError ? 'border-red-400' : 'border-gray-300'" />
                 <button type="button" @click="showConfirmPassword = !showConfirmPassword"
                   class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600">
@@ -402,7 +402,7 @@ const columns: ColumnDef<User>[] = [
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Rol *</label>
               <select v-model="createRole"
-                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 :class="createRoleError ? 'border-red-400' : 'border-gray-300'">
                 <option value="" disabled>Selecciona un rol</option>
                 <option v-for="opt in ROLE_OPTIONS" :key="opt.value" :value="opt.value">
@@ -418,7 +418,7 @@ const columns: ColumnDef<User>[] = [
                 Cancelar
               </button>
               <button type="submit" :disabled="isCreating"
-                class="px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60">
+                class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60">
                 {{ isCreating ? 'Guardando...' : 'Crear usuario' }}
               </button>
             </div>
@@ -438,7 +438,7 @@ const columns: ColumnDef<User>[] = [
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
               <input v-model="editName" type="text"
-                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 :class="editNameError ? 'border-red-400' : 'border-gray-300'" />
               <p v-if="editNameError" class="mt-1 text-xs text-red-600">{{ editNameError }}</p>
             </div>
@@ -446,7 +446,7 @@ const columns: ColumnDef<User>[] = [
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Correo electrónico *</label>
               <input v-model="editEmail" type="email"
-                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 :class="editEmailError ? 'border-red-400' : 'border-gray-300'" />
               <p v-if="editEmailError" class="mt-1 text-xs text-red-600">{{ editEmailError }}</p>
             </div>
@@ -454,7 +454,7 @@ const columns: ColumnDef<User>[] = [
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de usuario *</label>
               <input v-model="editUsername" type="text" autocomplete="off"
-                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 :class="editUsernameError ? 'border-red-400' : 'border-gray-300'" />
               <p v-if="editUsernameError" class="mt-1 text-xs text-red-600">{{ editUsernameError }}</p>
             </div>
@@ -473,7 +473,7 @@ const columns: ColumnDef<User>[] = [
                 Cancelar
               </button>
               <button type="submit" :disabled="isEditing"
-                class="px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60">
+                class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60">
                 {{ isEditing ? 'Guardando...' : 'Guardar cambios' }}
               </button>
             </div>
@@ -500,7 +500,7 @@ const columns: ColumnDef<User>[] = [
                 <input v-model="resetPassword"
                   :type="showResetPassword ? 'text' : 'password'"
                   autocomplete="new-password"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 pr-10"
                   :class="resetPasswordError ? 'border-red-400' : 'border-gray-300'" />
                 <button type="button" @click="showResetPassword = !showResetPassword"
                   class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600">
@@ -518,7 +518,7 @@ const columns: ColumnDef<User>[] = [
                 <input v-model="resetPasswordConfirm"
                   :type="showResetConfirmPassword ? 'text' : 'password'"
                   autocomplete="new-password"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 pr-10"
                   :class="resetPasswordConfirmError ? 'border-red-400' : 'border-gray-300'" />
                 <button type="button" @click="showResetConfirmPassword = !showResetConfirmPassword"
                   class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600">
@@ -535,7 +535,7 @@ const columns: ColumnDef<User>[] = [
                 Cancelar
               </button>
               <button type="submit" :disabled="isResetting"
-                class="px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60">
+                class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60">
                 {{ isResetting ? 'Restableciendo...' : 'Restablecer' }}
               </button>
             </div>

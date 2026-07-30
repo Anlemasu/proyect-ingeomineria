@@ -37,7 +37,7 @@ function onInput(e: Event) {
     inputmode="numeric"
     :readonly="readonly || disabled"
     :disabled="disabled"
-    class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+    class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
     :class="[
       disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-200' :
       readonly ? 'bg-gray-50 text-gray-700 border-gray-300 cursor-default' :

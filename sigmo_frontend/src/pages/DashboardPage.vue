@@ -183,8 +183,8 @@ async function confirmValidate() {
 <template>
   <!-- ── AUDITOR: pantalla de bienvenida estática, sin datos ─────────────────── -->
   <div v-if="role === 'auditor'" class="min-h-[70vh] flex flex-col items-center justify-center text-center gap-3">
-    <div class="w-40 h-40 rounded-2xl bg-blue-800 flex items-center justify-center shadow-sm">
-      <span class="text-4xl font-bold text-white">SIGMO</span>
+    <div class="w-40 h-40 rounded-2xl bg-gold-500 flex items-center justify-center shadow-sm">
+      <span class="text-4xl font-bold text-stone-900">SIGMO</span>
     </div>
     <h1 class="text-2xl text-gray-900 mt-2">Bienvenido, {{ authStore.user?.name }}</h1>
     <span
@@ -220,12 +220,12 @@ async function confirmValidate() {
         </div>
         <template v-else>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-blue-50 rounded-xl p-4">
+            <div class="bg-gold-50 rounded-xl p-4">
               <div class="flex items-center gap-2 mb-2">
-                <Truck class="w-4 h-4 text-blue-500" />
-                <span class="text-xs font-medium text-blue-600 uppercase tracking-wide">Total Viajes hoy</span>
+                <Truck class="w-4 h-4 text-gold-600" />
+                <span class="text-xs font-medium text-gold-700 uppercase tracking-wide">Total Viajes hoy</span>
               </div>
-              <p class="text-2xl font-bold text-blue-700">{{ totalTripsToday }}</p>
+              <p class="text-2xl font-bold text-gold-800">{{ totalTripsToday }}</p>
             </div>
             <div class="bg-emerald-50 rounded-xl p-4">
               <div class="flex items-center gap-2 mb-2">
@@ -241,9 +241,9 @@ async function confirmValidate() {
               </div>
               <p class="text-2xl font-bold text-red-600">{{ formatCurrency(totalGastos) }}</p>
             </div>
-            <div :class="saldoNeto >= 0 ? 'bg-blue-50' : 'bg-red-50'" class="rounded-xl p-4">
-              <span :class="saldoNeto >= 0 ? 'text-blue-600' : 'text-red-500'" class="text-xs font-medium uppercase tracking-wide">Saldo Neto</span>
-              <p :class="saldoNeto >= 0 ? 'text-blue-700' : 'text-red-600'" class="text-2xl font-bold mt-1">{{ formatCurrency(saldoNeto) }}</p>
+            <div :class="saldoNeto >= 0 ? 'bg-gold-50' : 'bg-red-50'" class="rounded-xl p-4">
+              <span :class="saldoNeto >= 0 ? 'text-gold-700' : 'text-red-500'" class="text-xs font-medium uppercase tracking-wide">Saldo Neto</span>
+              <p :class="saldoNeto >= 0 ? 'text-gold-800' : 'text-red-600'" class="text-2xl font-bold mt-1">{{ formatCurrency(saldoNeto) }}</p>
             </div>
           </div>
 
@@ -277,7 +277,7 @@ async function confirmValidate() {
           <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-semibold text-gray-800">Últimos viajes registrados hoy</h3>
-              <router-link :to="dailySummaryLinkTarget" class="text-xs text-blue-600 hover:text-blue-800 font-medium">
+              <router-link :to="dailySummaryLinkTarget" class="text-xs text-gold-700 hover:text-gold-800 font-medium">
                 Ver todos los viajes de hoy
               </router-link>
             </div>
@@ -298,7 +298,7 @@ async function confirmValidate() {
                     <td colspan="6" class="px-4 py-6 text-center text-xs text-gray-400">Sin viajes registrados hoy</td>
                   </tr>
                   <tr v-for="t in lastTrips" :key="t.id" class="hover:bg-gray-50">
-                    <td class="px-4 py-3 font-mono font-bold text-blue-700">#{{ t.voucher_num }}</td>
+                    <td class="px-4 py-3 font-mono font-bold text-gold-800">#{{ t.voucher_num }}</td>
                     <td class="px-4 py-3 text-gray-600 text-xs">{{ formatDate(t.date_register) }}</td>
                     <td class="px-4 py-3 text-gray-900">{{ t.client_detail?.name ?? '—' }}</td>
                     <td class="px-4 py-3 font-mono text-gray-700">{{ t.vehicle_detail?.plaque ?? '—' }}</td>
@@ -317,7 +317,7 @@ async function confirmValidate() {
     <section v-if="showLowBalanceAdvances" class="space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-800">Anticipos próximos a agotarse</h2>
-        <router-link to="/advances" class="text-xs text-blue-600 hover:text-blue-800 font-medium">Ver todos</router-link>
+        <router-link to="/advances" class="text-xs text-gold-700 hover:text-gold-800 font-medium">Ver todos</router-link>
       </div>
 
       <div v-if="advancesIsError" class="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -358,7 +358,7 @@ async function confirmValidate() {
           <p class="text-xs text-gray-500">Valor original del anticipo: <span class="font-semibold text-gray-700">{{ formatCurrency(a.value) }}</span></p>
           <router-link
             to="/advances"
-            class="block w-full text-center px-3 py-2 text-xs font-medium text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+            class="block w-full text-center px-3 py-2 text-xs font-medium text-gold-800 border border-gold-200 rounded-lg hover:bg-gold-50 transition-colors"
           >
             Ver detalle
           </router-link>
@@ -370,7 +370,7 @@ async function confirmValidate() {
     <section v-if="showFinishedAdvances" class="space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-800">Anticipos finalizados recientemente</h2>
-        <router-link to="/advances" class="text-xs text-blue-600 hover:text-blue-800 font-medium">Ver todos</router-link>
+        <router-link to="/advances" class="text-xs text-gold-700 hover:text-gold-800 font-medium">Ver todos</router-link>
       </div>
 
       <div v-if="advancesIsError" class="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -416,7 +416,7 @@ async function confirmValidate() {
     <section v-if="showUnfacturedTrips" class="space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-800">Viajes sin facturar (efectivo y transferencia)</h2>
-        <router-link to="/invoicing" class="text-xs text-blue-600 hover:text-blue-800 font-medium">Ver todos</router-link>
+        <router-link to="/invoicing" class="text-xs text-gold-700 hover:text-gold-800 font-medium">Ver todos</router-link>
       </div>
 
       <div v-if="tripsUnfacturedIsError" class="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -453,7 +453,7 @@ async function confirmValidate() {
                 </td>
               </tr>
               <tr v-for="t in tripsUnfactured" :key="t.id" class="hover:bg-gray-50">
-                <td class="px-4 py-3 font-mono font-bold text-blue-700">#{{ t.voucher_num }}</td>
+                <td class="px-4 py-3 font-mono font-bold text-gold-800">#{{ t.voucher_num }}</td>
                 <td class="px-4 py-3 text-gray-600 text-xs">{{ formatDate(t.date) }}</td>
                 <td class="px-4 py-3 text-gray-900">{{ t.client_detail?.name ?? '—' }}</td>
                 <td class="px-4 py-3 font-mono text-gray-700">{{ t.vehicle_detail?.plaque ?? '—' }}</td>
@@ -463,7 +463,7 @@ async function confirmValidate() {
                   <button
                     type="button"
                     @click="confirmTrip = t"
-                    class="px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                    class="px-3 py-1.5 text-xs font-medium text-gold-800 border border-gold-200 rounded-lg hover:bg-gold-50 transition-colors"
                   >
                     Validar
                   </button>

@@ -31,7 +31,7 @@ const emit = defineEmits<{
           <button
             @click="emit('confirm')"
             :disabled="loading"
-            class="px-4 py-2 text-sm font-medium text-white bg-blue-800 rounded-md hover:bg-blue-700 disabled:opacity-60"
+            class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60"
           >
             {{ loading ? 'Procesando...' : (confirmLabel ?? 'Confirmar') }}
           </button>

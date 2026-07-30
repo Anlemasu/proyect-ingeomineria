@@ -19,3 +19,18 @@ body {
   width: 100%;
   min-height: 100vh;
 }
+
+/* Escala sutil y uniforme del tamaño base en pantallas grandes: como el
+   espaciado, los anchos y el texto de Tailwind están en rem, todo crece
+   proporcionalmente sin tocar cada componente. */
+@media (min-width: 1536px) {
+  html {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 1920px) {
+  html {
+    font-size: 18px;
+  }
+}

@@ -127,7 +127,7 @@ function openHistory(client: Client) {
         v-if="canEdit('masters') && dirtyKeys.size > 0"
         @click="saveAll"
         :disabled="saving"
-        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60"
+        class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60"
       >
         <Save class="w-4 h-4" />
         {{ saving ? 'Guardando...' : 'Guardar cambios' }}
@@ -148,8 +148,8 @@ function openHistory(client: Client) {
         </thead>
         <tbody>
           <!-- General row -->
-          <tr class="border-b border-gray-100 bg-blue-50">
-            <td class="px-4 py-3 font-medium text-gray-800 sticky left-0 bg-blue-50">Tarifa general</td>
+          <tr class="border-b border-gray-100 bg-gold-50">
+            <td class="px-4 py-3 font-medium text-gray-800 sticky left-0 bg-gold-50">Tarifa general</td>
             <td v-for="t in activeTypes" :key="t.id" class="px-4 py-2">
               <CurrencyInput
                 v-if="canEdit('masters')"
@@ -174,7 +174,7 @@ function openHistory(client: Client) {
               <span v-else>{{ formatCurrency(getCellValue(client.id, t.id)) }}</span>
             </td>
             <td class="px-4 py-3">
-              <button @click="openHistory(client)" class="p-1 text-gray-400 hover:text-blue-600" title="Ver historial">
+              <button @click="openHistory(client)" class="p-1 text-gray-400 hover:text-gold-700" title="Ver historial">
                 <History class="w-4 h-4" />
               </button>
             </td>

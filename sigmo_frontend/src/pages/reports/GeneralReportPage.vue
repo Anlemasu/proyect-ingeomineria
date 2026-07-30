@@ -23,7 +23,7 @@ import { paymentMethodsApi } from '@/api/paymentMethods.api'
 import { invoicesApi } from '@/api/invoices.api'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate } from '@/utils/formatDate'
+import { formatDate, formatTime } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { printGeneralQuery } from '@/utils/printReport'
 import { exportGeneralQueryExcel } from '@/utils/exportGeneralQueryExcel'
@@ -50,7 +50,7 @@ const RESTRICTED_ROLES: UserRole[] = ['superuser', 'commercial_admin', 'accounta
 const COLUMN_CONFIG: ColumnConfigItem[] = [
   { key: 'voucher_num', label: 'N° Vale', roles: 'all' },
   { key: 'date', label: 'Fecha del viaje', roles: 'all' },
-  { key: 'date_register', label: 'Fecha de registro', roles: 'all' },
+  { key: 'date_register', label: 'Hora', roles: 'all' },
   { key: 'client_detail.name', label: 'Cliente', roles: 'all' },
   { key: 'origin_site_detail.name', label: 'Origen del material', roles: 'all' },
   { key: 'vehicle_detail.plaque', label: 'Placa', roles: 'all' },
@@ -252,10 +252,10 @@ const pageIndex = ref(0)
 const columns = computed<ColumnDef<Trip>[]>(() => [
   {
     id: 'voucher_num', accessorKey: 'voucher_num', header: 'N° Vale',
-    cell: ({ row }) => h('span', { class: 'font-mono font-bold text-blue-700' }, `#${row.original.voucher_num}`),
+    cell: ({ row }) => h('span', { class: 'font-mono font-bold text-gold-800' }, `#${row.original.voucher_num}`),
   },
   { id: 'date', accessorKey: 'date', header: 'Fecha del viaje', cell: ({ row }) => formatDate(row.original.date) },
-  { id: 'date_register', accessorKey: 'date_register', header: 'Fecha de registro', cell: ({ row }) => formatDate(row.original.date_register) },
+  { id: 'date_register', accessorKey: 'date_register', header: 'Hora', cell: ({ row }) => formatTime(row.original.date_register) },
   { id: 'client_detail.name', accessorKey: 'client_detail.name', header: 'Cliente' },
   { id: 'origin_site_detail.name', accessorKey: 'origin_site_detail.name', header: 'Origen del material' },
   { id: 'vehicle_detail.plaque', accessorKey: 'vehicle_detail.plaque', header: 'Placa' },
@@ -391,11 +391,11 @@ function handleExportPdf() {
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha desde</label>
-          <input v-model="filters.dateFrom" type="date" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input v-model="filters.dateFrom" type="date" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha hasta</label>
-          <input v-model="filters.dateTo" type="date" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input v-model="filters.dateTo" type="date" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Cliente</label>
@@ -403,32 +403,32 @@ function handleExportPdf() {
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Placa</label>
-          <input v-model="filters.plaque" type="text" placeholder="Búsqueda parcial" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input v-model="filters.plaque" type="text" placeholder="Búsqueda parcial" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Tipo de material</label>
-          <select v-model="filters.materialType" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <select v-model="filters.materialType" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white">
             <option :value="null">Todos</option>
             <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Tipo de vehículo</label>
-          <select v-model="filters.vehicleType" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <select v-model="filters.vehicleType" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white">
             <option :value="null">Todos</option>
             <option v-for="v in vehicleTypeOptions" :key="v.id" :value="v.id">{{ v.name }}</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Medio de pago</label>
-          <select v-model="filters.payment" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <select v-model="filters.payment" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white">
             <option :value="null">Todos</option>
             <option v-for="p in paymentOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Estado de facturación</label>
-          <select v-model="filters.invoiceStatus" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <select v-model="filters.invoiceStatus" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white">
             <option value="">Todos</option>
             <option value="facturado">Facturado</option>
             <option value="sin_facturar">Sin facturar</option>
@@ -436,7 +436,7 @@ function handleExportPdf() {
         </div>
         <div v-if="canSeeStateColumn">
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Estado del viaje</label>
-          <select v-model="filters.state" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+          <select v-model="filters.state" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white">
             <option value="">Todos</option>
             <option value="true">Activo</option>
             <option value="false">Anulado</option>
@@ -444,7 +444,7 @@ function handleExportPdf() {
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">N° Vale</label>
-          <input v-model="filters.voucherNum" type="number" placeholder="Exacto" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input v-model="filters.voucherNum" type="number" placeholder="Exacto" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
         </div>
       </div>
 
@@ -453,7 +453,7 @@ function handleExportPdf() {
           type="button"
           @click="runQuery"
           :disabled="isLoading"
-          class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+          class="flex items-center gap-2 px-5 py-2.5 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 disabled:opacity-50 transition-colors shadow-sm"
         >
           <Search class="w-4 h-4" />
           Consultar{{ activeFilterCount > 0 ? ` (${activeFilterCount} filtro${activeFilterCount > 1 ? 's' : ''} activo${activeFilterCount > 1 ? 's' : ''})` : '' }}
@@ -559,7 +559,7 @@ function handleExportPdf() {
                   :value="(header.column.getFilterValue() as string) ?? ''"
                   @input="header.column.setFilterValue(($event.target as HTMLInputElement).value); resetPage()"
                   :placeholder="String(header.column.columnDef.header)"
-                  class="w-full h-6 px-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  class="w-full h-6 px-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gold-400"
                 />
               </th>
             </tr>

@@ -91,12 +91,12 @@ const detailRevenue = computed(() =>
           <button
             type="button"
             @click="refetchToday()"
-            class="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            class="p-2 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
             title="Actualizar ahora"
           >
             <RefreshCw
               class="w-4 h-4"
-              :class="todayLoading ? 'animate-spin text-blue-500' : ''"
+              :class="todayLoading ? 'animate-spin text-gold-600' : ''"
             />
           </button>
         </div>
@@ -109,12 +109,12 @@ const detailRevenue = computed(() =>
       <div v-else-if="todayData" class="p-6">
         <!-- KPIs -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div class="bg-blue-50 rounded-xl p-4">
+          <div class="bg-gold-50 rounded-xl p-4">
             <div class="flex items-center gap-2 mb-2">
-              <Truck class="w-4 h-4 text-blue-500" />
-              <span class="text-xs font-medium text-blue-600 uppercase tracking-wide">Viajes</span>
+              <Truck class="w-4 h-4 text-gold-600" />
+              <span class="text-xs font-medium text-gold-700 uppercase tracking-wide">Viajes</span>
             </div>
-            <p class="text-2xl font-bold text-blue-700">{{ todayData.total_trips }}</p>
+            <p class="text-2xl font-bold text-gold-800">{{ todayData.total_trips }}</p>
           </div>
           <div class="bg-emerald-50 rounded-xl p-4">
             <div class="flex items-center gap-2 mb-2">
@@ -238,7 +238,7 @@ const detailRevenue = computed(() =>
                 <button
                   type="button"
                   @click="detailSummary = s"
-                  class="text-xs text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2"
+                  class="text-xs text-gold-700 hover:text-gold-800 font-medium underline underline-offset-2"
                 >
                   Ver desglose
                 </button>

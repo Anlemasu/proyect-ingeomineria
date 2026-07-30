@@ -133,7 +133,7 @@ const router = createRouter({
           path: 'reports/general',
           name: 'reports-general',
           component: () => import('@/pages/reports/GeneralReportPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor'] },
+          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier'] },
         },
         {
           path: 'reports/daily',

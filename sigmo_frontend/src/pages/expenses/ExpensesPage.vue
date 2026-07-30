@@ -155,7 +155,7 @@ const columns: ColumnDef<Expense>[] = [
       return h('button', {
         type: 'button',
         title: 'Editar gasto',
-        class: 'p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors',
+        class: 'p-1.5 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors',
         onClick: () => openEdit(row.original),
       }, h(Pencil, { class: 'w-4 h-4' }))
     },
@@ -186,7 +186,7 @@ const columns: ColumnDef<Expense>[] = [
               v-model="description"
               type="text"
               placeholder="Combustible, mantenimiento..."
-              class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
               :class="descriptionError ? 'border-red-400 bg-red-50' : 'border-gray-300'"
             />
             <p v-if="descriptionError" class="mt-1 text-xs text-red-500">{{ descriptionError }}</p>
@@ -212,7 +212,7 @@ const columns: ColumnDef<Expense>[] = [
             <input
               v-model="date"
               type="date"
-              class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
               :class="dateError ? 'border-red-400 bg-red-50' : 'border-gray-300'"
             />
             <p v-if="dateError" class="mt-1 text-xs text-red-500">{{ dateError }}</p>
@@ -223,7 +223,7 @@ const columns: ColumnDef<Expense>[] = [
           <button
             type="submit"
             :disabled="isSubmitting"
-            class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            class="flex items-center gap-2 px-5 py-2.5 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
             {{ isSubmitting ? 'Registrando...' : 'Registrar Gasto' }}
@@ -249,7 +249,7 @@ const columns: ColumnDef<Expense>[] = [
             @click="filterMode = mode as FilterMode"
             class="px-3 py-2 transition-colors"
             :class="filterMode === mode
-              ? 'bg-blue-600 text-white'
+              ? 'bg-gold-500 text-stone-900'
               : 'text-gray-600 hover:bg-gray-50'"
           >
             {{ label }}
@@ -262,7 +262,7 @@ const columns: ColumnDef<Expense>[] = [
           <input
             v-model="filterDate"
             type="date"
-            class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
           />
         </div>
 
@@ -273,7 +273,7 @@ const columns: ColumnDef<Expense>[] = [
             <input
               v-model="filterFrom"
               type="date"
-              class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
             />
           </div>
           <div>
@@ -281,7 +281,7 @@ const columns: ColumnDef<Expense>[] = [
             <input
               v-model="filterTo"
               type="date"
-              class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
             />
           </div>
         </template>
@@ -338,7 +338,7 @@ const columns: ColumnDef<Expense>[] = [
                 <input
                   v-model="editDescription"
                   type="text"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
                   :class="editDescriptionError ? 'border-red-400 bg-red-50' : 'border-gray-300'"
                 />
                 <p v-if="editDescriptionError" class="mt-1 text-xs text-red-500">{{ editDescriptionError }}</p>
@@ -364,7 +364,7 @@ const columns: ColumnDef<Expense>[] = [
                 <input
                   v-model="editDate"
                   type="date"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
                   :class="editDateError ? 'border-red-400 bg-red-50' : 'border-gray-300'"
                 />
                 <p v-if="editDateError" class="mt-1 text-xs text-red-500">{{ editDateError }}</p>
@@ -382,7 +382,7 @@ const columns: ColumnDef<Expense>[] = [
                 <button
                   type="submit"
                   :disabled="isEditSubmitting"
-                  class="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  class="flex items-center gap-2 px-5 py-2 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 disabled:opacity-50 transition-colors"
                 >
                   <Loader2 v-if="isEditSubmitting" class="w-4 h-4 animate-spin" />
                   {{ isEditSubmitting ? 'Guardando...' : 'Guardar cambios' }}

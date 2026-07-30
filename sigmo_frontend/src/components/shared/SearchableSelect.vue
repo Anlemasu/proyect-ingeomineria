@@ -78,7 +78,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onOutside))
       type="button"
       @click="toggle"
       :disabled="disabled"
-      class="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+      class="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
       :class="disabled
         ? 'border-gray-200 bg-gray-50 cursor-not-allowed text-gray-400'
         : 'border-gray-300 hover:border-gray-400 text-gray-900'"
@@ -114,7 +114,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onOutside))
             v-model="search"
             type="text"
             placeholder="Buscar..."
-            class="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+            class="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gold-400"
           />
         </div>
         <ul class="max-h-52 overflow-y-auto py-1">
@@ -125,15 +125,15 @@ onUnmounted(() => document.removeEventListener('mousedown', onOutside))
             v-for="opt in filtered"
             :key="opt.id"
             @click="select(opt.id)"
-            class="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 transition-colors"
-            :class="modelValue === opt.id ? 'bg-blue-50 font-medium text-blue-700' : 'text-gray-900'"
+            class="px-3 py-2 text-sm cursor-pointer hover:bg-gold-50 transition-colors"
+            :class="modelValue === opt.id ? 'bg-gold-50 font-medium text-gold-800' : 'text-gray-900'"
           >
             {{ opt.name }}
           </li>
           <li
             v-if="extraActionLabel"
             @click="emit('extraAction'); open = false; search = ''"
-            class="px-3 py-2 text-sm cursor-pointer text-blue-600 hover:bg-blue-50 border-t border-gray-100 font-medium"
+            class="px-3 py-2 text-sm cursor-pointer text-gold-700 hover:bg-gold-50 border-t border-gray-100 font-medium"
           >
             + {{ extraActionLabel }}
           </li>

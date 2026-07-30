@@ -22,7 +22,7 @@ class Trip(models.Model):
     value = models.DecimalField(max_digits=15, decimal_places=2)
     extern_voucher_num = models.CharField(max_length=20, null=True, blank=True)
     invoice_pos = models.IntegerField(null=True, blank=True)
-    date_register = models.DateField()
+    date_register = models.DateTimeField()
     date = models.DateField()
     certification_state = models.BooleanField(null=True, blank=True)
     certification_num = models.CharField(max_length=30, null=True, blank=True)

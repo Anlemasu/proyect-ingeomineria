@@ -9,9 +9,9 @@ const { open } = useSidebar()
 </script>
 
 <template>
-  <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6">
+  <header class="h-14 bg-white border-b border-stone-200 flex items-center justify-between px-4 lg:px-6">
     <button
-      class="text-gray-500 hover:text-gray-700 lg:hidden"
+      class="text-stone-500 hover:text-stone-700 lg:hidden"
       @click="open"
     >
       <Menu class="w-6 h-6" />

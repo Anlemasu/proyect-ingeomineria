@@ -14,7 +14,7 @@ import { tripsApi } from '@/api/trips.api'
 import { expensesApi } from '@/api/expenses.api'
 import { usePermissions } from '@/composables/usePermissions'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate, toISODate } from '@/utils/formatDate'
+import { formatDate, formatTime, toISODate } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { printDailyReport } from '@/utils/printDailyReport'
 import { exportDailyReportExcel } from '@/utils/exportDailyReportExcel'
@@ -110,8 +110,8 @@ function handleExportPdf() {
 // ── Columnas tabla de viajes ───────────────────────────────────────────────
 const tripColumns = computed<ColumnDef<Trip>[]>(() => {
   const cols: ColumnDef<Trip>[] = [
-    { id: 'voucher_num', header: 'N° Vale', cell: ({ row }) => h('span', { class: 'font-mono font-bold text-blue-700' }, `#${row.original.voucher_num}`) },
-    { id: 'date_register', header: 'Hora registro', cell: ({ row }) => formatDate(row.original.date_register) },
+    { id: 'voucher_num', header: 'N° Vale', cell: ({ row }) => h('span', { class: 'font-mono font-bold text-gold-800' }, `#${row.original.voucher_num}`) },
+    { id: 'date_register', header: 'Hora registro', cell: ({ row }) => formatTime(row.original.date_register) },
     { id: 'client', header: 'Cliente', cell: ({ row }) => row.original.client_detail?.name ?? '—' },
     { id: 'plaque', header: 'Placa', cell: ({ row }) => row.original.vehicle_detail?.plaque ?? '—' },
     { id: 'pin', header: 'PIN Ambiental', cell: ({ row }) => row.original.vehicle_detail?.dumper_detail?.ambiental_pin ?? '0' },
@@ -178,13 +178,13 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
         <input
           v-model="selectedDate"
           type="date"
-          class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
         />
       </div>
       <button
         type="button"
         @click="generateReport"
-        class="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+        class="flex items-center gap-2 px-5 py-2.5 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 disabled:opacity-50 transition-colors shadow-sm"
         :disabled="isLoading"
       >
         <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin' : ''" />
@@ -193,10 +193,10 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
       <button
         type="button"
         @click="refreshAll"
-        class="p-2.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+        class="p-2.5 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
         title="Actualizar"
       >
-        <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-blue-500' : ''" />
+        <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-gold-600' : ''" />
       </button>
     </div>
 
@@ -209,9 +209,9 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
     <template v-else>
       <!-- ── Tarjetas resumen ─────────────────────────────────────────────── -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-blue-50 rounded-xl p-4">
-          <span class="text-xs font-medium text-blue-600 uppercase tracking-wide">Total Viajes</span>
-          <p class="text-2xl font-bold text-blue-700 mt-1">{{ hasLoadedOnce ? reportData.summary.totalTrips : '—' }}</p>
+        <div class="bg-gold-50 rounded-xl p-4">
+          <span class="text-xs font-medium text-gold-700 uppercase tracking-wide">Total Viajes</span>
+          <p class="text-2xl font-bold text-gold-800 mt-1">{{ hasLoadedOnce ? reportData.summary.totalTrips : '—' }}</p>
         </div>
         <div class="bg-emerald-50 rounded-xl p-4">
           <span class="text-xs font-medium text-emerald-600 uppercase tracking-wide">Total Recaudado</span>
@@ -221,9 +221,9 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
           <span class="text-xs font-medium text-red-500 uppercase tracking-wide">Total Gastos</span>
           <p class="text-2xl font-bold text-red-600 mt-1">{{ formatCurrency(reportData.summary.totalExpenses) }}</p>
         </div>
-        <div :class="reportData.summary.netBalance >= 0 ? 'bg-blue-50' : 'bg-red-50'" class="rounded-xl p-4">
-          <span :class="reportData.summary.netBalance >= 0 ? 'text-blue-600' : 'text-red-500'" class="text-xs font-medium uppercase tracking-wide">Saldo Neto</span>
-          <p :class="reportData.summary.netBalance >= 0 ? 'text-blue-700' : 'text-red-600'" class="text-2xl font-bold mt-1">{{ formatCurrency(reportData.summary.netBalance) }}</p>
+        <div :class="reportData.summary.netBalance >= 0 ? 'bg-gold-50' : 'bg-red-50'" class="rounded-xl p-4">
+          <span :class="reportData.summary.netBalance >= 0 ? 'text-gold-700' : 'text-red-500'" class="text-xs font-medium uppercase tracking-wide">Saldo Neto</span>
+          <p :class="reportData.summary.netBalance >= 0 ? 'text-gold-800' : 'text-red-600'" class="text-2xl font-bold mt-1">{{ formatCurrency(reportData.summary.netBalance) }}</p>
         </div>
       </div>
 

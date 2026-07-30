@@ -77,7 +77,7 @@ const columns: ColumnDef<City>[] = [
     id: 'actions',
     header: 'Acciones',
     cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
-      canEdit('masters') ? h('button', { class: 'p-1 text-gray-500 hover:text-blue-600', onClick: () => openEdit(row.original) }, h(Pencil, { class: 'w-4 h-4' })) : null,
+      canEdit('masters') ? h('button', { class: 'p-1 text-gray-500 hover:text-gold-700', onClick: () => openEdit(row.original) }, h(Pencil, { class: 'w-4 h-4' })) : null,
       canEdit('masters') ? h('button', { class: 'p-1 text-gray-500 hover:text-amber-600', onClick: () => { confirmToggle.value = row.original } },
         h(row.original.state ? ToggleRight : ToggleLeft, { class: 'w-4 h-4' })) : null,
     ].filter(Boolean)),
@@ -89,7 +89,7 @@ const columns: ColumnDef<City>[] = [
   <div>
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <PageHeader title="Ciudades" description="Ciudades registradas" />
-      <button v-if="canCreate('masters')" @click="openCreate" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700">
+      <button v-if="canCreate('masters')" @click="openCreate" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600">
         <Plus class="w-4 h-4" /> Nueva ciudad
       </button>
     </div>
@@ -104,12 +104,12 @@ const columns: ColumnDef<City>[] = [
           <form @submit.prevent="onSubmit" class="space-y-4" novalidate>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
-              <input v-model="name" type="text" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" :class="nameError ? 'border-red-400' : 'border-gray-300'" />
+              <input v-model="name" type="text" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" :class="nameError ? 'border-red-400' : 'border-gray-300'" />
               <p v-if="nameError" class="mt-1 text-xs text-red-600">{{ nameError }}</p>
             </div>
             <div class="flex justify-end gap-3">
               <button type="button" @click="showModal = false" class="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">Cancelar</button>
-              <button type="submit" :disabled="isSubmitting" class="px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700 disabled:opacity-60">
+              <button type="submit" :disabled="isSubmitting" class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60">
                 {{ isSubmitting ? 'Guardando...' : 'Guardar' }}
               </button>
             </div>

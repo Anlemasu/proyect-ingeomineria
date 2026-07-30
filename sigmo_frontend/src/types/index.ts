@@ -121,7 +121,7 @@ export interface Trip {
   id: number
   voucher_num: number
   date: string
-  date_register: string
+  date_register: string  // ISO 8601 datetime: "2026-06-29T14:35:22Z" (antes DateField, ahora DateTimeField)
   value: string
   extern_voucher_num: string | null
   invoice_pos: number | null
