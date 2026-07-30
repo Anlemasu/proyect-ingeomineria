@@ -44,15 +44,17 @@ const onSubmit = handleSubmit(async (values) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-white flex items-center justify-center px-4">
-    <div class="bg-white rounded-lg shadow-sm border border-stone-200 p-8 w-full max-w-sm">
-      <div class="text-center mb-8">
-        <img src="/logo_transparente.png" alt="Ingeominería" class="h-14 w-auto mx-auto mb-3" />
-        <h1 class="text-2xl font-bold text-stone-900">SIGMO</h1>
-        <p class="text-stone-500 text-sm mt-1">Sistema de Información de Gestión Minera</p>
-      </div>
+  <div class="min-h-screen bg-[radial-gradient(ellipse_at_center,_#ffffff_0%,_#f5f5f4_100%)] flex items-center justify-center px-4">
+    <div class="bg-white rounded-lg shadow-[0_20px_50px_-12px_rgba(28,25,23,0.25)] border border-stone-200 overflow-hidden w-full max-w-sm">
+      <div class="h-1.5 bg-gradient-to-r from-gold-400 via-gold-500 to-gold-400"></div>
+      <div class="p-8">
+        <div class="text-center mb-8">
+          <img src="/logo_transparente.png" alt="Ingeominería" class="h-14 w-auto mx-auto mb-3" />
+          <h1 class="text-2xl font-bold text-stone-900">SIGMO</h1>
+          <p class="text-stone-500 text-sm mt-1">Sistema de Información de Gestión Minera</p>
+        </div>
 
-      <form @submit.prevent="onSubmit" class="space-y-5" novalidate>
+        <form @submit.prevent="onSubmit" class="space-y-5" novalidate>
         <div>
           <label class="block text-sm font-medium text-stone-700 mb-1">Usuario</label>
           <input
@@ -102,7 +104,8 @@ const onSubmit = handleSubmit(async (values) => {
           <Loader2 v-if="isSubmitting" class="w-4 h-4 animate-spin" />
           {{ isSubmitting ? 'Iniciando sesión...' : 'Iniciar sesión' }}
         </button>
-      </form>
+        </form>
+      </div>
     </div>
   </div>
 </template>
