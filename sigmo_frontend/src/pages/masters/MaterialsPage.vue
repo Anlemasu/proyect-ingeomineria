@@ -91,7 +91,7 @@ const columns: ColumnDef<MaterialType>[] = [
 
 <template>
   <div>
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <PageHeader title="Materiales" description="Tipos de material del sistema" />
       <button v-if="canCreate('masters')" @click="openCreate" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#1E40AF] rounded-md hover:bg-blue-700">
         <Plus class="w-4 h-4" /> Nuevo material

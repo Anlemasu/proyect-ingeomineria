@@ -832,7 +832,7 @@ const onSubmit = handleSubmit(async (values) => {
                 <div v-if="!detailTrip.state" class="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
                   ⚠ Viaje anulado
                 </div>
-                <div class="grid grid-cols-2 gap-x-6 gap-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                   <div>
                     <p class="text-xs text-gray-500 mb-0.5">Cliente</p>
                     <p class="font-medium text-gray-900">{{ detailTrip.client_detail?.name ?? '—' }}</p>

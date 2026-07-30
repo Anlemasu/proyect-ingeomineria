@@ -319,7 +319,7 @@ const columns: ColumnDef<User>[] = [
 <template>
   <div>
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <PageHeader title="Usuarios" description="Gestión de usuarios del sistema" />
       <button
         @click="openCreate"

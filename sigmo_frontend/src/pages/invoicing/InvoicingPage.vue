@@ -270,17 +270,17 @@ watch(activeTab, () => {
 </script>
 
 <template>
-  <div class="p-6 space-y-5">
+  <div class="p-4 lg:p-6 space-y-5">
     <!-- Header -->
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-semibold text-gray-900">Facturación</h1>
     </div>
 
     <!-- Tabs -->
-    <div class="border-b border-gray-200">
-      <nav class="flex gap-1" aria-label="Tabs">
+    <div class="border-b border-gray-200 overflow-x-auto">
+      <nav class="flex gap-1 w-max min-w-full" aria-label="Tabs">
         <button
-          class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+          class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
           :class="activeTab === 'pending'
             ? 'border-blue-600 text-blue-600'
             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
@@ -295,7 +295,7 @@ watch(activeTab, () => {
           </span>
         </button>
         <button
-          class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+          class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
           :class="activeTab === 'invoiced'
             ? 'border-blue-600 text-blue-600'
             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"

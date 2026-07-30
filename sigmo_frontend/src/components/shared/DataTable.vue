@@ -60,12 +60,12 @@ watch(() => props.data, () => { pageIndex.value = 0 })
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center gap-3">
+    <div class="flex flex-wrap items-center gap-3">
       <input
         v-model="globalFilter"
         type="text"
         placeholder="Buscar..."
-        class="w-64 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full sm:w-64 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
       <select
         v-model="pageSize"
@@ -78,7 +78,7 @@ watch(() => props.data, () => { pageIndex.value = 0 })
       <slot name="filters" />
     </div>
 
-    <div class="border border-gray-200 rounded-lg overflow-hidden bg-white">
+    <div class="border border-gray-200 rounded-lg overflow-x-auto bg-white">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
@@ -130,7 +130,7 @@ watch(() => props.data, () => { pageIndex.value = 0 })
       </table>
     </div>
 
-    <div class="flex items-center justify-between text-sm text-gray-600">
+    <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
       <span>
         Página {{ pageIndex + 1 }} de {{ pageCount || 1 }}
         ({{ table.getFilteredRowModel().rows.length }} registros)

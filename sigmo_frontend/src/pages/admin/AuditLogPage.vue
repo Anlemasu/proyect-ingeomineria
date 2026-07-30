@@ -298,7 +298,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
 <template>
   <div>
     <!-- Page header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <PageHeader title="Log de Auditoría" description="Registro de acciones del sistema (solo lectura)" />
       <button
         @click="exportCsv"
@@ -407,7 +407,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
           <div class="px-6 py-5 space-y-6 flex-1">
 
             <!-- Basic info -->
-            <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
                 <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-0.5">Fecha / Hora</p>
                 <p class="text-gray-800 font-mono text-xs">{{ formatTs(selectedEntry.timestamp) }}</p>
@@ -469,7 +469,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
                   </div>
 
                   <!-- Update/annul: before vs after -->
-                  <div v-else class="grid grid-cols-2 divide-x divide-gray-100">
+                  <div v-else class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 divide-x-0 sm:divide-x divide-gray-100">
                     <div class="px-3 py-2">
                       <p class="text-xs text-gray-400 mb-1">Antes</p>
                       <p class="font-mono text-red-600 break-all whitespace-pre-wrap line-through decoration-red-300">

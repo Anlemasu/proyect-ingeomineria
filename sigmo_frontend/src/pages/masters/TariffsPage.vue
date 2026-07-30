@@ -121,7 +121,7 @@ function openHistory(client: Client) {
 
 <template>
   <div>
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <PageHeader title="Tarifas" description="Tarifas por cliente y tipo de vehiculo" />
       <button
         v-if="canEdit('masters') && dirtyKeys.size > 0"

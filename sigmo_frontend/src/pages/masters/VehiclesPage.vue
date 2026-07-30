@@ -148,12 +148,12 @@ const vehicleColumns: ColumnDef<Vehicle>[] = [
   <div>
     <PageHeader title="Vehiculos" description="Tipos de vehiculo y vehiculos registrados" />
 
-    <div class="flex gap-1 mb-6 border-b border-gray-200">
+    <div class="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto">
       <button
         v-for="tab in [{ key: 'types', label: 'Tipos de vehiculo' }, { key: 'vehicles', label: 'Vehiculos' }]"
         :key="tab.key"
         @click="activeTab = tab.key as 'types' | 'vehicles'"
-        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
         :class="activeTab === tab.key ? 'border-[#1E40AF] text-[#1E40AF]' : 'border-transparent text-gray-500 hover:text-gray-700'"
       >
         {{ tab.label }}

@@ -466,11 +466,11 @@ watch(activeTab, () => {
 </script>
 
 <template>
-  <div class="p-6 space-y-5">
+  <div class="p-4 lg:p-6 space-y-5">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="text-2xl font-semibold text-gray-900">Anticipos</h1>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <button
           v-if="canManage && activeTab === 'registro'"
           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -519,12 +519,12 @@ watch(activeTab, () => {
     </div>
 
     <!-- Tabs -->
-    <div class="border-b border-gray-200">
-      <nav class="flex gap-1" aria-label="Tabs">
+    <div class="border-b border-gray-200 overflow-x-auto">
+      <nav class="flex gap-1 w-max min-w-full" aria-label="Tabs">
         <button
           v-for="tab in tabs"
           :key="tab.id"
-          class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors"
+          class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
           :class="activeTab === tab.id
             ? 'border-blue-600 text-blue-600'
             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
@@ -704,7 +704,7 @@ watch(activeTab, () => {
         <!-- Drawer body -->
         <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
           <!-- Datos principales -->
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Fecha</p>
               <p class="text-sm font-medium text-gray-900">{{ formatDate(detailAdvance.date) }}</p>

@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { LogOut, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-vue-next'
+import { LogOut, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-vue-next'
 import { useAuth } from '@/composables/useAuth'
 import { useNavigation } from '@/composables/useNavigation'
+import { useSidebar } from '@/composables/useSidebar'
 import type { NavItem, NavLeaf, NavGroup } from '@/constants/navigation'
 
 const route = useRoute()
 const { logout } = useAuth()
 const { visibleNav } = useNavigation()
-
-const collapsed = ref(false)
+const { collapsed, isMobileOpen, close } = useSidebar()
 
 // Track which groups are open
 const openGroups = ref<Set<string>>(new Set())
@@ -47,21 +47,36 @@ autoExpand()
 watch(() => route.path, autoExpand)
 
 // When sidebar collapses, don't close groups (remember state)
-const sidebarWidth = computed(() => collapsed.value ? 'w-16' : 'w-60')
+const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
 </script>
 
 <template>
+  <!-- Mobile backdrop -->
+  <div
+    v-if="isMobileOpen"
+    class="fixed inset-0 bg-black/50 z-30 lg:hidden"
+    @click="close"
+  />
+
   <aside
-    class="flex flex-col min-h-screen bg-slate-800 transition-all duration-300 flex-shrink-0"
-    :class="sidebarWidth"
+    class="fixed inset-y-0 left-0 z-40 w-64 flex flex-col min-h-screen bg-slate-800 transition-transform duration-300 flex-shrink-0 lg:static lg:transition-all"
+    :class="[sidebarWidth, isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0']"
   >
     <!-- Logo -->
     <div
-      class="flex items-center border-b border-slate-700 transition-all duration-300"
-      :class="collapsed ? 'p-4 justify-center' : 'px-5 py-4'"
+      class="flex items-center justify-between border-b border-slate-700 transition-all duration-300"
+      :class="collapsed ? 'p-4 lg:justify-center' : 'px-5 py-4'"
     >
-      <span class="text-white font-bold text-lg flex-shrink-0">S</span>
-      <span v-if="!collapsed" class="text-white font-bold text-lg ml-0.5">IGMO</span>
+      <div class="flex items-center">
+        <span class="text-white font-bold text-lg flex-shrink-0">S</span>
+        <span v-if="!collapsed" class="text-white font-bold text-lg ml-0.5">IGMO</span>
+      </div>
+      <button
+        class="text-slate-300 hover:text-white lg:hidden"
+        @click="close"
+      >
+        <X class="w-5 h-5" />
+      </button>
     </div>
 
     <!-- Nav -->
@@ -161,7 +176,7 @@ const sidebarWidth = computed(() => collapsed.value ? 'w-16' : 'w-60')
       <button
         @click="collapsed = !collapsed"
         :title="collapsed ? 'Expandir menú' : 'Colapsar menú'"
-        class="flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+        class="hidden lg:flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
         :class="collapsed ? 'justify-center' : ''"
       >
         <ChevronLeft v-if="!collapsed" class="w-4 h-4" />

@@ -76,7 +76,7 @@ const detailRevenue = computed(() =>
 
     <!-- ── Panel resumen del día ─────────────────────────────────────────── -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-sm font-semibold text-gray-800">Resumen del día en curso</h2>
           <p class="text-xs text-gray-500 mt-0.5">Actualización automática cada 30 segundos</p>

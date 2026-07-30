@@ -208,7 +208,7 @@ const columns: ColumnDef<Client>[] = [
 
 <template>
   <div>
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <PageHeader title="Clientes" description="Gestion de clientes del sistema" />
       <button
         v-if="canCreate('clients')"
@@ -230,7 +230,7 @@ const columns: ColumnDef<Client>[] = [
             {{ editingClient ? 'Editar cliente' : 'Nuevo cliente' }}
           </h2>
           <form @submit.prevent="onSubmit" class="space-y-4" novalidate>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">NIT *</label>
                 <input

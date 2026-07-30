@@ -448,7 +448,7 @@ function handleExportPdf() {
         </div>
       </div>
 
-      <div class="mt-5 flex items-center gap-3">
+      <div class="mt-5 flex flex-wrap items-center gap-3">
         <button
           type="button"
           @click="runQuery"
@@ -606,7 +606,7 @@ function handleExportPdf() {
       </div>
 
       <!-- ── Paginación ─────────────────────────────────────────────────────── -->
-      <div v-if="totalFilteredCount > 0" class="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm text-gray-600">
+      <div v-if="totalFilteredCount > 0" class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-gray-100 text-sm text-gray-600">
         <div class="flex items-center gap-3">
           <select v-model="pageSize" @change="resetPage" class="px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none">
             <option :value="25">25 por página</option>
