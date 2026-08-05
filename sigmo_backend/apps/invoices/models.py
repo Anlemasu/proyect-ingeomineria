@@ -6,7 +6,7 @@ from apps.common.text import uppercase_fields
 class Invoice(models.Model):
     id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.RESTRICT)
-    number = models.CharField(max_length=15)
+    number = models.CharField(max_length=15, unique=True)
 
     class Meta:
         db_table = 'INVOICE'

@@ -14,7 +14,7 @@ import { tripsApi } from '@/api/trips.api'
 import { expensesApi } from '@/api/expenses.api'
 import { usePermissions } from '@/composables/usePermissions'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate, formatTime, toISODate } from '@/utils/formatDate'
+import { formatDate, formatTime, todayBogota } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { printDailyReport } from '@/utils/printDailyReport'
 import { exportDailyReportExcel } from '@/utils/exportDailyReportExcel'
@@ -25,7 +25,7 @@ const canSeeValue = computed(() => !hasRole('cashier'))
 const canSeeAdvances = computed(() => !hasRole('cashier'))
 
 // ── Fecha del reporte ──────────────────────────────────────────────────────
-const today = toISODate(new Date())
+const today = todayBogota()
 const selectedDate = ref(today)
 const reportDate = ref(today)
 

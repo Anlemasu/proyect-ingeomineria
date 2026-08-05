@@ -26,7 +26,7 @@ import { pinsApi }           from '@/api/pins.api'
 import { tripsApi }          from '@/api/trips.api'
 
 import { useAuthStore }       from '@/stores/auth.store'
-import { toISODate, formatDate } from '@/utils/formatDate'
+import { todayBogota, formatDate } from '@/utils/formatDate'
 import { formatCurrency }     from '@/utils/formatCurrency'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { printVoucher }       from '@/utils/printVoucher'
@@ -69,7 +69,7 @@ const vehicleTypeOptions = computed(() => (vehicleTypesData.value ?? []).filter(
 const paymentList        = computed(() => (paymentsData.value ?? []).filter(p => p.state))
 
 // ── Query viajes de hoy ────────────────────────────────────────────────────────
-const today = toISODate(new Date())
+const today = todayBogota()
 
 const { data: todayTripsData, isLoading: tripsLoading, refetch: refetchTrips } = useQuery({
   queryKey: ['trips', 'today'],

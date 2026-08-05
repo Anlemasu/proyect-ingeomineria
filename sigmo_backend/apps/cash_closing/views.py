@@ -30,7 +30,7 @@ class DailySummaryCloseView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if request.user.role not in ['superuser', 'cashier']:
+        if request.user.role not in ['superuser', 'cashier', 'commercial_admin']:
             log_action(request, 'access_denied', 'DailySummary')
             return Response(
                 {'error': 'No tiene permisos para ejecutar el cierre de caja.'},
@@ -144,7 +144,7 @@ class DailySummaryTodayView(APIView):
             trips.aggregate(total=Sum('value'))['total'] or 0
         ) / total_trips if total_trips > 0 else 0
         total_expenses = Expense.objects.filter(
-            date=today
+            date=today, state=True
         ).aggregate(total=Sum('value'))['total'] or 0
 
         # Desglose dinámico por método de pago

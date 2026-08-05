@@ -49,7 +49,7 @@ def recalculate_daily_summary(date, summary: DailySummary) -> DailySummary:
     total_value = trips.aggregate(total=Sum('value'))['total'] or 0
     avg_trip_value = (total_value / total_trips) if total_trips > 0 else 0
     total_expenses = Expense.objects.filter(
-        date=date
+        date=date, state=True
     ).aggregate(total=Sum('value'))['total'] or 0
 
     summary.total_trips = total_trips

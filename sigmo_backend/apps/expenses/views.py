@@ -8,6 +8,11 @@ from typing import cast
 from .models import Expense
 from .serializers import ExpenseSerializer
 from apps.cash_closing.models import DailySummary
+from apps.cash_closing.services import resync_if_closed
+
+# Campos cuyo cambio afecta los totales de un DailySummary ya cerrado (mismo
+# criterio que FIELDS_AFFECTING_TOTALS en trips/views.py).
+FIELDS_AFFECTING_TOTALS = {'value', 'state'}
 
 
 def can_manage_expenses(user):
@@ -98,17 +103,65 @@ class ExpenseDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Mismo criterio que Trip: un gasto ya anulado no puede modificarse.
+        if not obj.state:
+            return Response(
+                {'error': 'No se puede modificar un gasto anulado.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # FASE 5.3: mismo criterio que Trip (RF-37) — un día con cierre de
+        # caja vigente solo puede tocarse (edición o anulación) por
+        # superuser, como ajuste histórico. No se creó un ajuste histórico
+        # nuevo para gastos: simplemente se bloquea para los demás roles.
+        day_closed = DailySummary.objects.filter(
+            date=obj.date, state=DailySummary.STATE_CLOSED
+        ).exists()
+        if day_closed and request.user.role != 'superuser':
+            log_action(request, 'access_denied', 'Expense', object_id=obj.id)
+            return Response({
+                'error': (
+                    'Este gasto pertenece a un día con cierre de caja registrado. '
+                    'Solo el superusuario puede modificarlo (ajuste histórico).'
+                )
+            }, status=status.HTTP_409_CONFLICT)
+
+        is_annulment = request.data.get('state') is False
+        action = 'annul' if is_annulment else 'update'
+        justification = request.data.get('justification', None)
+        if is_annulment and not justification:
+            log_action(request, 'access_denied', 'Expense', object_id=obj.id)
+            return Response(
+                {'error': 'Se requiere justificación para anular un gasto.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Capturar datos anteriores antes de modificar
         previous = dict(ExpenseSerializer(obj).data)  # type: ignore
+        incoming_fields = set(request.data.keys()) - {'justification'}
 
         serializer = ExpenseSerializer(obj, data=request.data, partial=True)
         if serializer.is_valid():
-            serializer.save()
+            expense = cast(Expense, serializer.save())
             log_action(
-                request, 'update', 'Expense',
-                object_id=obj.id,
+                request, action, 'Expense',
+                object_id=expense.id,
                 previous_data=previous,
                 new_data=dict(serializer.data),  # type: ignore
+                justification=(justification if is_annulment else None),
             )
+
+            # Mismo motivo que en Trip: un cierre vigente que ya sumó este
+            # gasto queda desactualizado si no se recalcula tras la edición.
+            if day_closed and incoming_fields & FIELDS_AFFECTING_TOTALS:
+                resync_if_closed(
+                    expense.date,
+                    request=request,
+                    trigger_note=(
+                        f'Recalculado por {action} del gasto #{expense.id} '
+                        f'(ajuste histórico).'
+                    ),
+                )
+
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

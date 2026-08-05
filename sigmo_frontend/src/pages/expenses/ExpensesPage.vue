@@ -5,7 +5,7 @@ import { useForm, useField } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 import { toast } from 'vue-sonner'
-import { Pencil, Loader2, X } from 'lucide-vue-next'
+import { Pencil, Loader2, X, Ban } from 'lucide-vue-next'
 import type { ColumnDef } from '@tanstack/vue-table'
 
 import PageHeader from '@/components/shared/PageHeader.vue'
@@ -15,14 +15,14 @@ import { expensesApi } from '@/api/expenses.api'
 import type { Expense } from '@/types'
 import { usePermissions } from '@/composables/usePermissions'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate, toISODate } from '@/utils/formatDate'
+import { formatDate, todayBogota } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 
 const { canCreate, canEdit } = usePermissions()
 const queryClient = useQueryClient()
 
 // ── Today's date helper ───────────────────────────────────────────────────────
-const todayISO = toISODate(new Date())
+const todayISO = todayBogota()
 
 // ── Filter state ──────────────────────────────────────────────────────────────
 type FilterMode = 'today' | 'specific' | 'range'
@@ -44,8 +44,10 @@ const { data: expensesData, isLoading } = useQuery({
 })
 
 const expenses = computed(() => expensesData.value ?? [])
+// Igual que en Trips (totalActive): los gastos anulados no cuentan en el
+// total, aunque siguen listados con trazabilidad.
 const totalValue = computed(() =>
-  expenses.value.reduce((sum, e) => sum + Number(e.value), 0)
+  expenses.value.filter(e => e.state).reduce((sum, e) => sum + Number(e.value), 0)
 )
 
 // ── Create form ───────────────────────────────────────────────────────────────
@@ -129,6 +131,43 @@ const onEditSubmit = handleEdit(async (values) => {
   }
 })
 
+// ── Anulación ─────────────────────────────────────────────────────────────────
+const annulExpense = ref<Expense | null>(null)
+const annulJustification = ref('')
+const annulLoading = ref(false)
+
+function openAnnul(expense: Expense) {
+  annulExpense.value = expense
+  annulJustification.value = ''
+}
+
+function closeAnnul() {
+  annulExpense.value = null
+}
+
+async function confirmAnnul() {
+  if (!annulExpense.value) return
+  if (!annulJustification.value.trim()) {
+    toast.error('Debe justificar la anulación')
+    return
+  }
+  annulLoading.value = true
+  try {
+    await expensesApi.update(annulExpense.value.id, {
+      state: false,
+      justification: annulJustification.value.trim(),
+    })
+    toast.success(`Gasto #${annulExpense.value.id} anulado`)
+    closeAnnul()
+    queryClient.invalidateQueries({ queryKey: ['expenses'] })
+    queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
+  } catch (err) {
+    toast.error(getApiErrorMessage(err))
+  } finally {
+    annulLoading.value = false
+  }
+}
+
 // ── Table columns ─────────────────────────────────────────────────────────────
 const columns: ColumnDef<Expense>[] = [
   {
@@ -139,7 +178,9 @@ const columns: ColumnDef<Expense>[] = [
   {
     accessorKey: 'description',
     header: 'Descripción',
-    cell: ({ row }) => h('span', { class: 'max-w-xs truncate block' }, row.original.description),
+    cell: ({ row }) => h('span', {
+      class: ['max-w-xs truncate block', row.original.state ? '' : 'line-through text-gray-400'],
+    }, row.original.description),
   },
   {
     accessorKey: 'value',
@@ -147,17 +188,33 @@ const columns: ColumnDef<Expense>[] = [
     cell: ({ row }) => h('span', { class: 'font-medium text-gray-900' }, formatCurrency(Number(row.original.value))),
   },
   {
+    id: 'state',
+    header: 'Estado',
+    enableSorting: false,
+    cell: ({ row }) => row.original.state
+      ? h('span', { class: 'text-xs text-gray-400' }, '—')
+      : h('span', { class: 'text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded' }, 'Anulado'),
+  },
+  {
     id: 'actions',
     header: 'Acciones',
     enableSorting: false,
     cell: ({ row }) => {
-      if (!canEdit('expenses')) return null
-      return h('button', {
-        type: 'button',
-        title: 'Editar gasto',
-        class: 'p-1.5 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors',
-        onClick: () => openEdit(row.original),
-      }, h(Pencil, { class: 'w-4 h-4' }))
+      if (!canEdit('expenses') || !row.original.state) return null
+      return h('div', { class: 'flex items-center gap-1' }, [
+        h('button', {
+          type: 'button',
+          title: 'Editar gasto',
+          class: 'p-1.5 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors',
+          onClick: () => openEdit(row.original),
+        }, h(Pencil, { class: 'w-4 h-4' })),
+        h('button', {
+          type: 'button',
+          title: 'Anular gasto',
+          class: 'p-1.5 rounded-lg text-gray-400 hover:text-red-700 hover:bg-red-50 transition-colors',
+          onClick: () => openAnnul(row.original),
+        }, h(Ban, { class: 'w-4 h-4' })),
+      ])
     },
   },
 ]
@@ -389,6 +446,72 @@ const columns: ColumnDef<Expense>[] = [
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- ── Annul modal ─────────────────────────────────────────────────────── -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-opacity duration-150"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-100"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="annulExpense"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+        >
+          <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <div class="flex items-center justify-between mb-5">
+              <h3 class="text-sm font-semibold text-gray-800">
+                Anular Gasto #{{ annulExpense.id }}
+              </h3>
+              <button
+                type="button"
+                @click="closeAnnul"
+                class="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+
+            <p class="text-xs text-gray-500 mb-4">
+              {{ annulExpense.description }} · {{ formatCurrency(Number(annulExpense.value)) }}
+            </p>
+
+            <label class="block text-xs font-medium text-gray-700 mb-1">
+              Justificación <span class="text-red-500">*</span>
+            </label>
+            <textarea
+              v-model="annulJustification"
+              rows="3"
+              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400 transition-colors"
+              placeholder="Motivo de la anulación..."
+            />
+
+            <div class="flex gap-2 justify-end pt-4">
+              <button
+                type="button"
+                @click="closeAnnul"
+                :disabled="annulLoading"
+                class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                @click="confirmAnnul"
+                :disabled="annulLoading || !annulJustification.trim()"
+                class="flex items-center gap-2 px-5 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                <Loader2 v-if="annulLoading" class="w-4 h-4 animate-spin" />
+                {{ annulLoading ? 'Anulando...' : 'Confirmar anulación' }}
+              </button>
+            </div>
           </div>
         </div>
       </Transition>

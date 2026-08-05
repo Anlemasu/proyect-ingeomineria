@@ -12,7 +12,7 @@ import { getApiErrorMessage } from '@/utils/handleApiError'
 import { usePermissions } from '@/composables/usePermissions'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
-import { toISODate } from '@/utils/formatDate'
+import { todayBogota } from '@/utils/formatDate'
 import type { Client, VehicleType, Tariff } from '@/types'
 
 const qc = useQueryClient()
@@ -75,7 +75,7 @@ const { mutateAsync: updateTariff } = useMutation({
 async function saveAll() {
   if (!dirtyKeys.value.size) return
   saving.value = true
-  const today = toISODate(new Date())
+  const today = todayBogota()
   let errors = 0
   for (const key of dirtyKeys.value) {
     const [clientPart, typePart] = key.split('-')

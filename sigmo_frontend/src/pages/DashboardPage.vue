@@ -16,7 +16,7 @@ import { invoicesApi } from '@/api/invoices.api'
 import { useAuthStore } from '@/stores/auth.store'
 import { ROLE_LABELS, ROLE_COLORS } from '@/constants/roles'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate, toISODate } from '@/utils/formatDate'
+import { formatDate, todayBogota } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import type { Trip, Advance } from '@/types'
 
@@ -28,7 +28,7 @@ const authStore = useAuthStore()
 const queryClient = useQueryClient()
 const role = computed(() => authStore.user?.role)
 
-const today = toISODate(new Date())
+const today = todayBogota()
 
 // ── Visibilidad de secciones por rol (display logic — el enforcement real vive en el router/backend) ──
 const showDailySummary = computed(() => ['cashier', 'commercial_admin', 'superuser'].includes(role.value ?? ''))
@@ -37,9 +37,7 @@ const showFinishedAdvances = computed(() => ['accountant', 'superuser'].includes
 const showUnfacturedTrips = computed(() => ['accountant', 'superuser'].includes(role.value ?? ''))
 const canValidate = computed(() => ['accountant', 'superuser'].includes(role.value ?? ''))
 
-// `/trips` está restringido a superuser/cashier — commercial_admin no puede entrar ahí,
-// así que para ese rol el link va a Reporte Diario (ver análisis Parte 9)
-const dailySummaryLinkTarget = computed(() => (role.value === 'commercial_admin' ? '/reports/daily' : '/trips'))
+const dailySummaryLinkTarget = '/trips'
 
 // ── Resumen del día (cashier, commercial_admin, superuser) ────────────────────
 const {

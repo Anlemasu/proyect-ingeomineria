@@ -2,6 +2,7 @@ import { defineComponent, h } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteLocationNormalized, NavigationGuardNext } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.store'
+import { getAllowedRoles } from '@/constants/navigation'
 
 const UnderConstruction = defineComponent({
   props: { module: { type: String, default: 'Módulo' } },
@@ -41,19 +42,19 @@ const router = createRouter({
           path: 'trips',
           name: 'trips',
           component: () => import('@/pages/trips/TripsPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'trips/adjustments',
           name: 'trips-adjustments',
           component: () => import('@/pages/trips/AdjustmentsPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier', 'commercial_admin'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'cash-closing',
           name: 'cash-closing',
           component: () => import('@/pages/cash-closing/CashClosingPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier'] },
+          meta: { requiresAuth: true },
         },
 
         // ── Clientes ───────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ const router = createRouter({
           path: 'masters/clients',
           name: 'clients',
           component: () => import('@/pages/masters/ClientsPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor'] },
+          meta: { requiresAuth: true },
         },
 
         // ── Maestros ───────────────────────────────────────────────────────────
@@ -69,43 +70,43 @@ const router = createRouter({
           path: 'masters/materials',
           name: 'materials',
           component: () => import('@/pages/masters/MaterialsPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'auditor'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'masters/vehicles',
           name: 'vehicles',
           component: () => import('@/pages/masters/VehiclesPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'auditor'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'masters/payment-methods',
           name: 'payment-methods',
           component: () => import('@/pages/masters/PaymentMethodsPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'auditor'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'masters/tariffs',
           name: 'tariffs',
           component: () => import('@/pages/masters/TariffsPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'auditor'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'masters/pins',
           name: 'pins',
           component: () => import('@/pages/masters/PinsPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'auditor'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'masters/origins',
           name: 'origins',
           component: () => import('@/pages/masters/OriginsPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'cashier', 'auditor'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'masters/cities',
           name: 'cities',
           component: () => import('@/pages/masters/CitiesPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'auditor'] },
+          meta: { requiresAuth: true },
         },
 
         // ── Finanzas ───────────────────────────────────────────────────────────
@@ -113,19 +114,19 @@ const router = createRouter({
           path: 'advances',
           name: 'advances',
           component: () => import('@/pages/advances/AdvancesPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'accountant', 'commercial_admin'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'invoicing',
           name: 'invoicing',
           component: () => import('@/pages/invoicing/InvoicingPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'accountant'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'expenses',
           name: 'expenses',
           component: () => import('@/pages/expenses/ExpensesPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'cashier', 'commercial_admin', 'accountant', 'auditor'] },
+          meta: { requiresAuth: true },
         },
 
         // ── Reportes ───────────────────────────────────────────────────────────
@@ -133,19 +134,19 @@ const router = createRouter({
           path: 'reports/general',
           name: 'reports-general',
           component: () => import('@/pages/reports/GeneralReportPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'reports/daily',
           name: 'reports-daily',
           component: () => import('@/pages/reports/DailyReportPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'reports/range',
           name: 'reports-range',
           component: { ...UnderConstruction, props: { module: 'Reporte por Rango' } },
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'commercial_admin', 'accountant', 'auditor'] },
+          meta: { requiresAuth: true },
         },
 
         // ── Administración ─────────────────────────────────────────────────────
@@ -153,13 +154,13 @@ const router = createRouter({
           path: 'admin/users',
           name: 'admin-users',
           component: () => import('@/pages/admin/UsersPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser'] },
+          meta: { requiresAuth: true },
         },
         {
           path: 'admin/audit-log',
           name: 'admin-audit-log',
           component: () => import('@/pages/admin/AuditLogPage.vue'),
-          meta: { requiresAuth: true, allowedRoles: ['superuser', 'auditor'] },
+          meta: { requiresAuth: true },
         },
       ],
     },
@@ -180,7 +181,11 @@ router.beforeEach((to: RouteLocationNormalized, _from: RouteLocationNormalized, 
     return next('/login')
   }
 
-  const allowedRoles = to.meta.allowedRoles as string[] | undefined
+  // FASE 5.4: los roles permitidos por ruta ya no se duplican aquí — se
+  // leen de la misma configuración centralizada que usa el menú de
+  // navegación (constants/navigation.ts), para que menú y guardas de ruta
+  // nunca queden desincronizados entre sí.
+  const allowedRoles = getAllowedRoles(to.path)
   if (allowedRoles && store.user && !allowedRoles.includes(store.user.role)) {
     return next('/unauthorized')
   }

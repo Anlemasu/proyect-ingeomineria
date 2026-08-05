@@ -219,6 +219,7 @@ export interface Expense {
   value: string
   description: string
   date: string
+  state: boolean
 }
 
 export interface DailyReportData {

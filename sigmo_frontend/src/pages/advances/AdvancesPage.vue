@@ -17,7 +17,7 @@ import { clientsApi } from '@/api/clients.api'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate, toISODate } from '@/utils/formatDate'
+import { formatDate, todayBogota } from '@/utils/formatDate'
 import type { Advance, AdvanceMovement, Client } from '@/types'
 
 const qc = useQueryClient()
@@ -103,7 +103,7 @@ const { handleSubmit, isSubmitting, resetForm, setValues } = useForm({
   validationSchema: schema,
   initialValues: {
     client: undefined as number | undefined,
-    date: toISODate(new Date()),
+    date: todayBogota(),
     value: undefined as number | undefined,
     transfer_num: undefined as number | undefined,
     trips_quantity: undefined as number | undefined,
@@ -125,7 +125,7 @@ function openCreate() {
   resetForm()
   setValues({
     client: undefined,
-    date: toISODate(new Date()),
+    date: todayBogota(),
     value: undefined,
     transfer_num: undefined,
     trips_quantity: undefined,

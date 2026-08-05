@@ -8,6 +8,7 @@ class Expense(models.Model):
     value = models.DecimalField(max_digits=15, decimal_places=2)
     description = models.TextField()
     date = models.DateField()
+    state = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'EXPENSE'

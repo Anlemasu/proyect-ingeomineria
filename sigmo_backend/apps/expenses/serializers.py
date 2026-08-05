@@ -4,7 +4,7 @@ from .models import Expense
 class ExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
-        fields = ['id', 'user', 'value', 'description', 'date']
+        fields = ['id', 'user', 'value', 'description', 'date', 'state']
         read_only_fields = ['id', 'user']  # user lo asigna la vista
 
     def validate_value(self, value):

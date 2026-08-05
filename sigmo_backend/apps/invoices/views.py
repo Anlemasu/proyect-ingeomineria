@@ -1,3 +1,4 @@
+from django.db import IntegrityError
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -30,7 +31,17 @@ class InvoiceListCreateView(APIView):
             )
         serializer = InvoiceSerializer(data=request.data)
         if serializer.is_valid():
-            invoice = cast(Invoice, serializer.save(user=request.user))
+            # El UniqueValidator del serializer ya cubre el caso normal; este
+            # try/except es la red de seguridad para la carrera entre dos
+            # requests concurrentes que pasan esa validación antes de que
+            # cualquiera de las dos llegue a hacer el INSERT.
+            try:
+                invoice = cast(Invoice, serializer.save(user=request.user))
+            except IntegrityError:
+                return Response(
+                    {'error': 'Ya existe una factura con este número.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             log_action(
                 request, 'create', 'Invoice',
                 object_id=invoice.id,

@@ -13,6 +13,7 @@ from .models import Trip
 from .serializers import TripReadSerializer, TripWriteSerializer
 from .services import (
     sync_advance_movement_on_trip_change,
+    reallocate_advance_on_client_change,
     InsufficientBalanceError,
     UnsupportedAdvanceChangeError,
 )
@@ -28,7 +29,7 @@ FIELDS_AFFECTING_TOTALS = {'value', 'state', 'payment'}
 
 
 def can_register_trips(user):
-    return user.role in ['superuser', 'cashier']
+    return user.role in ['superuser', 'cashier', 'commercial_admin']
 
 
 def can_update_trips(user):
@@ -320,15 +321,48 @@ class TripDetailView(APIView):
         was_advance_funded = old_payment.is_advance and old_advance is not None
         force = str(request.data.get('force', '')).lower() == 'true'
 
+        # Cambio de cliente: no hay "mismo anticipo" que ajustar por
+        # diferencia — el saldo se devuelve completo al cliente anterior y
+        # el viaje se reevalúa desde cero contra el anticipo activo del
+        # cliente nuevo (reallocate_advance_on_client_change), con las
+        # mismas reglas que un registro nuevo. Se valida ANTES del atomic,
+        # igual que en TripListCreateView.post, para devolver un 400 claro
+        # sin haber escrito nada si el nuevo cliente no alcanza y no vino
+        # justificación.
+        new_client = serializer.validated_data.get('client', obj.client)  # type: ignore
+        client_changed = new_client.id != obj.client_id and not is_annulment
+
+        if client_changed:
+            new_payment_check = serializer.validated_data.get('payment', obj.payment)  # type: ignore
+            if new_payment_check.is_advance:
+                new_value_check = serializer.validated_data.get('value', obj.value)  # type: ignore
+                candidate_advance = get_active_advance(new_client)
+                candidate_balance = get_available_balance(candidate_advance) if candidate_advance else Decimal('0')
+                if new_value_check > candidate_balance and not justification:
+                    return Response({
+                        'error': (
+                            'Saldo del anticipo insuficiente para el nuevo cliente. '
+                            'Debe justificar el ajuste para guardarlo como deuda pendiente.'
+                        ),
+                        'saldo_disponible': str(candidate_balance),
+                        'valor_viaje': str(new_value_check),
+                        'diferencia': str(new_value_check - candidate_balance),
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
         # FASE 3: un viaje en deuda pendiente (payment.is_advance=True,
         # advance=NULL) solo puede quedar liquidado a través de
         # settle_pending_debts (automático, FIFO, al registrar un anticipo
         # nuevo para el cliente). No se soporta asignarle un anticipo a
         # mano por este PATCH — eso dejaría el viaje con `advance` puesto
-        # pero sin el AdvanceMovement que debería acompañarlo.
+        # pero sin el AdvanceMovement que debería acompañarlo. No aplica
+        # cuando el cliente cambia: ahí el `advance` lo recalcula el
+        # backend por su cuenta (ver más abajo), ignorando lo que mande el caller.
         was_pending_debt = old_payment.is_advance and old_advance is None
         incoming_advance = request.data.get('advance')
-        if was_pending_debt and 'advance' in request.data and incoming_advance not in (None, ''):
+        if (
+            was_pending_debt and not client_changed
+            and 'advance' in request.data and incoming_advance not in (None, '')
+        ):
             return Response({
                 'error': (
                     'No se puede asignar manualmente un anticipo a un viaje con '
@@ -344,13 +378,39 @@ class TripDetailView(APIView):
                 # reversión de saldo a partir del mismo "valor viejo".
                 Trip.objects.select_for_update().get(pk=obj.pk)
 
-                trip = cast(Trip, serializer.save())
+                if client_changed:
+                    # El backend recalcula 'advance' por su cuenta (igual
+                    # que en el registro) — lo que el caller haya mandado
+                    # para ese campo se ignora a propósito.
+                    trip = cast(Trip, serializer.save(advance=obj.advance))
+                    reallocate_advance_on_client_change(
+                        trip,
+                        old_advance=old_advance,
+                        was_advance_funded=was_advance_funded,
+                        old_value=old_value,
+                        justification=justification,
+                        request=request,
+                    )
+                else:
+                    trip = cast(Trip, serializer.save())
+                    if was_advance_funded:
+                        sync_advance_movement_on_trip_change(
+                            trip,
+                            was_advance_funded=True,
+                            old_value=old_value,
+                            old_advance=old_advance,
+                            new_advance=trip.advance,
+                            is_annulment=is_annulment,
+                            force=force,
+                            is_superuser=(request.user.role == 'superuser'),
+                            request=request,
+                        )
 
-                # Se deja primero el evento propio del viaje: si algo falla
-                # más abajo (saldo insuficiente, cambio de anticipo no
-                # soportado), el rollback del atomic también deshace este
-                # log — no debe quedar un registro de auditoría describiendo
-                # un cambio que finalmente no se aplicó.
+                # Se deja al final, ya con 'advance'/'pending_debt_justification'
+                # resueltos: si algo falla más arriba (saldo insuficiente,
+                # cambio de anticipo no soportado), el rollback del atomic
+                # también deshace este log — no debe quedar un registro de
+                # auditoría describiendo un cambio que finalmente no se aplicó.
                 log_action(
                     request, action, 'Trip',
                     object_id=obj.id,
@@ -358,19 +418,6 @@ class TripDetailView(APIView):
                     new_data=dict(TripReadSerializer(trip).data),  # type: ignore
                     justification=justification,
                 )
-
-                if was_advance_funded:
-                    sync_advance_movement_on_trip_change(
-                        trip,
-                        was_advance_funded=True,
-                        old_value=old_value,
-                        old_advance=old_advance,
-                        new_advance=trip.advance,
-                        is_annulment=is_annulment,
-                        force=force,
-                        is_superuser=(request.user.role == 'superuser'),
-                        request=request,
-                    )
 
                 # REQUISITO NUEVO 3.4: si el día de este viaje ya tiene un
                 # cierre vigente, se recalcula DESPUÉS del AdvanceMovement de

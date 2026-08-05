@@ -57,7 +57,7 @@ export const navigation: NavItem[] = [
         label: 'Registro de Viajes',
         path: '/trips',
         icon: Truck,
-        roles: ['superuser', 'cashier'],
+        roles: ['superuser', 'cashier', 'commercial_admin'],
       },
       {
         type: 'leaf',
@@ -71,7 +71,7 @@ export const navigation: NavItem[] = [
         label: 'Cierre de Caja',
         path: '/cash-closing',
         icon: Archive,
-        roles: ['superuser', 'cashier'],
+        roles: ['superuser', 'cashier', 'commercial_admin'],
       },
     ],
   },
@@ -162,7 +162,10 @@ export const navigation: NavItem[] = [
         label: 'Gastos',
         path: '/expenses',
         icon: Receipt,
-        roles: ['superuser', 'cashier', 'commercial_admin'],
+        // accountant/auditor tienen acceso real de solo lectura (backend:
+        // ExpenseListCreateView.get no restringe por rol) — antes no
+        // aparecían aquí y solo podían llegar por URL directa.
+        roles: ['superuser', 'cashier', 'commercial_admin', 'accountant', 'auditor'],
       },
     ],
   },
@@ -216,3 +219,18 @@ export const navigation: NavItem[] = [
     ],
   },
 ]
+
+// FASE 5.4: única fuente de roles por ruta — la usan tanto el menú
+// (useNavigation.isLeafVisible) como las guardas de Vue Router
+// (router/index.ts), para no mantener dos listas de roles que puedan
+// desincronizarse entre sí (como pasaba antes con Gastos).
+export function getAllowedRoles(path: string): string[] | undefined {
+  for (const item of navigation) {
+    if (item.type === 'leaf' && item.path === path) return item.roles
+    if (item.type === 'group') {
+      const child = item.children.find(c => c.path === path)
+      if (child) return child.roles
+    }
+  }
+  return undefined
+}

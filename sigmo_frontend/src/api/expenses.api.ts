@@ -13,9 +13,14 @@ export interface ExpensePayload {
   date: string
 }
 
+export interface ExpensePatchPayload extends Partial<ExpensePayload> {
+  state?: boolean
+  justification?: string
+}
+
 export const expensesApi = {
   list: (params?: ExpenseListParams) => api.get<Expense[]>('/expenses/', { params }),
   create: (data: ExpensePayload) => api.post<Expense>('/expenses/', data),
   detail: (id: number) => api.get<Expense>(`/expenses/${id}/`),
-  update: (id: number, data: Partial<ExpensePayload>) => api.patch<Expense>(`/expenses/${id}/`, data),
+  update: (id: number, data: ExpensePatchPayload) => api.patch<Expense>(`/expenses/${id}/`, data),
 }

@@ -19,7 +19,7 @@ import { vehiclesApi }       from '@/api/vehicles.api'
 import { paymentMethodsApi } from '@/api/paymentMethods.api'
 import { advancesApi }       from '@/api/advances.api'
 import { useAuthStore }      from '@/stores/auth.store'
-import { toISODate }         from '@/utils/formatDate'
+import { todayBogota }       from '@/utils/formatDate'
 import { formatCurrency }    from '@/utils/formatCurrency'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import type { Trip } from '@/types'
@@ -33,16 +33,20 @@ const canAnnul      = computed(() => role.value === 'superuser' || role.value ==
 // Igual que en el formulario de registro: solo superuser/commercial_admin pueden mover la fecha del viaje
 const canChangeDate = computed(() => role.value === 'superuser' || role.value === 'commercial_admin')
 
-const today = toISODate(new Date())
+const today = todayBogota()
 
 // ── Queries ───────────────────────────────────────────────────────────────────
-// Los 3 roles con acceso a esta página solo ajustan viajes del día en curso
+// cashier/commercial_admin solo ajustan viajes del día en curso (SAME_DAY_ONLY_ROLES
+// en el backend). superuser puede consultar y ajustar viajes de fechas pasadas (RF-37),
+// por eso solo a ese rol se le muestra el selector de fecha.
+const selectedDate = ref(today)
 const { data: tripsData, isLoading, refetch } = useQuery({
-  queryKey: ['trips-adjustments', today],
-  queryFn:  () => tripsApi.list({ date: today }).then(r => r.data),
+  queryKey: ['trips-adjustments', selectedDate],
+  queryFn:  () => tripsApi.list({ date: selectedDate.value }).then(r => r.data),
   refetchInterval: 30_000,
 })
 const trips = computed(() => tripsData.value ?? [])
+const isHistoricalView = computed(() => selectedDate.value !== today)
 
 // ── Búsqueda por número de vale ───────────────────────────────────────────────
 const voucherSearch = ref('')
@@ -92,11 +96,6 @@ const editExtern        = ref('')
 const editJustification = ref('')
 const editLoading       = ref(false)
 
-// RF-37: el superusuario requiere justificación al ajustar un registro de un día distinto al actual
-const editRequiresJustification = computed(() =>
-  isSuperuser.value && !!editTrip.value && editTrip.value.date_register.split('T')[0] !== today
-)
-
 function openEdit(trip: Trip) {
   editTrip.value          = trip
   editClient.value        = trip.client_detail?.id
@@ -129,10 +128,34 @@ watch([editActiveAdvance, editIsAdvancePayment], ([advance, isAdvance]) => {
   editAdvanceId.value = isAdvance ? (advance?.id ?? null) : null
 })
 
+// ── Reasignación de anticipo al cambiar el cliente ─────────────────────────────
+// Si el cliente del viaje cambia, el saldo se devuelve completo al cliente
+// anterior y se reevalúa desde cero contra el anticipo activo del cliente
+// nuevo (mismas reglas que el registro de un viaje nuevo, ver
+// reallocate_advance_on_client_change en el backend). Si el nuevo cliente no
+// alcanza, hace falta justificar — igual que en TripsPage al registrar.
+const editClientChanged = computed(() =>
+  !!editTrip.value && editClient.value !== editTrip.value.client_detail?.id
+)
+const editHasActiveAdvance = computed(() => editActiveAdvance.value !== null)
+const editBalanceSufficient = computed(() => {
+  if (!editIsAdvancePayment.value) return true
+  if (!editHasActiveAdvance.value) return false
+  return (editActiveAdvance.value?.available_balance ?? 0) >= (editValue.value ?? 0)
+})
+const editNeedsJustification = computed(() =>
+  editClientChanged.value && editIsAdvancePayment.value && !editBalanceSufficient.value
+)
+const editCanSubmit = computed(() => {
+  if (!editNeedsJustification.value) return true
+  return isSuperuser.value && editJustification.value.trim().length > 0
+})
+watch(editClient, () => { editJustification.value = '' })
+
 async function saveEdit() {
   if (!editTrip.value) return
-  if (editRequiresJustification.value && !editJustification.value.trim()) {
-    toast.error('La justificación es obligatoria para ajustar un registro de un día distinto al actual')
+  if (!editCanSubmit.value) {
+    toast.error('El nuevo cliente no tiene saldo de anticipo suficiente. Justifique el ajuste para guardarlo como deuda pendiente.')
     return
   }
 
@@ -159,7 +182,12 @@ async function saveEdit() {
       return
     }
 
-    if (editJustification.value.trim()) patch.justification = editJustification.value.trim()
+    // Cambio de cliente en viaje financiado con anticipo: el backend
+    // recalcula el anticipo (devuelve saldo al cliente anterior, descuenta
+    // del nuevo) e ignora cualquier `advance` que se le mande — esta
+    // justificación solo aplica si el nuevo cliente no alcanza a cubrir el
+    // valor del viaje (ver reallocate_advance_on_client_change).
+    if (editNeedsJustification.value) patch.justification = editJustification.value.trim()
 
     await tripsApi.patch(orig.id, patch)
     toast.success('Viaje actualizado correctamente')
@@ -167,6 +195,14 @@ async function saveEdit() {
     refetch()
     queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
     queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
+    // Cualquier edición que toque valor/cliente/medio de pago puede haber
+    // movido saldo de anticipo (mismo cliente vía sync_advance_movement_on_trip_change,
+    // o entre clientes vía reallocate_advance_on_client_change) — invalidar
+    // 'advances'/'advance-balance' por prefijo cubre tanto la query global
+    // de AdvancesPage (alerta de saldos negativos) como las scoped por cliente.
+    queryClient.invalidateQueries({ queryKey: ['advances'] })
+    queryClient.invalidateQueries({ queryKey: ['advance-balance'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard', 'advances'] })
   } catch (err) {
     toast.error(getApiErrorMessage(err))
   } finally {
@@ -201,6 +237,10 @@ async function confirmAnnul() {
     refetch()
     queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
     queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
+    // La anulación revierte el saldo de anticipo si el viaje estaba financiado.
+    queryClient.invalidateQueries({ queryKey: ['advances'] })
+    queryClient.invalidateQueries({ queryKey: ['advance-balance'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard', 'advances'] })
   } catch (err) {
     toast.error(getApiErrorMessage(err))
   } finally {
@@ -228,6 +268,16 @@ async function confirmAnnul() {
           class="pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 w-full sm:w-56"
         />
       </div>
+      <input
+        v-if="isSuperuser"
+        v-model="selectedDate"
+        type="date"
+        :max="today"
+        class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
+      />
+      <span v-if="isHistoricalView" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+        <AlertTriangle class="w-3 h-3" />Vista histórica
+      </span>
       <button
         type="button"
         @click="refetch()"
@@ -266,7 +316,9 @@ async function confirmAnnul() {
             </tr>
             <tr v-else-if="filteredTrips.length === 0">
               <td colspan="8" class="px-4 py-12 text-center text-xs text-gray-400">
-                {{ voucherSearch.trim() ? 'Sin resultados para ese número de vale' : 'Sin viajes registrados hoy' }}
+                {{ voucherSearch.trim()
+                  ? 'Sin resultados para ese número de vale'
+                  : isHistoricalView ? 'Sin viajes registrados en esta fecha' : 'Sin viajes registrados hoy' }}
               </td>
             </tr>
             <tr
@@ -443,6 +495,35 @@ async function confirmAnnul() {
                   Saldo: <strong>{{ formatCurrency(editActiveAdvance.available_balance ?? 0) }}</strong>
                 </span>
                 <span v-else>Sin anticipo disponible para este cliente</span>
+                <p v-if="editClientChanged" class="mt-1 text-[11px] opacity-80">
+                  Al guardar, el saldo se devuelve al cliente anterior y el viaje pasa a descontarse de este anticipo.
+                </p>
+              </div>
+
+              <!-- Saldo insuficiente tras el cambio de cliente -->
+              <div v-if="editNeedsJustification" class="px-3 py-2 rounded-lg bg-red-50 border border-red-200">
+                <div class="flex items-start gap-2 text-red-700 text-xs">
+                  <AlertTriangle class="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <div class="space-y-0.5">
+                    <p class="font-semibold">Saldo insuficiente para el nuevo cliente</p>
+                    <p>Saldo disponible: <strong>{{ formatCurrency(editActiveAdvance?.available_balance ?? 0) }}</strong></p>
+                    <p>Valor del viaje: <strong>{{ formatCurrency(editValue ?? 0) }}</strong></p>
+                  </div>
+                </div>
+                <div v-if="isSuperuser" class="mt-2 pt-2 border-t border-red-200">
+                  <label class="block text-xs font-medium text-red-700 mb-1">
+                    Justificación <span class="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    v-model="editJustification"
+                    rows="2"
+                    placeholder="Motivo — el viaje quedará como deuda pendiente del nuevo cliente..."
+                    class="w-full px-3 py-2 text-sm border border-red-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+                  />
+                </div>
+                <p v-else class="mt-2 text-xs text-red-600">
+                  Solo el superusuario puede guardar este ajuste como deuda pendiente.
+                </p>
               </div>
 
               <!-- Valor -->
@@ -462,30 +543,13 @@ async function confirmAnnul() {
                   class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
                 />
               </div>
-
-              <!-- Justificación — solo cuando se ajusta un registro de otro día -->
-              <div v-if="editRequiresJustification">
-                <label class="block text-xs font-medium text-gray-700 mb-1.5">
-                  Justificación <span class="text-red-500">*</span>
-                </label>
-                <p class="mb-1.5 text-xs text-amber-600 flex items-center gap-1">
-                  <AlertTriangle class="w-3.5 h-3.5 shrink-0" />
-                  Registro de un día distinto al actual
-                </p>
-                <textarea
-                  v-model="editJustification"
-                  rows="2"
-                  placeholder="Motivo del ajuste histórico..."
-                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none"
-                />
-              </div>
             </div>
 
             <div class="px-6 py-4 border-t border-gray-100 shrink-0">
               <button
                 type="button"
                 @click="saveEdit"
-                :disabled="editLoading || (editRequiresJustification && !editJustification.trim())"
+                :disabled="editLoading || !editCanSubmit"
                 class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 disabled:opacity-50 transition-colors"
               >
                 <RefreshCw v-if="editLoading" class="w-4 h-4 animate-spin" />
