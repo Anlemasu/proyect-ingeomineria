@@ -1,9 +1,7 @@
 import axios from 'axios'
 import { toast } from 'vue-sonner'
+import { useAuthStore } from '@/stores/auth.store'
 
-const TOKEN_KEY = 'sigmo_token'
-const USER_KEY = 'sigmo_user'
-const REFRESH_KEY = 'sigmo_refresh'
 const LOGIN_ENDPOINT = '/users/login/'
 
 const api = axios.create({
@@ -11,10 +9,19 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+// FASE 4C: el token se lee del store de Pinia (memoria de ESTA pestaña),
+// no de sessionStorage/localStorage directamente. useAuthStore() se llama
+// dentro del interceptor (no una sola vez al importar el módulo) para
+// asegurar que siempre resuelve la instancia de Pinia activa de la app
+// actual. Antes esto leía localStorage en cada request — como
+// localStorage se comparte entre pestañas, cerrar sesión en una pestaña
+// borraba esas claves para todas, y la siguiente request de cualquier
+// OTRA pestaña salía sin token y esa pestaña también quedaba deslogueada
+// sin haber hecho nada.
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY)
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  const authStore = useAuthStore()
+  if (authStore.token) {
+    config.headers.Authorization = `Bearer ${authStore.token}`
   }
   return config
 })
@@ -45,9 +52,12 @@ api.interceptors.response.use(
     }
 
     if (status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(USER_KEY)
-      localStorage.removeItem(REFRESH_KEY)
+      // FASE 4C: se limpia a través del store (clearSession(), que ya
+      // opera sobre sessionStorage — ver auth.store.ts) en vez de borrar
+      // claves de localStorage a mano aquí. Esto solo afecta la sesión de
+      // ESTA pestaña; otras pestañas con su propia sesión en su propio
+      // sessionStorage no se enteran ni se ven tocadas.
+      useAuthStore().clearSession()
       toast.error('Sesión expirada. Inicia sesión nuevamente.')
       window.location.href = '/login'
     } else if (status === 403) {

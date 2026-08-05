@@ -23,8 +23,22 @@ const TOKEN_KEY = 'sigmo_token'
 const USER_KEY = 'sigmo_user'
 const REFRESH_KEY = 'sigmo_refresh'
 
+// FASE 4C: la sesión se persiste en sessionStorage, NO en localStorage.
+// localStorage se comparte entre TODAS las pestañas del mismo origen —
+// con múltiples sesiones simultáneas permitidas (una pestaña puede tener
+// al usuario X logueado y otra al Y, o dos sesiones distintas del mismo
+// usuario), guardar la sesión ahí hacía que cerrar sesión en una pestaña
+// borrara literalmente las claves que las demás pestañas también leían,
+// "cerrándoles la sesión" sin que ellas hubieran hecho nada.
+// sessionStorage resuelve esto porque el navegador le da una copia
+// completamente aislada a cada pestaña (aunque sea el mismo origen) —
+// nada que escriba la pestaña A es visible para la B — y a la vez
+// sobrevive un F5 dentro de la MISMA pestaña, que es lo que pedía la
+// Fase 4 (Bug 1).
+const storage = sessionStorage
+
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem(TOKEN_KEY))
+  const token = ref<string | null>(storage.getItem(TOKEN_KEY))
   const user = ref<User | null>(null)
   // FASE 4B: se persiste para poder mandarlo en el logout y que el
   // backend lo invalide (blacklist, Fase 2) — antes de este fix el
@@ -42,7 +56,7 @@ export const useAuthStore = defineStore('auth', () => {
   // antes de implementar esto — ver resumen de la fase), así que en vez
   // de validar contra el servidor en cada arranque, se persiste el mismo
   // objeto `user` que el login ya trae (LoginResponse.user) y se restaura
-  // desde localStorage junto con el token.
+  // desde storage junto con el token.
   //
   // isInitializing empieza en true y App.vue no renderiza rutas
   // protegidas mientras lo esté. Hoy initialize() es 100% síncrono (no
@@ -59,18 +73,18 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   function initialize() {
-    const storedToken = localStorage.getItem(TOKEN_KEY)
-    const storedUser = localStorage.getItem(USER_KEY)
+    const storedToken = storage.getItem(TOKEN_KEY)
+    const storedUser = storage.getItem(USER_KEY)
 
     if (storedToken && !isTokenExpired(storedToken) && storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser) as User
         token.value = storedToken
         user.value = parsedUser
-        refreshToken.value = localStorage.getItem(REFRESH_KEY)
+        refreshToken.value = storage.getItem(REFRESH_KEY)
       } catch {
-        // localStorage corrupto/manipulado: mejor arrancar sin sesión que
-        // con un usuario a medias.
+        // storage corrupto/manipulado: mejor arrancar sin sesión que con
+        // un usuario a medias.
         clearSession()
       }
     } else {
@@ -84,18 +98,18 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = accessToken
     user.value = userData
     refreshToken.value = refresh
-    localStorage.setItem(TOKEN_KEY, accessToken)
-    localStorage.setItem(USER_KEY, JSON.stringify(userData))
-    localStorage.setItem(REFRESH_KEY, refresh)
+    storage.setItem(TOKEN_KEY, accessToken)
+    storage.setItem(USER_KEY, JSON.stringify(userData))
+    storage.setItem(REFRESH_KEY, refresh)
   }
 
   function clearSession() {
     token.value = null
     user.value = null
     refreshToken.value = null
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
-    localStorage.removeItem(REFRESH_KEY)
+    storage.removeItem(TOKEN_KEY)
+    storage.removeItem(USER_KEY)
+    storage.removeItem(REFRESH_KEY)
   }
 
   function logout() {

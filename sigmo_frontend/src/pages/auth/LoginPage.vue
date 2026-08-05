@@ -14,7 +14,11 @@ const store = useAuthStore()
 
 const schema = toTypedSchema(z.object({
   username: z.string().min(1, 'El usuario es requerido').transform(s => s.trim()),
-  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+  // El mínimo de 8 caracteres es una regla de creación/cambio de
+  // contraseña (ver ChangePasswordPage y el backend), no del login: el
+  // login solo autentica contra lo que ya esté guardado, sea cual sea su
+  // longitud.
+  password: z.string().min(1, 'La contraseña es requerida'),
 }))
 
 const { handleSubmit, isSubmitting } = useForm({ validationSchema: schema })
