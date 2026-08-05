@@ -1,7 +1,7 @@
 from rest_framework import serializers
-from django.db.models import Sum
 from .models import Advance, AdvanceMovement
 from apps.clients.serializers import ClientSerializer
+from .services import get_available_balance
 
 
 class AdvanceMovementSerializer(serializers.ModelSerializer):
@@ -80,14 +80,4 @@ class AdvanceSerializer(serializers.ModelSerializer):
         SerializerMethodField llama este método automáticamente
         y su resultado va en el JSON como 'available_balance'.
         """
-        movs = obj.advancemovement_set.all()
-
-        ingresos = movs.filter(
-            type_movement='ingreso'
-        ).aggregate(total=Sum('amount'))['total'] or 0
-
-        egresos = movs.filter(
-            type_movement='egreso'
-        ).aggregate(total=Sum('amount'))['total'] or 0
-
-        return float(ingresos - egresos)
+        return float(get_available_balance(obj))

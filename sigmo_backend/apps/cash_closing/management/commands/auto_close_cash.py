@@ -2,7 +2,6 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.cash_closing.services import execute_close, AlreadyClosedError
-from apps.audit.services import log_action
 
 
 class Command(BaseCommand):
@@ -13,7 +12,11 @@ class Command(BaseCommand):
         self.stdout.write(f'[auto_close_cash] Verificando cierre para {today}...')
 
         try:
-            summary = execute_close(today)
+            # source='auto': execute_close deja el registro en AuditLog con
+            # user=None (no hay un usuario HTTP autenticado en un cron) y una
+            # justificación indicando que fue un cierre automático — antes
+            # este comando no dejaba ningún rastro de auditoría.
+            summary = execute_close(today, source='auto')
             self.stdout.write(
                 self.style.SUCCESS(
                     f'[auto_close_cash] Cierre ejecutado: {summary.total_trips} viajes, '

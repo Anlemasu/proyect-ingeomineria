@@ -3,14 +3,17 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth import authenticate
 from django.core.cache import cache
 from django.conf import settings
+from django.db import transaction
 from apps.audit.services import log_action
 from typing import cast
 
 from .models import User
 from .serializers import UserReadSerializer, UserCreateSerializer, ChangePasswordSerializer, ResetPasswordByAdminSerializer
+from .services import blacklist_all_outstanding_tokens
 
 
 def is_superuser(user):
@@ -85,8 +88,34 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # BUG 3: sin esto, "cerrar sesión" solo borraba el token en el
+        # cliente — el refresh token seguía siendo válido en el backend
+        # hasta su expiración (hasta 1 día) y cualquiera que lo conservara
+        # podía seguir pidiendo access tokens nuevos con él.
+        #
+        # El refresh token debe venir en el body porque es la única forma
+        # de identificar CUÁL de los tokens del usuario hay que invalidar
+        # (el access token de la cabecera no sirve para eso: blacklist()
+        # opera sobre refresh tokens, no sobre access tokens). Si el
+        # frontend todavía no lo envía, el logout no falla — simplemente no
+        # hay nada que blacklistear en el servidor esta vez.
+        refresh_token = request.data.get('refresh')
+        blacklisted = False
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+                blacklisted = True
+            except TokenError:
+                # Token ya inválido, expirado o mal formado: no es un error
+                # fatal para el logout, el cliente de todas formas debe
+                # tratar la sesión como cerrada.
+                pass
+
         # RF-05: registrar cierre de sesión
-        log_action(request, 'logout', 'User', object_id=request.user.id)
+        log_action(
+            request, 'logout', 'User', object_id=request.user.id,
+            new_data={'refresh_token_blacklisted': blacklisted},
+        )
         return Response(
             {'message': 'Sesión cerrada correctamente.'},
             status=status.HTTP_200_OK
@@ -170,16 +199,33 @@ class UserDetailView(APIView):
 
         # Capturar datos anteriores antes de modificar
         previous = dict(UserReadSerializer(user).data)  # type: ignore
+        was_active = user.state
 
         serializer = UserReadSerializer(user, data=request.data, partial=True)
         if serializer.is_valid():
-            serializer.save()
-            log_action(
-                request, 'update', 'User',
-                object_id=user.id,
-                previous_data=previous,
-                new_data=dict(serializer.data),  # type: ignore
-            )
+            with transaction.atomic():
+                updated_user = cast(User, serializer.save())
+
+                # BUG 3: si esta edición desactiva al usuario (STATE_USER
+                # true -> false), no basta con que no pueda volver a hacer
+                # login — su refresh token ya emitido seguiría sirviendo
+                # para sacar access tokens nuevos hasta por 1 día más. Se
+                # invalidan todos sus refresh token vigentes en el mismo
+                # momento en que se desactiva, sin esperar a que use logout.
+                revoked_count = 0
+                if was_active and not updated_user.state:
+                    revoked_count = blacklist_all_outstanding_tokens(updated_user)
+
+                log_action(
+                    request, 'update', 'User',
+                    object_id=user.id,
+                    previous_data=previous,
+                    new_data=dict(serializer.data),  # type: ignore
+                    justification=(
+                        f'Desactivación: {revoked_count} refresh token(s) invalidados.'
+                        if revoked_count else None
+                    ),
+                )
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

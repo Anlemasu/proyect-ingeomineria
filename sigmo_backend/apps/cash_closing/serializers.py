@@ -22,6 +22,7 @@ class DailySummarySerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'date',
+            'state',
             'total_trips',
             'total_volume',
             'avg_trip_value',

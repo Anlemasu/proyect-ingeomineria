@@ -28,7 +28,7 @@ const onSubmit = handleSubmit(async (values) => {
   serverError.value = ''
   try {
     const res = await authApi.login(values.username, values.password)
-    store.login(res.data.access, res.data.user)
+    store.login(res.data.access, res.data.user, res.data.refresh)
     router.push('/')
   } catch (err: unknown) {
     const e = err as { response?: { status?: number } }

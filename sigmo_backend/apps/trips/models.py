@@ -27,6 +27,20 @@ class Trip(models.Model):
     certification_state = models.BooleanField(null=True, blank=True)
     certification_num = models.CharField(max_length=30, null=True, blank=True)
     state = models.BooleanField(default=True)
+    # FASE 3 — decisión de modelo de datos para "deuda pendiente":
+    # se reutiliza `advance IS NULL` en un viaje pagado con medio "anticipo"
+    # (payment.is_advance=True) para representar "todavía no se liquidó
+    # contra ningún anticipo". No se creó una tabla nueva porque ese estado
+    # ya es 100% derivable de campos existentes (payment.is_advance +
+    # advance IS NULL + state=True) — antes de esta fase, `advance=NULL`
+    # con `payment.is_advance=True` estaba prohibido por validación
+    # (TripWriteSerializer exigía un anticipo siempre); se revisó ese
+    # camino y no lo usaba nada más, así que quedó libre para este
+    # significado nuevo sin chocar con ningún otro uso.
+    # Este campo solo guarda la justificación capturada en el momento del
+    # registro sin saldo suficiente; se conserva aunque el viaje después se
+    # liquide o se anule (es un dato histórico de por qué nació pendiente).
+    pending_debt_justification = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'TRIP'

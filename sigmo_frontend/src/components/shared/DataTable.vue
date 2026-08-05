@@ -78,9 +78,9 @@ watch(() => props.data, () => { pageIndex.value = 0 })
       <slot name="filters" />
     </div>
 
-    <div class="border border-gray-200 rounded-lg overflow-x-auto bg-white">
+    <div class="border border-gray-200 rounded-lg overflow-auto bg-white max-h-[65vh]">
       <table class="w-full text-sm">
-        <thead class="bg-gray-50 border-b border-gray-200">
+        <thead class="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
           <tr>
             <th
               v-for="header in table.getHeaderGroups()[0].headers"

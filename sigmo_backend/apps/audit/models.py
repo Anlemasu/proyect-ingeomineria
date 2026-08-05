@@ -5,13 +5,15 @@ from apps.users.models import User
 class AuditLog(models.Model):
 
     ACTION_CHOICES = [
-        ('login',         'Inicio de sesión'),
-        ('logout',        'Cierre de sesión'),
-        ('create',        'Creación'),
-        ('update',        'Modificación'),
-        ('delete',        'Eliminación'),
-        ('annul',         'Anulación'),
-        ('access_denied', 'Acceso denegado'),
+        ('login',           'Inicio de sesión'),
+        ('logout',          'Cierre de sesión'),
+        ('create',          'Creación'),
+        ('update',          'Modificación'),
+        ('delete',          'Eliminación'),
+        ('annul',           'Anulación'),
+        ('access_denied',   'Acceso denegado'),
+        ('revert',          'Reversión de cierre de caja'),
+        ('recalculo_cierre', 'Recálculo automático de cierre de caja'),
     ]
 
     # Usuario que realizó la acción (null si no estaba autenticado)

@@ -7,6 +7,7 @@ from typing import cast
 
 from .models import Expense
 from .serializers import ExpenseSerializer
+from apps.cash_closing.models import DailySummary
 
 
 def can_manage_expenses(user):
@@ -42,6 +43,19 @@ class ExpenseListCreateView(APIView):
             )
         serializer = ExpenseSerializer(data=request.data)
         if serializer.is_valid():
+            # REQUISITO NUEVO 3.1: mismo bloqueo que en trips — un día con
+            # cierre de caja vigente no admite gastos nuevos.
+            expense_date = serializer.validated_data.get('date')  # type: ignore
+            if DailySummary.objects.filter(
+                date=expense_date, state=DailySummary.STATE_CLOSED
+            ).exists():
+                return Response({
+                    'error': (
+                        f'El día {expense_date} ya tiene cierre de caja registrado. '
+                        f'Debe revertir el cierre para registrar nuevos gastos.'
+                    )
+                }, status=status.HTTP_409_CONFLICT)
+
             expense = cast(Expense, serializer.save(user=request.user))
             log_action(
                 request, 'create', 'Expense',

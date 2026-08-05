@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'apps.reports',
     'apps.audit',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
 ]
 
