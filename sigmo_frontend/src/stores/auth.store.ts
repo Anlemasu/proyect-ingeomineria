@@ -103,6 +103,20 @@ export const useAuthStore = defineStore('auth', () => {
     storage.setItem(REFRESH_KEY, refresh)
   }
 
+  // 8A.3: usado por el refresh silencioso (axiosInstance.ts) para renovar
+  // el access token (y el refresh rotado) sin pasar por login() completo,
+  // que exige `userData` — algo que la respuesta de refresh no trae (no
+  // vuelve a autenticar contra credenciales, solo renueva tokens de una
+  // sesión que ya existía, así que `user` se deja intacto).
+  function setTokens(accessToken: string, refresh?: string) {
+    token.value = accessToken
+    storage.setItem(TOKEN_KEY, accessToken)
+    if (refresh) {
+      refreshToken.value = refresh
+      storage.setItem(REFRESH_KEY, refresh)
+    }
+  }
+
   function clearSession() {
     token.value = null
     user.value = null
@@ -116,5 +130,5 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession()
   }
 
-  return { token, user, refreshToken, isAuthenticated, isInitializing, initialize, login, logout, clearSession }
+  return { token, user, refreshToken, isAuthenticated, isInitializing, initialize, login, logout, clearSession, setTokens }
 })

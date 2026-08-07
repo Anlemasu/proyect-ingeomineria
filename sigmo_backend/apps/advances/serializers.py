@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 from .models import Advance, AdvanceMovement
 from apps.clients.serializers import ClientSerializer
@@ -79,5 +81,14 @@ class AdvanceSerializer(serializers.ModelSerializer):
         RF-30: saldo = suma de ingresos - suma de egresos de los movimientos.
         SerializerMethodField llama este método automáticamente
         y su resultado va en el JSON como 'available_balance'.
+
+        FASE 6.2: si el queryset vino de annotate_available_balance() (ver
+        AdvanceListCreateView.get), usa esos totales ya calculados en la
+        misma consulta en vez de volver a golpear la base de datos por cada
+        anticipo — mismo resultado numérico, sin las queries N+1.
         """
+        ingresos = getattr(obj, '_annotated_ingresos', None)
+        egresos = getattr(obj, '_annotated_egresos', None)
+        if ingresos is not None or egresos is not None:
+            return float((ingresos or Decimal('0')) - (egresos or Decimal('0')))
         return float(get_available_balance(obj))

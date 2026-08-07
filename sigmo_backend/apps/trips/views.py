@@ -14,6 +14,7 @@ from .serializers import TripReadSerializer, TripWriteSerializer
 from .services import (
     sync_advance_movement_on_trip_change,
     reallocate_advance_on_client_change,
+    reverse_advance_discount,
     InsufficientBalanceError,
     UnsupportedAdvanceChangeError,
 )
@@ -27,6 +28,12 @@ from apps.cash_closing.services import resync_if_closed
 # 'invoice'/'invoice_pos' no necesita disparar un recálculo del cierre.
 FIELDS_AFFECTING_TOTALS = {'value', 'state', 'payment'}
 
+# 8B.4: campos que afectan el valor facturado — no pueden editarse en un
+# viaje que ya tiene una factura asociada, para no desalinear lo facturado
+# de lo que el sistema muestra como registro operativo. Editarlos exige
+# desvincular la factura primero (ver can_unlink_invoice más abajo).
+FINANCIAL_FIELDS_LOCKED_WHEN_INVOICED = {'value', 'client', 'payment'}
+
 
 def can_register_trips(user):
     return user.role in ['superuser', 'cashier', 'commercial_admin']
@@ -34,6 +41,14 @@ def can_register_trips(user):
 
 def can_update_trips(user):
     return user.role in ['superuser', 'commercial_admin', 'cashier']
+
+
+# 8B.4: desvincular una factura de un viaje es una operación distinta de
+# editar el viaje — la puede hacer el superuser o contabilidad (quien
+# gestiona la facturación, ver can_manage_invoices en apps/invoices), no
+# los mismos roles que registran/editan viajes en el día a día.
+def can_unlink_invoice(user):
+    return user.role in ['superuser', 'accountant']
 
 
 # RF-36: estos dos roles están al mismo nivel en la matriz (CRU, no D) —
@@ -116,30 +131,41 @@ class TripListCreateView(APIView):
         # Cualquier `advance` que el caller haya mandado en el body se
         # ignora a propósito para esto (el validate() del serializer solo
         # lo usa como chequeo defensivo de que pertenezca al cliente).
-        active_advance = None
-        active_balance = Decimal('0')
-        insufficient = False
         justification = request.data.get('justification', None)
-
-        if payment and payment.is_advance:
-            active_advance = get_active_advance(client)
-            active_balance = get_available_balance(active_advance) if active_advance else Decimal('0')
-            insufficient = value > active_balance
-
-            if insufficient and not justification:
-                return Response({
-                    'error': (
-                        'Saldo del anticipo insuficiente. Debe justificar el '
-                        'registro para guardarlo como deuda pendiente.'
-                    ),
-                    'saldo_disponible': str(active_balance),
-                    'valor_viaje': str(value),
-                    'diferencia': str(value - active_balance),
-                }, status=status.HTTP_400_BAD_REQUEST)
 
         # Solo entrar al atomic para las escrituras
         try:
             with transaction.atomic():
+                active_advance = None
+                active_balance = Decimal('0')
+                insufficient = False
+
+                if payment and payment.is_advance:
+                    # FASE 6.1: select_for_update() sobre el anticipo activo
+                    # ANTES de leer su saldo, para que dos registros
+                    # concurrentes del mismo cliente no lean el mismo saldo
+                    # "viejo" y decidan ambos que alcanza (o ambos que no).
+                    # El segundo request espera a que el primero termine su
+                    # transacción y recalcula el saldo ya actualizado. Mismo
+                    # patrón que reallocate_advance_on_client_change y la
+                    # liquidación de anticipos (Fase 3, settle_pending_debts).
+                    candidate_advance = get_active_advance(client)
+                    if candidate_advance:
+                        active_advance = Advance.objects.select_for_update().get(pk=candidate_advance.pk)
+                    active_balance = get_available_balance(active_advance) if active_advance else Decimal('0')
+                    insufficient = value > active_balance
+
+                    if insufficient and not justification:
+                        return Response({
+                            'error': (
+                                'Saldo del anticipo insuficiente. Debe justificar el '
+                                'registro para guardarlo como deuda pendiente.'
+                            ),
+                            'saldo_disponible': str(active_balance),
+                            'valor_viaje': str(value),
+                            'diferencia': str(value - active_balance),
+                        }, status=status.HTTP_400_BAD_REQUEST)
+
                 last_trip = Trip.objects.select_for_update().order_by('-voucher_num').first()
                 next_voucher = (last_trip.voucher_num + 1) if last_trip else 1
 
@@ -214,13 +240,28 @@ class TripDetailView(APIView):
         return Response(TripReadSerializer(obj).data)
 
     def patch(self, request, pk):
+        # 8B.4: desvincular una factura (`invoice` explícito en null) es una
+        # operación separada, reservada a superuser/contabilidad — se
+        # detecta ANTES del gate normal de can_update_trips() para que
+        # accountant (que can_update_trips ya bloquea de plano, ver
+        # test_accountant_cannot_patch_trip) pueda hacer específicamente
+        # esta operación sin abrirle el resto del PATCH.
+        is_unlink_request = 'invoice' in request.data and request.data.get('invoice') is None
+
         # BUG 1/2 (Fase 2): solo estos tres roles pueden ejecutar este PATCH.
         # Antes no había ningún chequeo de rol aquí — cualquier autenticado
         # (incluido 'auditor', que el ERS define como solo lectura absoluta)
         # podía modificar viajes. Se revisa antes de buscar el objeto, igual
         # que en el resto de vistas del proyecto (AdvanceDetailView.patch,
         # ExpenseDetailView.patch, etc.).
-        if not can_update_trips(request.user):
+        if is_unlink_request:
+            if not can_unlink_invoice(request.user):
+                log_action(request, 'access_denied', 'Trip', object_id=pk)
+                return Response(
+                    {'error': 'No tiene permisos para desvincular una factura de un viaje.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        elif not can_update_trips(request.user):
             log_action(request, 'access_denied', 'Trip', object_id=pk)
             return Response(
                 {'error': 'No tiene permisos para modificar viajes.'},
@@ -240,6 +281,25 @@ class TripDetailView(APIView):
                 {'error': 'No se puede modificar un viaje anulado.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # 8B.4: un viaje ya facturado no puede editar valor/cliente/medio de
+        # pago — desalinearía lo facturado de lo que el sistema muestra
+        # como registro operativo. Debe desvincularse la factura primero
+        # (is_unlink_request arriba), en un request aparte: no se permite
+        # combinar "desvincular" y "editar estos campos" en el mismo PATCH,
+        # para mantener el flujo explícito en dos pasos.
+        if obj.invoice_id is not None:
+            touched_locked_fields = FINANCIAL_FIELDS_LOCKED_WHEN_INVOICED & set(request.data.keys())
+            if touched_locked_fields:
+                log_action(request, 'access_denied', 'Trip', object_id=obj.id)
+                return Response({
+                    'error': (
+                        'Este viaje ya está facturado y no puede editar valor, '
+                        'cliente ni medio de pago. Desvincule la factura primero '
+                        '(superuser o contabilidad).'
+                    ),
+                    'fields': sorted(touched_locked_fields),
+                }, status=status.HTTP_409_CONFLICT)
 
         # date_register se guarda en UTC (datetime aware); hay que convertirlo
         # a la zona horaria local antes de comparar fechas de calendario, o si
@@ -392,19 +452,45 @@ class TripDetailView(APIView):
                         request=request,
                     )
                 else:
-                    trip = cast(Trip, serializer.save())
-                    if was_advance_funded:
-                        sync_advance_movement_on_trip_change(
+                    # BUG 1: si el medio de pago deja de ser de tipo
+                    # anticipo, el viaje ya no puede seguir financiado por
+                    # el anticipo actual — se ignora a propósito cualquier
+                    # `advance` que venga en el payload (igual que en la
+                    # rama client_changed) y el backend decide el resultado.
+                    new_payment = serializer.validated_data.get('payment', obj.payment)  # type: ignore
+                    payment_leaving_advance = was_advance_funded and not new_payment.is_advance
+
+                    if payment_leaving_advance:
+                        trip = cast(Trip, serializer.save(advance=None, pending_debt_justification=None))
+                        reverse_advance_discount(
                             trip,
-                            was_advance_funded=True,
-                            old_value=old_value,
-                            old_advance=old_advance,
-                            new_advance=trip.advance,
-                            is_annulment=is_annulment,
-                            force=force,
-                            is_superuser=(request.user.role == 'superuser'),
+                            advance=old_advance,  # type: ignore[arg-type]
+                            amount=old_value,
+                            reason=f'Reversión por cambio de medio de pago del viaje #{trip.voucher_num}',
                             request=request,
                         )
+                    else:
+                        # 8B.4: al desvincular (invoice=None), limpiar
+                        # también invoice_pos — no tendría sentido dejar un
+                        # número de posición de factura colgado sin ninguna
+                        # factura a la que pertenezca. El caller solo manda
+                        # `invoice: null`, no invoice_pos, así que se fuerza
+                        # acá igual que otros campos derivados en este PATCH.
+                        save_kwargs = {'invoice_pos': None} if is_unlink_request else {}
+                        trip = cast(Trip, serializer.save(**save_kwargs))
+                        if was_advance_funded:
+                            sync_advance_movement_on_trip_change(
+                                trip,
+                                was_advance_funded=True,
+                                old_value=old_value,
+                                old_advance=old_advance,
+                                new_advance=trip.advance,
+                                is_annulment=is_annulment,
+                                force=force,
+                                is_superuser=(request.user.role == 'superuser'),
+                                request=request,
+                                justification=justification,
+                            )
 
                 # Se deja al final, ya con 'advance'/'pending_debt_justification'
                 # resueltos: si algo falla más arriba (saldo insuficiente,
@@ -443,9 +529,11 @@ class TripDetailView(APIView):
         except UnsupportedAdvanceChangeError:
             return Response({
                 'error': (
-                    'No se permite cambiar el anticipo, ni el medio de pago '
-                    '"anticipo", de un viaje que ya está financiado por un '
-                    'anticipo. Anule el viaje y regístrelo de nuevo.'
+                    'No se permite asignar manualmente el campo "advance" '
+                    '(a otro anticipo, o a vacío) de un viaje que ya está '
+                    'financiado por un anticipo. Para dejar de financiarlo '
+                    'con el anticipo actual, cambie el medio de pago a uno '
+                    'que no sea de tipo "anticipo", o anule el viaje.'
                 )
             }, status=status.HTTP_400_BAD_REQUEST)
 

@@ -71,21 +71,39 @@ const { mutateAsync: createTariff } = useMutation({
 const { mutateAsync: updateTariff } = useMutation({
   mutationFn: ({ id, data }: { id: number; data: { value: number } }) => tariffsApi.update(id, data),
 })
+const { mutateAsync: deleteTariff } = useMutation({
+  mutationFn: (id: number) => tariffsApi.remove(id),
+})
 
 async function saveAll() {
   if (!dirtyKeys.value.size) return
   saving.value = true
   const today = todayBogota()
   let errors = 0
+  let invalidValueErrors = 0
   for (const key of dirtyKeys.value) {
     const [clientPart, typePart] = key.split('-')
     const clientId = clientPart === 'general' ? null : parseInt(clientPart)
     const typeId = parseInt(typePart)
     const val = editValues.value[key]
-    if (!val || val <= 0) continue
+    const existing = getCurrentTariff(clientId, typeId)
+
     try {
-      const existing = getCurrentTariff(clientId, typeId)
-      if (existing) {
+      if (val === null) {
+        // 8B.5: celda vaciada a propósito (CurrencyInput emite `null`
+        // cuando el campo queda en blanco, distinto de `0`). Si había una
+        // tarifa personalizada para este cliente/tipo, se elimina — el
+        // cliente vuelve a usar la tarifa general. Si no había nada, no
+        // hay nada que hacer.
+        if (existing) await deleteTariff(existing.id)
+      } else if (val <= 0) {
+        // Antes esto se descartaba en silencio (`continue`) y el toast
+        // final igual decía "guardado correctamente" sin indicar qué
+        // celda se había ignorado ni por qué. Ahora es un error explícito
+        // que cuenta hacia el mensaje final — la celda no se toca.
+        errors++
+        invalidValueErrors++
+      } else if (existing) {
         await updateTariff({ id: existing.id, data: { value: val } })
       } else {
         await createTariff({ client: clientId, vehicle_type: typeId, value: val, start_date: today })
@@ -100,6 +118,8 @@ async function saveAll() {
   saving.value = false
   if (errors === 0) {
     toast.success('Tarifas guardadas correctamente.')
+  } else if (invalidValueErrors === errors) {
+    toast.error(`${errors} tarifa(s) inválida(s): el valor debe ser mayor a 0.`)
   } else {
     toast.error(`${errors} tarifa(s) no se pudieron guardar.`)
   }

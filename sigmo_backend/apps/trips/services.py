@@ -6,6 +6,7 @@ from .models import Trip
 from apps.advances.models import Advance, AdvanceMovement
 from apps.advances.services import get_available_balance, get_active_advance
 from apps.audit.services import log_action
+from apps.clients.models import Client
 
 
 class InsufficientBalanceError(Exception):
@@ -20,14 +21,24 @@ class InsufficientBalanceError(Exception):
 
 class UnsupportedAdvanceChangeError(Exception):
     """
-    Cambiar el anticipo (o quitar/poner el medio de pago 'anticipo') de un
+    Cambiar el campo `advance` directamente (a otro anticipo, o a NULL) en un
     viaje que YA está financiado por un anticipo no está soportado por esta
     reversión automática: no hay forma de saber, solo mirando el PATCH, si
     la intención es "corregir un error de captura" o "refinanciar el viaje
     contra otro cliente/anticipo", y cada caso requiere un tratamiento
     contable distinto. Se rechaza explícitamente en vez de aplicar un
-    supuesto silencioso; la vía soportada es anular el viaje (que sí revierte
-    el saldo correctamente) y registrarlo de nuevo.
+    supuesto silencioso.
+
+    La vía soportada para dejar de financiar un viaje con su anticipo actual
+    es cambiar el `payment` a un medio que no sea de tipo anticipo (ver
+    `reverse_advance_discount`, invocada desde TripDetailView.patch cuando
+    detecta ese cambio) o anular el viaje — ambas SÍ revierten el saldo
+    correctamente. Poner `advance` en NULL a mano, sin pasar por ninguna de
+    esas dos vías, dejaría el viaje con `payment.is_advance=True` y
+    `advance=NULL`: exactamente el patrón que `settle_pending_debts` (Fase 3)
+    interpreta como "deuda pendiente genuina", así que el próximo anticipo
+    del cliente lo volvería a liquidar — un doble descuento. Por eso se
+    rechaza también ese caso, no solo el de cambiar a otro anticipo distinto.
     """
 
 
@@ -42,6 +53,7 @@ def sync_advance_movement_on_trip_change(
     force: bool,
     is_superuser: bool,
     request=None,
+    justification: str | None = None,
 ) -> None:
     """
     BUG 2 — mantiene sincronizado el saldo del anticipo cuando se anula o se
@@ -78,7 +90,11 @@ def sync_advance_movement_on_trip_change(
     if not was_advance_funded:
         return
 
-    if new_advance is not None and old_advance is not None and new_advance.id != old_advance.id:
+    if old_advance is not None and (new_advance is None or new_advance.id != old_advance.id):
+        # BUG 1: antes solo se rechazaba cambiar a OTRO anticipo no nulo;
+        # dejar `advance` en NULL (mismo cliente, payment.is_advance sigue
+        # True) pasaba de largo y terminaba en el `diff == 0` de abajo sin
+        # revertir nada — ver docstring de UnsupportedAdvanceChangeError.
         raise UnsupportedAdvanceChangeError()
 
     target_value = Decimal('0') if is_annulment else Decimal(trip.value)
@@ -92,7 +108,15 @@ def sync_advance_movement_on_trip_change(
 
         if diff > 0:
             # El nuevo valor es mayor: hace falta descontar más saldo.
-            if diff > balance_before and not (force and is_superuser):
+            #
+            # 8B.3 (diagnóstico de solo lectura): decisión explícita del
+            # negocio — se mantiene el mecanismo actual (el anticipo puede
+            # quedar en saldo negativo, NO se convierte en "deuda
+            # pendiente" como al registrar un viaje nuevo), pero ahora
+            # también exige `justification` además de `force`+superuser:
+            # antes un superuser podía dejar un anticipo en negativo sin
+            # dejar ningún rastro de por qué se autorizó.
+            if diff > balance_before and not (force and is_superuser and justification):
                 raise InsufficientBalanceError(balance_before, diff)
             movement = AdvanceMovement.objects.create(
                 advance=advance,
@@ -118,6 +142,7 @@ def sync_advance_movement_on_trip_change(
                 ),
             )
 
+        overdrawn = diff > 0 and diff > balance_before
         log_action(
             request, 'update', 'Advance',
             object_id=advance.id,
@@ -131,7 +156,53 @@ def sync_advance_movement_on_trip_change(
                     'description': movement.description,
                 },
             },
+            # 8B.3: solo se deja la justificación cuando fue efectivamente
+            # la que autorizó dejar el anticipo en negativo — no la de
+            # cualquier otro motivo que haya venido en el mismo request
+            # (ej. una anulación no tiene nada que ver con este ajuste).
+            justification=(justification if overdrawn else None),
         )
+
+
+def reverse_advance_discount(
+    trip: Trip,
+    *,
+    advance: Advance,
+    amount: Decimal,
+    reason: str,
+    request=None,
+) -> None:
+    """
+    BUG 1 — revierte por completo el descuento que `advance` le había hecho
+    a `trip`: crea un AdvanceMovement de ingreso por `amount` contra
+    `advance`, y deja su propio AuditLog 'update'/'Advance'.
+
+    Extraída de reallocate_advance_on_client_change (Fase 1), que ya hacía
+    exactamente esto para el caso "cambio de cliente". Ahora también la usa
+    TripDetailView.patch cuando un viaje financiado deja de pagarse con un
+    medio de tipo anticipo (cambio de `payment`), que es la otra vía
+    legítima para dejar de estar financiado por el anticipo actual.
+
+    NO abre su propio transaction.atomic(): debe llamarse dentro de uno ya
+    abierto por el caller, igual que antes.
+    """
+    locked_advance = Advance.objects.select_for_update().get(pk=advance.pk)
+    balance_before = get_available_balance(locked_advance)
+    AdvanceMovement.objects.create(
+        advance=locked_advance,
+        trip=trip,
+        type_movement='ingreso',
+        amount=amount,
+        trips_quantity=0,
+        date=trip.date,
+        description=reason,
+    )
+    log_action(
+        request, 'update', 'Advance',
+        object_id=locked_advance.id,
+        previous_data={'available_balance': str(balance_before)},
+        new_data={'available_balance': str(get_available_balance(locked_advance))},
+    )
 
 
 def reallocate_advance_on_client_change(
@@ -163,27 +234,29 @@ def reallocate_advance_on_client_change(
     ni el criterio de "anticipo activo = el más reciente del cliente"
     (get_active_advance): ambos siguen aplicando tal cual sobre el
     resultado que esta función deja.
+
+    9.1 — igual que settle_pending_debts (advances/services.py), bloquea la
+    fila del Client destino ANTES de leer el saldo de su anticipo activo:
+    dos cambios de cliente concurrentes (de dos viajes distintos) hacia el
+    MISMO cliente destino podrían, sin este lock, leer el mismo saldo
+    "viejo" antes de que cualquiera escriba su AdvanceMovement, y ambos
+    aprobar un descuento que juntos ya no caben. Se bloquea el Client (no
+    el Advance): igual que en settle_pending_debts, el anticipo activo
+    puede no existir todavía o cambiar de fila entre la lectura y la
+    escritura, así que lo único estable para serializar por cliente es la
+    fila del propio Client.
     """
     if was_advance_funded:
-        advance = Advance.objects.select_for_update().get(pk=old_advance.pk)  # type: ignore[union-attr]
-        balance_before = get_available_balance(advance)
-        AdvanceMovement.objects.create(
-            advance=advance,
-            trip=trip,
-            type_movement='ingreso',
+        reverse_advance_discount(
+            trip,
+            advance=old_advance,  # type: ignore[arg-type]
             amount=old_value,
-            trips_quantity=0,
-            date=trip.date,
-            description=f'Reversión por cambio de cliente del viaje #{trip.voucher_num}',
-        )
-        log_action(
-            request, 'update', 'Advance',
-            object_id=advance.id,
-            previous_data={'available_balance': str(balance_before)},
-            new_data={'available_balance': str(get_available_balance(advance))},
+            reason=f'Reversión por cambio de cliente del viaje #{trip.voucher_num}',
+            request=request,
         )
 
     if trip.payment.is_advance:
+        Client.objects.select_for_update().get(pk=trip.client_id)
         new_advance = get_active_advance(trip.client)
         available = get_available_balance(new_advance) if new_advance else Decimal('0')
 

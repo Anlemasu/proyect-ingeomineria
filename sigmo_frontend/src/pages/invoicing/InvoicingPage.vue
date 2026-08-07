@@ -139,27 +139,33 @@ function closeInvoiceModal() {
 
 const assignMutation = useMutation({
   mutationFn: async () => {
-    // Crear factura si es nueva
+    // 8B.6: una sola request — el backend crea/reutiliza la factura Y
+    // asocia los viajes seleccionados dentro de una única transacción
+    // atómica (ver invoices.api.ts). Antes esto eran 2+ requests
+    // independientes (crear factura, luego N PATCH de viajes en
+    // paralelo): si un PATCH fallaba a mitad de camino, la factura ya
+    // creada quedaba con solo un subconjunto de viajes asociados, sin
+    // ningún rollback posible entre requests HTTP separados.
+    const trips = selectedTrips.value
+    const tripIds = trips.map(t => t.id)
+
     let invoiceId: number
     if (invoiceMode.value === 'new') {
       const num = invoiceNumber.value.trim()
       if (!num) { invoiceNumberError.value = 'El número de factura es requerido.'; throw new Error('validation') }
       if (num.length > 15) { invoiceNumberError.value = 'Máximo 15 caracteres.'; throw new Error('validation') }
       invoiceNumberError.value = ''
-      const res = await invoicesApi.create({ number: num })
+      const res = await invoicesApi.create({ number: num, trip_ids: tripIds })
       invoiceId = res.data.id
     } else {
       if (!existingInvoiceId.value) { throw new Error('Selecciona una factura existente.') }
-      invoiceId = existingInvoiceId.value as number
+      const res = await invoicesApi.assignTripsToExistingInvoice({
+        invoice_id: existingInvoiceId.value as number,
+        trip_ids: tripIds,
+      })
+      invoiceId = res.data.id
     }
 
-    // Asignar factura a cada viaje seleccionado (en paralelo con posición secuencial)
-    const trips = selectedTrips.value
-    await Promise.all(
-      trips.map((t, idx) =>
-        tripsApi.patch(t.id, { invoice: invoiceId, invoice_pos: idx + 1 })
-      )
-    )
     return { invoiceId, count: trips.length }
   },
   onSuccess: ({ count }) => {

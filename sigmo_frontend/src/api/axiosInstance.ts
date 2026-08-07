@@ -1,13 +1,44 @@
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import { toast } from 'vue-sonner'
 import { useAuthStore } from '@/stores/auth.store'
+import type { RefreshResponse } from '@/types'
 
 const LOGIN_ENDPOINT = '/users/login/'
+const REFRESH_ENDPOINT = '/users/token/refresh/'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 })
+
+// 8A.3: refresh silencioso. Sin precedente en el proyecto — primera vez
+// que se introduce un patrón de "un solo refresh en vuelo, el resto
+// espera". `isRefreshing` evita que varias requests que expiran casi al
+// mismo tiempo (ej. varias llamadas paralelas de vue-query) disparen cada
+// una su propio POST /token/refresh/ — la primera que detecta el 401
+// dispara el refresh; las demás solo se encolan en `refreshSubscribers` y
+// se reintentan todas juntas cuando ese único refresh resuelve.
+// Cada suscriptor recibe el token nuevo si el refresh tuvo éxito, o `null`
+// si falló — así ninguna request en cola se queda esperando para siempre
+// (una promesa que nunca resuelve ni rechaza) cuando el refresh token
+// también resulta inválido.
+let isRefreshing = false
+let refreshSubscribers: Array<(newToken: string | null) => void> = []
+
+function subscribeTokenRefresh(cb: (newToken: string | null) => void) {
+  refreshSubscribers.push(cb)
+}
+
+function notifySubscribers(newToken: string | null) {
+  refreshSubscribers.forEach((cb) => cb(newToken))
+  refreshSubscribers = []
+}
+
+function forceSessionExpired() {
+  useAuthStore().clearSession()
+  toast.error('Sesión expirada. Inicia sesión nuevamente.')
+  window.location.href = '/login'
+}
 
 // FASE 4C: el token se lee del store de Pinia (memoria de ESTA pestaña),
 // no de sessionStorage/localStorage directamente. useAuthStore() se llama
@@ -28,13 +59,15 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (!error.response) {
       toast.error('Error de conexión. Verifica tu red.')
       return Promise.reject(error)
     }
     const status = error.response.status
-    const isLoginRequest = (error.config?.url ?? '').endsWith(LOGIN_ENDPOINT)
+    const url = error.config?.url ?? ''
+    const isLoginRequest = url.endsWith(LOGIN_ENDPOINT)
+    const isRefreshRequest = url.endsWith(REFRESH_ENDPOINT)
 
     // FASE 4 (BUG 2): un 401 de /users/login/ es "credenciales
     // incorrectas" — no hay ninguna sesión todavía que pueda "expirar".
@@ -51,15 +84,82 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // 8A.3: la propia llamada de refresh fallando (401 = refresh token
+    // inválido/expirado/blacklisteado; o cualquier otro error) no debe
+    // reintentar refrescarse a sí misma — sería un loop infinito. Se deja
+    // pasar el rechazo tal cual: el único responsable de limpiar la
+    // sesión, avisar a la cola de requests en espera, y redirigir a
+    // login es el catch del sitio que disparó el refresh (más abajo) —
+    // así ese manejo ocurre una sola vez, sea cual sea el motivo por el
+    // que el refresh falló.
+    if (isRefreshRequest) {
+      return Promise.reject(error)
+    }
+
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean }
+    const authStore = useAuthStore()
+
+    if (status === 401 && !originalRequest._retry && authStore.refreshToken) {
+      // 8A.3: refresh silencioso — antes de este fix, CUALQUIER 401
+      // (incluido uno legítimo por access token expirado, con el refresh
+      // token todavía vigente) desconectaba al usuario de inmediato,
+      // perdiendo lo que estuviera a mitad de capturar. Se marca
+      // `_retry` para que, si el reintento con el token nuevo también
+      // 401ea, no se vuelva a intentar refrescar en loop — ahí sí es una
+      // sesión realmente inválida.
+      originalRequest._retry = true
+
+      if (isRefreshing) {
+        // Ya hay un refresh en curso disparado por otra request (ej. dos
+        // llamadas paralelas de vue-query expirando casi al mismo
+        // tiempo) — esta solo se encola y espera su resultado, sin
+        // disparar un segundo POST /token/refresh/ redundante.
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh((newToken) => {
+            if (newToken) {
+              resolve(api(originalRequest))
+            } else {
+              reject(error)
+            }
+          })
+        })
+      }
+
+      isRefreshing = true
+      try {
+        // Llamada directa con `api` (no vía auth.api.ts): auth.api.ts
+        // importa este módulo para obtener el cliente axios, así que
+        // importar authApi.refresh aquí crearía un ciclo de imports
+        // entre los dos archivos.
+        const { data } = await api.post<RefreshResponse>(REFRESH_ENDPOINT, {
+          refresh: authStore.refreshToken,
+        })
+        authStore.setTokens(data.access, data.refresh)
+        isRefreshing = false
+        // Avisa a cualquier request que se haya encolado MIENTRAS este
+        // refresh estaba en curso. Esta misma request (la que disparó el
+        // refresh) no pasa por la cola — se reintenta directo abajo.
+        notifySubscribers(data.access)
+        return api(originalRequest)
+      } catch (refreshError) {
+        // Cubre TODO fallo del refresh (401, red, 500, lo que sea):
+        // única vez que se limpia isRefreshing, se avisa a la cola (con
+        // null, para que cada request encolada se rechace en vez de
+        // quedar esperando para siempre) y se fuerza el logout.
+        isRefreshing = false
+        notifySubscribers(null)
+        forceSessionExpired()
+        return Promise.reject(refreshError)
+      }
+    }
+
     if (status === 401) {
       // FASE 4C: se limpia a través del store (clearSession(), que ya
       // opera sobre sessionStorage — ver auth.store.ts) en vez de borrar
       // claves de localStorage a mano aquí. Esto solo afecta la sesión de
       // ESTA pestaña; otras pestañas con su propia sesión en su propio
       // sessionStorage no se enteran ni se ven tocadas.
-      useAuthStore().clearSession()
-      toast.error('Sesión expirada. Inicia sesión nuevamente.')
-      window.location.href = '/login'
+      forceSessionExpired()
     } else if (status === 403) {
       toast.error('No tienes permisos para realizar esta acción.')
     } else if (status === 500) {

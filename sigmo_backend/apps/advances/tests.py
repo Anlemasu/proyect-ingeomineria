@@ -1,6 +1,8 @@
+import threading
 from decimal import Decimal
 
-from django.test import TestCase
+from django.db import connection
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -11,7 +13,7 @@ from apps.masters.models import VehicleType, Vehicle, MaterialType, PaymentMetho
 from apps.trips.models import Trip
 from apps.audit.models import AuditLog
 from .models import Advance, AdvanceMovement
-from .services import get_available_balance
+from .services import annotate_available_balance, get_available_balance
 
 
 class PendingDebtFixturesMixin:
@@ -169,6 +171,153 @@ class PendingDebtSettlementOnNewAdvanceTests(PendingDebtFixturesMixin, TestCase)
         )
 
 
+class ReversedTripDoesNotGetResettledByNewAdvanceTests(PendingDebtFixturesMixin, TestCase):
+    """BUG 1 (diagnóstico de solo lectura): antes de este fix, cambiar el
+    medio de pago de un viaje financiado dejaba `advance=NULL` sin revertir
+    el descuento y sin tocar `payment` — el viaje quedaba pareciendo una
+    deuda pendiente genuina, y el siguiente anticipo del cliente lo volvía a
+    liquidar (doble descuento). Este test prueba que, tras la reversión
+    correcta, un anticipo nuevo del mismo cliente NO vuelve a tocar ese
+    viaje."""
+
+    def test_new_advance_does_not_resettle_a_trip_whose_payment_left_advance(self):
+        resp_a = self._create_advance(1000000)
+        advance_a_id = resp_a.data['id']
+
+        trip_resp = self._create_trip(300000)
+        trip_id = trip_resp.data['id']
+        self.assertEqual(trip_resp.data['advance'], advance_a_id)
+        self.assertEqual(get_available_balance(Advance.objects.get(pk=advance_a_id)), Decimal('700000'))
+
+        patch_resp = self.api.patch(
+            f'/api/trips/{trip_id}/', {'payment': self.payment_cash.id}, format='json'
+        )
+        self.assertEqual(patch_resp.status_code, status.HTTP_200_OK, patch_resp.data)
+        self.assertEqual(get_available_balance(Advance.objects.get(pk=advance_a_id)), Decimal('1000000'))
+
+        resp_b = self._create_advance(500000)
+        advance_b_id = resp_b.data['id']
+
+        trip = Trip.objects.get(pk=trip_id)
+        self.assertIsNone(trip.advance_id, 'el viaje ya no debe volver a quedar financiado')
+        self.assertFalse(
+            AdvanceMovement.objects.filter(advance_id=advance_b_id, trip_id=trip_id).exists(),
+            'el anticipo nuevo no debe generar ningún movimiento contra este viaje',
+        )
+        self.assertEqual(
+            get_available_balance(Advance.objects.get(pk=advance_b_id)),
+            Decimal('500000'),
+            'el anticipo nuevo debe quedar intacto: no había ninguna deuda pendiente real que liquidar',
+        )
+
+
+class ConcurrentAdvanceCreationSettlementRaceTests(TransactionTestCase):
+    """
+    BUG 2 (diagnóstico de solo lectura): settle_pending_debts solo bloqueaba
+    la fila del Advance recién creado — una fila NUEVA y distinta en cada
+    request, así que dos anticipos creados casi al mismo tiempo para el
+    MISMO cliente no generaban ninguna contención entre sí, y ambos podían
+    leer el mismo Trip pendiente antes de que cualquiera escribiera su
+    liquidación (doble egreso contra el mismo viaje, cargado a dos
+    anticipos distintos).
+
+    TransactionTestCase (no TestCase) y usernames únicos, mismo motivo
+    documentado en trips/tests.py::ConcurrentTripAdvanceBalanceCheckTests:
+    los hilos necesitan conexiones de BD independientes con commits reales
+    para reproducir la carrera.
+    """
+
+    def setUp(self):
+        self.superuser = User.objects.create_user(
+            username='super_race701', email='super_race701@test.com', name='Super',
+            role='superuser', password='x12345',
+        )
+        self.owner_user = User.objects.create_user(
+            username='owner_race701', email='owner_race701@test.com', name='Owner',
+            role='commercial_admin', password='x12345',
+        )
+        self.client_obj = Client.objects.create(
+            user=self.owner_user, nit='900123458', name='Cliente Test Concurrencia Anticipos',
+            abrev_name='CTCA', address='Calle 1', phone=3000000003,
+        )
+        vehicle_type = VehicleType.objects.create(name='Volqueta', capacity=Decimal('10.00'))
+        self.vehicle = Vehicle.objects.create(vehicle_type=vehicle_type, plaque='XYZ701')
+        self.material = MaterialType.objects.create(name='Material Test')
+        self.origin = OriginSite.objects.create(name='Origen Test')
+        self.payment_advance = PaymentMethod.objects.create(name='Anticipo', is_advance=True)
+        self.today = timezone.localdate()
+
+        # Una sola deuda pendiente: sin anticipo activo todavía, se guarda
+        # justificada. Cada uno de los dos anticipos concurrentes, por sí
+        # solo, tiene saldo de sobra para liquidarla — lo que se prueba es
+        # que solo UNO de los dos efectivamente lo haga.
+        api = APIClient()
+        api.force_authenticate(user=self.superuser)
+        trip_resp = api.post('/api/trips/', {
+            'payment': self.payment_advance.id,
+            'origin_site': self.origin.id,
+            'material_type': self.material.id,
+            'client': self.client_obj.id,
+            'vehicle': self.vehicle.id,
+            'value': '300000',
+            'date': str(self.today),
+            'justification': 'Sin anticipo activo todavía',
+        }, format='json')
+        connection.close()
+        self.pending_trip_id = trip_resp.data['id']
+
+    def _post_advance(self, transfer_num):
+        api = APIClient()
+        api.force_authenticate(user=self.superuser)
+        try:
+            return api.post('/api/advances/', {
+                'client': self.client_obj.id,
+                'value': '300000',
+                'transfer_num': transfer_num,
+                'date': str(self.today),
+            }, format='json')
+        finally:
+            connection.close()
+
+    def test_only_one_of_two_concurrent_advances_settles_the_same_pending_trip(self):
+        results = []
+        start_barrier = threading.Barrier(2)
+
+        def worker(n):
+            start_barrier.wait()
+            results.append(self._post_advance(n))
+
+        t1 = threading.Thread(target=worker, args=(1,))
+        t2 = threading.Thread(target=worker, args=(2,))
+        t1.start()
+        t2.start()
+        t1.join(timeout=15)
+        t2.join(timeout=15)
+
+        self.assertEqual(len(results), 2)
+        for r in results:
+            self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+
+        egresos = AdvanceMovement.objects.filter(
+            trip_id=self.pending_trip_id, type_movement='egreso'
+        )
+        self.assertEqual(egresos.count(), 1, 'el viaje pendiente no debe liquidarse dos veces')
+
+        trip = Trip.objects.get(pk=self.pending_trip_id)
+        advance_ids = [r.data['id'] for r in results]
+        self.assertIn(trip.advance_id, advance_ids)
+
+        settled_id = trip.advance_id
+        other_id = [i for i in advance_ids if i != settled_id][0]
+        self.assertEqual(
+            get_available_balance(Advance.objects.get(pk=settled_id)), Decimal('0')
+        )
+        self.assertEqual(
+            get_available_balance(Advance.objects.get(pk=other_id)), Decimal('300000'),
+            'el anticipo que perdió la carrera debe quedar con su saldo intacto',
+        )
+
+
 class PendingDebtInteractionWithAnnulmentTests(PendingDebtFixturesMixin, TestCase):
     """Caso 5: anular un viaje ya liquidado contra un anticipo CONGELADO
     (no el activo actual) revierte contra el que realmente lo cubrió."""
@@ -264,3 +413,95 @@ class CashierInsufficientBalanceAuditTests(PendingDebtFixturesMixin, TestCase):
         self.assertEqual(log.user_id, self.cashier.id)
         self.assertEqual(log.justification, 'Cliente sin anticipo, autoriza deuda')
         self.assertEqual(log.new_data['insufficient_balance_registration']['role'], 'cashier')
+
+
+class AdvanceCreationValidationAndRoleGateTests(PendingDebtFixturesMixin, TestCase):
+    """FASE 6.4: cobertura que faltaba sobre el registro de anticipos en sí
+    (más allá de la secuencia de liquidación, ya cubierta arriba): quién
+    puede crearlos (can_manage_advances) y las validaciones de campo
+    (RF-29: valor > 0, número de consignación válido)."""
+
+    def test_cashier_cannot_create_advance(self):
+        resp = self._create_advance(500000, api=self.cashier_api)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN, resp.data)
+        self.assertTrue(
+            AuditLog.objects.filter(action='access_denied', model_name='Advance').exists()
+        )
+        self.assertEqual(Advance.objects.count(), 0)
+
+    def test_advance_with_zero_value_is_rejected(self):
+        resp = self.api.post('/api/advances/', {
+            'client': self.client_obj.id,
+            'value': '0',
+            'transfer_num': 1,
+            'date': str(self.today),
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+
+    def test_advance_with_invalid_transfer_num_is_rejected(self):
+        resp = self.api.post('/api/advances/', {
+            'client': self.client_obj.id,
+            'value': '500000',
+            'transfer_num': 0,
+            'date': str(self.today),
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+
+
+class AnnotatedBalanceMatchesPerObjectCalculationTests(PendingDebtFixturesMixin, TestCase):
+    """
+    FASE 6.2: annotate_available_balance() (una sola consulta agregada para
+    varios anticipos) debe devolver exactamente el mismo número que
+    get_available_balance() (una consulta por anticipo) para el mismo
+    dataset — es una optimización de acceso a datos, no un cambio de
+    fórmula.
+    """
+
+    def test_annotated_and_per_object_balance_match_for_mixed_movements(self):
+        # A: solo ingreso, sin egresos.
+        resp_a = self._create_advance(1000000)
+        advance_a_id = resp_a.data['id']
+
+        # B: ingreso + un viaje que lo descuenta parcialmente.
+        resp_b = self._create_advance(500000)
+        self._create_trip(200000)  # se descuenta del anticipo activo (B)
+
+        # C: un segundo cliente para que la agregación cruce varias filas.
+        other_owner = User.objects.create_user(
+            username='owner2', email='owner2@test.com', name='Owner 2',
+            role='commercial_admin', password='x12345',
+        )
+        other_client = Client.objects.create(
+            user=other_owner, nit='900987654', name='Cliente Test 2',
+            abrev_name='CT2', address='Calle 2', phone=3000000001,
+        )
+        advance_c = Advance.objects.create(
+            client=other_client, user=self.superuser, value=Decimal('300000'),
+            transfer_num=999, date=self.today,
+        )
+        # C se queda sin ningún AdvanceMovement — caso borde (0 movimientos).
+
+        annotated = {
+            adv.id: (adv._annotated_ingresos or Decimal('0')) - (adv._annotated_egresos or Decimal('0'))  # type: ignore[attr-defined]
+            for adv in annotate_available_balance(Advance.objects.all())
+        }
+        per_object = {
+            adv.id: get_available_balance(adv)
+            for adv in Advance.objects.all()
+        }
+
+        self.assertEqual(annotated, per_object)
+        self.assertEqual(annotated[advance_a_id], Decimal('1000000'))
+        self.assertEqual(per_object[advance_c.id], Decimal('0'))
+
+    def test_advance_list_endpoint_returns_same_balance_as_before(self):
+        resp_a = self._create_advance(1000000)
+        advance_a_id = resp_a.data['id']
+        self._create_trip(400000)
+
+        expected_balance = get_available_balance(Advance.objects.get(pk=advance_a_id))
+
+        resp = self.api.get('/api/advances/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        entry = next(a for a in resp.data if a['id'] == advance_a_id)
+        self.assertEqual(Decimal(str(entry['available_balance'])), expected_balance)

@@ -62,7 +62,10 @@ INSTALLED_APPS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # BUG 3: ActiveUserJWTAuthentication añade el chequeo de
+        # User.state que la clase estándar de simplejwt nunca aplica en
+        # este proyecto (ver docstring en apps/users/authentication.py).
+        'apps.users.authentication.ActiveUserJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',

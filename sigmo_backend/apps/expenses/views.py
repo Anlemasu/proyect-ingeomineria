@@ -2,6 +2,8 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
+from django.utils.dateparse import parse_date
 from apps.audit.services import log_action
 from typing import cast
 
@@ -114,8 +116,27 @@ class ExpenseDetailView(APIView):
         # caja vigente solo puede tocarse (edición o anulación) por
         # superuser, como ajuste histórico. No se creó un ajuste histórico
         # nuevo para gastos: simplemente se bloquea para los demás roles.
+        #
+        # 8B.2: esta validación debe cubrir tanto la fecha ACTUAL del gasto
+        # como la fecha NUEVA propuesta (si `date` viene en el PATCH) — antes
+        # solo miraba obj.date, así que mover un gasto hacia o desde un día
+        # cerrado, en el mismo request, evadía el bloqueo por completo
+        # (se validaba la fecha equivocada). Si el `date` entrante no es un
+        # string parseable, se ignora acá — el serializer lo rechazará
+        # después con su propio 400, no hace falta duplicar esa validación.
+        day_closed_dates = {obj.date}
+        incoming_date_raw = request.data.get('date')
+        if incoming_date_raw:
+            parsed_new_date = (
+                parse_date(incoming_date_raw)
+                if isinstance(incoming_date_raw, str)
+                else incoming_date_raw
+            )
+            if parsed_new_date:
+                day_closed_dates.add(parsed_new_date)
+
         day_closed = DailySummary.objects.filter(
-            date=obj.date, state=DailySummary.STATE_CLOSED
+            date__in=day_closed_dates, state=DailySummary.STATE_CLOSED
         ).exists()
         if day_closed and request.user.role != 'superuser':
             log_action(request, 'access_denied', 'Expense', object_id=obj.id)
@@ -142,26 +163,38 @@ class ExpenseDetailView(APIView):
 
         serializer = ExpenseSerializer(obj, data=request.data, partial=True)
         if serializer.is_valid():
-            expense = cast(Expense, serializer.save())
-            log_action(
-                request, action, 'Expense',
-                object_id=expense.id,
-                previous_data=previous,
-                new_data=dict(serializer.data),  # type: ignore
-                justification=(justification if is_annulment else None),
-            )
-
-            # Mismo motivo que en Trip: un cierre vigente que ya sumó este
-            # gasto queda desactualizado si no se recalcula tras la edición.
-            if day_closed and incoming_fields & FIELDS_AFFECTING_TOTALS:
-                resync_if_closed(
-                    expense.date,
-                    request=request,
-                    trigger_note=(
-                        f'Recalculado por {action} del gasto #{expense.id} '
-                        f'(ajuste histórico).'
-                    ),
+            # 8B.1: la anulación/edición del gasto y el recálculo del
+            # DailySummary deben confirmarse o fallar juntos — antes corrían
+            # como dos pasos independientes sin transacción (si algo fallaba
+            # a mitad del recálculo, el gasto ya había quedado guardado).
+            # Además, resync_if_closed depende de correr DENTRO de un
+            # transaction.atomic() para su propio select_for_update() (ver
+            # docstring en cash_closing/services.py) — sin este atomic(),
+            # en Postgres eso lanzaría TransactionManagementError fuera de
+            # los tests (los TestCase de Django ya envuelven cada test en su
+            # propia transacción, lo que enmascaraba el problema ahí).
+            with transaction.atomic():
+                expense = cast(Expense, serializer.save())
+                log_action(
+                    request, action, 'Expense',
+                    object_id=expense.id,
+                    previous_data=previous,
+                    new_data=dict(serializer.data),  # type: ignore
+                    justification=(justification if is_annulment else None),
                 )
+
+                # Mismo motivo que en Trip: un cierre vigente que ya sumó
+                # este gasto queda desactualizado si no se recalcula tras
+                # la edición.
+                if day_closed and incoming_fields & FIELDS_AFFECTING_TOTALS:
+                    resync_if_closed(
+                        expense.date,
+                        request=request,
+                        trigger_note=(
+                            f'Recalculado por {action} del gasto #{expense.id} '
+                            f'(ajuste histórico).'
+                        ),
+                    )
 
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

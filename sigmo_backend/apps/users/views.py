@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate
 from django.core.cache import cache
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from apps.audit.services import log_action
 from typing import cast
 
@@ -248,15 +249,30 @@ class ResetPasswordAdminView(APIView):
                 {'error': 'Usuario no encontrado.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        serializer = ResetPasswordByAdminSerializer(data=request.data)
+        serializer = ResetPasswordByAdminSerializer(
+            data=request.data, context={'target_user': target_user}
+        )
         if serializer.is_valid():
             new_password: str = serializer.validated_data['new_password']
             target_user.set_password(new_password)
+            # 8A.4: además de blacklistear el refresh (abajo), registra
+            # cuándo fue este cambio — ActiveUserJWTAuthentication rechaza
+            # cualquier access token de target_user emitido antes de este
+            # momento, aunque no haya expirado por tiempo.
+            target_user.password_changed_at = timezone.now()
             target_user.save()
+            # 8A.1: un reset de contraseña es, casi siempre, una respuesta a
+            # una sospecha de compromiso — si no se invalidan las sesiones
+            # existentes de target_user, quien sea que tenía la contraseña
+            # vieja (y ya un refresh token vigente) sigue con acceso igual.
+            revoked_count = blacklist_all_outstanding_tokens(target_user)
             log_action(
                 request, 'update', 'User',
                 object_id=target_user.id,
                 new_data={'action': 'password_reset_by_admin', 'target_username': target_user.username},
+                justification=(
+                    f'{revoked_count} refresh token(s) invalidados.' if revoked_count else None
+                ),
             )
             return Response(
                 {'message': 'Contraseña restablecida correctamente.'},
@@ -276,15 +292,40 @@ class ChangePasswordView(APIView):
         if serializer.is_valid():
             new_password: str = serializer.validated_data.get('new_password')  # type: ignore
             request.user.set_password(new_password)
+            # 8A.4: además de blacklistear el refresh (abajo),
+            # ActiveUserJWTAuthentication ahora rechaza cualquier access
+            # token emitido antes de este momento — incluido el que esta
+            # misma request usó para autenticarse. Por eso, más abajo, se
+            # le entrega a la respuesta un token nuevo (emitido DESPUÉS de
+            # fijar este timestamp) para que la propia sesión no se corte
+            # a sí misma con su propio cambio.
+            request.user.password_changed_at = timezone.now()
             request.user.save()
+            # 8A.1: invalida los refresh tokens ya emitidos (otras sesiones/
+            # dispositivos) — el propósito de seguridad de cambiar la
+            # contraseña no se cumple si una sesión ya abierta con la
+            # contraseña anterior sigue sirviendo igual.
+            revoked_count = blacklist_all_outstanding_tokens(request.user)
+            # Se emite DESPUÉS del blacklist de arriba (para no quedar
+            # blacklisteado él mismo) y DESPUÉS de fijar
+            # password_changed_at (para que su propio `iat` nunca quede
+            # "antes" del cambio, ver ActiveUserJWTAuthentication).
+            new_refresh = RefreshToken.for_user(request.user)
             # RF-05: registrar cambio de contraseña sin guardar la contraseña
             log_action(
                 request, 'update', 'User',
                 object_id=request.user.id,
                 new_data={'action': 'password_changed'},
+                justification=(
+                    f'{revoked_count} refresh token(s) invalidados.' if revoked_count else None
+                ),
             )
             return Response(
-                {'message': 'Contraseña actualizada correctamente.'},
+                {
+                    'message': 'Contraseña actualizada correctamente.',
+                    'access': str(new_refresh.access_token),
+                    'refresh': str(new_refresh),
+                },
                 status=status.HTTP_200_OK
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

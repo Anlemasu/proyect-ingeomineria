@@ -11,9 +11,11 @@ export function useNavigation() {
 
     return navigation.reduce<NavItem[]>((acc, item) => {
       if (item.type === 'leaf') {
-        if (item.roles.includes(role)) acc.push(item)
+        if (item.enabled !== false && item.roles.includes(role)) acc.push(item)
       } else {
-        const visibleChildren = item.children.filter(child => child.roles.includes(role))
+        const visibleChildren = item.children.filter(
+          child => child.enabled !== false && child.roles.includes(role),
+        )
         if (visibleChildren.length > 0) {
           acc.push({ ...item, children: visibleChildren } as NavGroup)
         }

@@ -1,5 +1,27 @@
+from django.contrib.auth import password_validation
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from .models import User
+
+
+def _run_django_password_validators(value, *, user=None, field='password'):
+    """
+    8A.2 — AUTH_PASSWORD_VALIDATORS (settings.py) estaba configurado pero
+    nunca se invocaba: ningún flujo de creación/cambio de contraseña
+    llamaba a Django para aplicarlo, así que las reglas ahí declaradas
+    (longitud mínima, no similar al usuario, no una contraseña común, no
+    solo numérica) no tenían ningún efecto real.
+
+    `validate_password` de Django lanza su propio ValidationError (con
+    `.messages`, una lista de strings) — no el de DRF. Se relanza como
+    serializers.ValidationError para que DRF lo agregue automáticamente a
+    serializer.errors, igual que cualquier otro error de validate_*, sin
+    tener que tocar ninguna vista.
+    """
+    try:
+        password_validation.validate_password(value, user=user)
+    except DjangoValidationError as e:
+        raise serializers.ValidationError({field: list(e.messages)})
 
 
 # ── Lectura ──────────────────────────────────────────────────────────────────
@@ -64,6 +86,22 @@ class UserCreateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate(self, data):
+        # 8A.2: a esta altura ya corrieron los validate_<campo> (incluido
+        # validate_password, arriba), así que 'username'/'email'/'name' ya
+        # están en `data`. Todavía no existe un User guardado — se arma uno
+        # sin persistir solo para que UserAttributeSimilarityValidator
+        # pueda comparar la contraseña contra el username/email reales
+        # (sin este objeto, ese validador específico no tendría con qué
+        # comparar y sería un no-op).
+        candidate = User(
+            username=data.get('username', ''),
+            email=data.get('email', ''),
+            name=data.get('name', ''),
+        )
+        _run_django_password_validators(data['password'], user=candidate, field='password')
+        return data
+
     def create(self, validated_data):
         return User.objects.create_user(
             username=validated_data['username'],
@@ -93,6 +131,12 @@ class ChangePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'La nueva contraseña debe tener al menos un número.'
             )
+        # 8A.2: usuario real disponible vía el contexto que la vista ya
+        # pasa (`context={'request': request}`) — permite que
+        # UserAttributeSimilarityValidator compare contra el username/email
+        # reales, no solo las reglas manuales de arriba.
+        user = self.context['request'].user
+        _run_django_password_validators(value, user=user, field='new_password')
         return value
 
     def validate(self, data):
@@ -125,4 +169,10 @@ class ResetPasswordByAdminSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'La contraseña debe contener al menos un número.'
             )
+        # 8A.2: la vista (ResetPasswordAdminView) pasa target_user en el
+        # contexto — permite comparar contra el username/email del usuario
+        # que efectivamente va a recibir esta contraseña, no el del
+        # superusuario que hace el reset.
+        target_user = self.context.get('target_user')
+        _run_django_password_validators(value, user=target_user, field='new_password')
         return value

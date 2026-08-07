@@ -483,6 +483,42 @@ class TariffDetailView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def delete(self, request, pk):
+        # 8B.5: elimina una tarifa personalizada de cliente para que ese
+        # cliente vuelva a usar la tarifa general — a diferencia de PATCH
+        # (RF-21: cierra la vieja y SIEMPRE crea una reemplazo), esto
+        # cierra sin reemplazo. Soft-delete (state=False + end_date), mismo
+        # patrón que el resto del proyecto (nunca hard-delete de registros
+        # con historial: viajes, gastos, usuarios).
+        if not can_manage_masters(request.user):
+            log_action(request, 'access_denied', 'Tariff', object_id=pk)
+            return Response(
+                {'error': 'No tiene permisos para eliminar tarifas.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        obj = self.get_object(pk)
+        if not obj:
+            return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not obj.state:
+            return Response(
+                {'error': 'Esta tarifa ya está inactiva.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        previous = dict(TariffSerializer(obj).data)  # type: ignore
+        obj.end_date = timezone.now().date()
+        obj.state = False
+        obj.save()
+
+        log_action(
+            request, 'delete', 'Tariff',
+            object_id=obj.id,
+            previous_data=previous,
+            new_data=dict(TariffSerializer(obj).data),  # type: ignore
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 # ── PinsDumper ────────────────────────────────────────────────────────────────
 class PinsDumperListCreateView(APIView):

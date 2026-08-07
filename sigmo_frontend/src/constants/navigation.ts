@@ -28,6 +28,11 @@ export interface NavLeaf {
   path: string
   icon: Component
   roles: string[]
+  // FASE 6.3: apaga la entrada de menú y bloquea la ruta directa sin
+  // borrar la configuración — para secciones montadas pero sin
+  // funcionalidad real todavía (ej. apps/reports, hoy vacía). Ausente u
+  // `true` = visible/accesible normalmente (comportamiento previo).
+  enabled?: boolean
 }
 
 export interface NavGroup {
@@ -194,6 +199,10 @@ export const navigation: NavItem[] = [
         path: '/reports/range',
         icon: BarChart2,
         roles: ['superuser', 'commercial_admin', 'accountant', 'auditor'],
+        // FASE 6.3: placeholder sin funcionalidad real (UnderConstruction en
+        // el router) — se retoma cuando apps/reports (hoy vacía) se
+        // complete. Reactivar quitando esta línea o poniéndola en `true`.
+        enabled: false,
       },
     ],
   },
@@ -226,10 +235,10 @@ export const navigation: NavItem[] = [
 // desincronizarse entre sí (como pasaba antes con Gastos).
 export function getAllowedRoles(path: string): string[] | undefined {
   for (const item of navigation) {
-    if (item.type === 'leaf' && item.path === path) return item.roles
+    if (item.type === 'leaf' && item.path === path) return item.enabled === false ? [] : item.roles
     if (item.type === 'group') {
       const child = item.children.find(c => c.path === path)
-      if (child) return child.roles
+      if (child) return child.enabled === false ? [] : child.roles
     }
   }
   return undefined

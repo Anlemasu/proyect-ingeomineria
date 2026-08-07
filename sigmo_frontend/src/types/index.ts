@@ -105,6 +105,15 @@ export interface LoginResponse {
   user: User
 }
 
+// 8A.3: respuesta de POST /users/token/refresh/ (TokenRefreshView estándar
+// de simplejwt). No trae `user` — a diferencia de LoginResponse, un
+// refresh nunca vuelve a autenticar contra credenciales, solo renueva
+// tokens de una sesión que ya existía.
+export interface RefreshResponse {
+  access: string
+  refresh: string
+}
+
 export interface ApiError {
   error?: string
   detail?: string

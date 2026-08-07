@@ -19,4 +19,9 @@ export const tariffsApi = {
 
   update: (id: number, data: { value: number }) =>
     api.patch<Tariff>(`/masters/tariffs/${id}/`, data),
+
+  // 8B.5: elimina una tarifa personalizada de cliente (sin reemplazo) para
+  // que ese cliente vuelva a usar la tarifa general — distinto de `update`,
+  // que siempre cierra la vieja Y crea una nueva (RF-21).
+  remove: (id: number) => api.delete(`/masters/tariffs/${id}/`),
 }

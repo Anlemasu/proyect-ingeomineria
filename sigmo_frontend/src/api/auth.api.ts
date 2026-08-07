@@ -1,6 +1,10 @@
 import api from './axiosInstance'
 import type { LoginResponse } from '@/types'
 
+// 8A.3: el refresh de token (POST /users/token/refresh/) NO se expone acá
+// — vive directamente en axiosInstance.ts, que es quien lo dispara desde
+// el interceptor de respuesta. Ponerlo en este archivo crearía un ciclo de
+// imports (auth.api.ts ya importa `api` desde axiosInstance.ts).
 export const authApi = {
   login: (username: string, password: string) =>
     api.post<LoginResponse>('/users/login/', { username, password }),

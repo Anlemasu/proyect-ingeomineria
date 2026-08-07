@@ -1,8 +1,9 @@
 from decimal import Decimal
 
-from django.db.models import Sum
+from django.db.models import Case, DecimalField, QuerySet, Sum, Value, When
 
 from apps.audit.services import log_action
+from apps.clients.models import Client
 from .models import Advance, AdvanceMovement
 
 
@@ -30,6 +31,42 @@ def get_available_balance(advance: Advance) -> Decimal:
     ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
     return ingresos - egresos
+
+
+def annotate_available_balance(queryset: QuerySet) -> QuerySet:
+    """
+    FASE 6.2: mismo cálculo que get_available_balance (ingresos - egresos de
+    AdvanceMovement) pero en una sola consulta agregada para listas, en vez
+    de dos queries por anticipo (N+1 al listar varios anticipos, ej. panel
+    de alertas de saldo bajo en el Dashboard).
+
+    Los dos Sum() condicionales (Case/When) van en el mismo annotate() para
+    que compartan un único JOIN a AdvanceMovement — si fueran dos
+    annotate() separados, Django haría un JOIN por cada uno y el resultado
+    se multiplicaría (bug clásico de agregación sobre relaciones inversas).
+
+    Agrega `_annotated_ingresos` y `_annotated_egresos` a cada objeto del
+    queryset; AdvanceSerializer.get_available_balance los usa si están
+    presentes y si no, cae de vuelta a get_available_balance(obj) (por
+    ejemplo cuando se serializa un Advance individual sin pasar por acá).
+    """
+    zero = Value(Decimal('0'), output_field=DecimalField(max_digits=15, decimal_places=2))
+    return queryset.annotate(
+        _annotated_ingresos=Sum(
+            Case(
+                When(advancemovement__type_movement='ingreso', then='advancemovement__amount'),
+                default=zero,
+                output_field=DecimalField(max_digits=15, decimal_places=2),
+            )
+        ),
+        _annotated_egresos=Sum(
+            Case(
+                When(advancemovement__type_movement='egreso', then='advancemovement__amount'),
+                default=zero,
+                output_field=DecimalField(max_digits=15, decimal_places=2),
+            )
+        ),
+    )
 
 
 def get_active_advance(client) -> Advance | None:
@@ -70,13 +107,25 @@ def settle_pending_debts(advance: Advance, *, request=None) -> list[AdvanceMovem
     deudas confirma este comportamiento) y no un límite técnico.
 
     El caller controla la transacción: debe llamarse dentro de un
-    transaction.atomic() con `advance` ya bloqueado por select_for_update()
-    (mismo patrón de Fase 1), para que dos anticipos creándose casi al
-    mismo tiempo para el mismo cliente no liquiden la misma deuda dos veces.
+    transaction.atomic(). El select_for_update() sobre la fila de `advance`
+    que ya hace el caller (AdvanceListCreateView.post) NO alcanza para
+    prevenir la doble liquidación: cada anticipo nuevo es una fila distinta,
+    así que dos anticipos creándose casi al mismo tiempo para el MISMO
+    cliente no generan ninguna contención entre sí bloqueando cada uno el
+    suyo, y ambos pueden leer el mismo Trip pendiente antes de que
+    cualquiera escriba. Por eso esta función bloquea, ella misma, la fila
+    del Client del anticipo (select_for_update) antes de leer
+    `pending_trips`: un lock por cliente (no global, no por-anticipo), para
+    que dos anticipos del mismo cliente se serialicen entre sí sin bloquear
+    a otros clientes.
 
     Devuelve la lista de AdvanceMovement creados (una por deuda liquidada).
     """
     from apps.trips.models import Trip  # import diferido: evita ciclo con trips.models, que importa advances.models a nivel de módulo
+
+    # BUG 2 — ver docstring arriba: serializa por cliente la lectura+escritura
+    # de los Trip pendientes, que es la sección crítica real de esta función.
+    Client.objects.select_for_update().get(pk=advance.client_id)
 
     pending_trips = Trip.objects.filter(
         client=advance.client,

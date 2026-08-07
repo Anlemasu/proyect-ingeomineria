@@ -9,7 +9,7 @@ from apps.audit.services import log_action
 
 from .models import Advance, AdvanceMovement
 from .serializers import AdvanceSerializer, AdvanceMovementSerializer
-from .services import get_available_balance, settle_pending_debts
+from .services import annotate_available_balance, settle_pending_debts
 
 
 def can_manage_advances(user):
@@ -24,6 +24,9 @@ class AdvanceListCreateView(APIView):
         client_id = request.query_params.get('client')
         if client_id:
             advances = advances.filter(client_id=client_id)
+        # FASE 6.2: saldo de todos los anticipos en una sola consulta
+        # agregada en vez de una query por anticipo (ver AdvanceSerializer).
+        advances = annotate_available_balance(advances)
         serializer = AdvanceSerializer(advances, many=True)
         return Response(serializer.data)
 
@@ -149,13 +152,18 @@ class AdvanceBalanceView(APIView):
     def get(self, request, client_id):
         from apps.trips.models import Trip  # import diferido: evita ciclo con trips.models
 
-        advances = Advance.objects.filter(client_id=client_id).order_by('-date', '-id')
-        active_advance_id = advances.first().id if advances.exists() else None
+        # FASE 6.2: saldo de todos los anticipos del cliente en una sola
+        # consulta agregada (antes: una query de ingresos + una de egresos
+        # POR anticipo dentro del for de abajo).
+        advances = list(annotate_available_balance(
+            Advance.objects.filter(client_id=client_id).order_by('-date', '-id')
+        ))
+        active_advance_id = advances[0].id if advances else None
 
         advances_detail = []
         total_advances_balance = Decimal('0')
         for adv in advances:
-            balance = get_available_balance(adv)
+            balance = (adv._annotated_ingresos or Decimal('0')) - (adv._annotated_egresos or Decimal('0'))  # type: ignore[attr-defined]
             total_advances_balance += balance
             advances_detail.append({
                 'id': adv.id,

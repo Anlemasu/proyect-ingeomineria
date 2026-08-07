@@ -46,6 +46,12 @@ class User(AbstractBaseUser):
     username = models.CharField(max_length=30, unique=True)
     role = models.CharField(max_length=30, choices=ROLES)
     state = models.BooleanField(default=True)
+    # 8A.4: momento del último cambio de contraseña exitoso (propio o por
+    # reset del superusuario). NULL para usuarios que nunca la han
+    # cambiado desde que se agregó este campo — se trata como "sin
+    # restricción por este motivo" (ver ActiveUserJWTAuthentication), no
+    # como un error ni como "cámbiala ahora".
+    password_changed_at = models.DateTimeField(null=True, blank=True)
 
     # ← ClassVar le dice a Pylance el tipo exacto del manager
     objects: ClassVar[UserManager] = UserManager()
