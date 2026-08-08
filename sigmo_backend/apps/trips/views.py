@@ -317,8 +317,33 @@ class TripDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # RF-37: si es anulación, registrar como 'annul'
-        is_annulment = request.data.get('state') is False
+        # Capturar datos anteriores antes de modificar (RF-38)
+        previous = dict(TripReadSerializer(obj).data)  # type: ignore
+
+        # El superuser puede editar registros históricos o de un día ya
+        # cerrado sin justificar (decisión explícita: se quitó esa exigencia
+        # a cambio de concentrar la justificación únicamente en la
+        # anulación, más abajo). El bloqueo de día cerrado para los demás
+        # roles sigue vigente — esto solo afecta a superuser.
+
+        serializer = TripWriteSerializer(obj, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # RF-37: si es anulación, registrar como 'annul'.
+        #
+        # 9.2 — se lee de `serializer.validated_data` (ya parseado/validado
+        # por DRF), no del payload crudo `request.data`. `request.data.get(
+        # 'state') is False` solo detectaba una anulación cuando el campo
+        # llegaba como bool nativo de JSON (`false`); si el mismo request
+        # llegaba form-encoded (`state=false` como string), DRF igual lo
+        # normalizaba a `False` en validated_data (por eso la anulación se
+        # aplicaba igual), pero esa comparación cruda nunca lo detectaba —
+        # así que la anulación se colaba sin exigir justificación, sin el
+        # AuditLog de tipo 'annul', y sin revertir el saldo del anticipo.
+        # validated_data.get('state', obj.state) usa el estado actual como
+        # default para un PATCH parcial que no toca 'state' en absoluto.
+        is_annulment = serializer.validated_data.get('state', obj.state) is False  # type: ignore[union-attr]
         action = 'annul' if is_annulment else 'update'
         justification = request.data.get('justification', None)
         INVOICE_ONLY_FIELDS = {'invoice', 'invoice_pos'}
@@ -358,19 +383,6 @@ class TripDetailView(APIView):
                     'Solo el superusuario puede modificarlo (ajuste histórico).'
                 )
             }, status=status.HTTP_409_CONFLICT)
-
-        # Capturar datos anteriores antes de modificar (RF-38)
-        previous = dict(TripReadSerializer(obj).data)  # type: ignore
-
-        # El superuser puede editar registros históricos o de un día ya
-        # cerrado sin justificar (decisión explícita: se quitó esa exigencia
-        # a cambio de concentrar la justificación únicamente en la
-        # anulación, arriba). El bloqueo de día cerrado para los demás
-        # roles sigue vigente — esto solo afecta a superuser.
-
-        serializer = TripWriteSerializer(obj, data=request.data, partial=True)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         # BUG 2 — snapshot de cómo estaba financiado el viaje ANTES de
         # guardar, para poder calcular la reversión/ajuste del anticipo

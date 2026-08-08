@@ -1,10 +1,29 @@
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Case, DecimalField, QuerySet, Sum, Value, When
+from django.utils import timezone
 
 from apps.audit.services import log_action
 from apps.clients.models import Client
 from .models import Advance, AdvanceMovement
+
+
+class AdvanceNotActiveError(Exception):
+    """
+    9C — solo el anticipo ACTIVO de un cliente (el más reciente, ver
+    get_active_advance) puede corregirse por este mecanismo. Uno congelado
+    (ya no es el más reciente) sigue el mismo principio de "una vez
+    congelado, no se vuelve a tocar" que ya rige en el resto del sistema
+    (ver get_active_advance) — se rechaza explícitamente en vez de permitir
+    que un ajuste retroactivo reabra un anticipo histórico.
+    """
+
+
+class NoValueChangeError(Exception):
+    """9C — el valor corregido es igual al valor ya registrado: no hay
+    ningún ajuste real que aplicar, así que no tiene sentido crear un
+    AdvanceMovement de monto cero ni dejar una entrada de auditoría vacía."""
 
 
 def get_available_balance(advance: Advance) -> Decimal:
@@ -164,3 +183,107 @@ def settle_pending_debts(advance: Advance, *, request=None) -> list[AdvanceMovem
         )
 
     return created_movements
+
+
+def correct_active_advance_value(
+    advance: Advance, *, correct_value: Decimal, justification: str, request=None,
+) -> AdvanceMovement:
+    """
+    FASE 9C — corrige el valor original de un anticipo cuando se detectó un
+    error de digitación, aunque ya se hayan descontado viajes contra él.
+
+    Sigue el mismo principio que el resto del proyecto para corregir
+    saldos (ver sync_advance_movement_on_trip_change, reverse_advance_discount):
+    NUNCA se edita/borra un AdvanceMovement ya existente — se crea uno
+    NUEVO de ajuste (ingreso o egreso) que deja el saldo correcto,
+    preservando el historial completo intacto.
+
+    La corrección se expresa como "el valor correcto debería ser X", no
+    como un delta. El monto del movimiento de ajuste es
+    `correct_value - advance.value` (el valor ORIGINAL registrado, no el
+    saldo disponible en vivo): así, lo que ya se consumió (egresos por
+    viajes) no se ve afectado por la corrección — solo se corrige el monto
+    de fondeo, y el saldo disponible resultante queda automáticamente en
+    `correct_value - lo_ya_consumido`, tal como pide el negocio. Si el
+    ajuste calculado fuera contra el saldo disponible en vez de contra
+    `advance.value`, lo ya consumido se sumaría o restaría dos veces.
+
+    Además del movimiento, actualiza `Advance.value` al valor corregido:
+    es necesario para que una SEGUNDA corrección futura calcule el diff
+    contra el valor ya corregido, no contra el original equivocado (si no
+    se actualizara, una corrección posterior "revertiría" silenciosamente
+    la anterior). Esto se hace a nivel de modelo (`.save(update_fields=...)`),
+    no a través de AdvanceSerializer — el bloqueo de edición de `value` de
+    la Fase 9.3 vive en el serializer (vía AdvanceDetailView.patch, el PATCH
+    genérico) y sigue intacto; este es un mecanismo explícito y separado,
+    auditado aparte, no un bypass silencioso de ese bloqueo.
+
+    Un saldo resultante negativo (la corrección hacia abajo deja al
+    cliente debiendo más de lo que ya se había descontado) se PERMITE
+    igual — mismo criterio que ya rige en sync_advance_movement_on_trip_change
+    cuando un ajuste de valor de viaje deja el anticipo en negativo: es
+    información real, no un error a bloquear.
+
+    Bloqueo: primero la fila del Client (mismo patrón que
+    settle_pending_debts) para que la pregunta "¿sigue siendo el anticipo
+    activo?" se responda de forma consistente aunque se esté creando un
+    anticipo nuevo para el mismo cliente casi al mismo tiempo; después la
+    fila del propio Advance (mismo patrón que
+    sync_advance_movement_on_trip_change) para serializar contra un
+    descuento de viaje concurrente que esté a punto de escribir su propio
+    AdvanceMovement contra este mismo anticipo. El caller debe llamar esto
+    dentro de su propio transaction.atomic() — aquí se abre uno propio para
+    mantener la función autocontenida, igual que reverse_advance_discount.
+    """
+    with transaction.atomic():
+        Client.objects.select_for_update().get(pk=advance.client_id)
+
+        active_advance = get_active_advance(advance.client)
+        if active_advance is None or active_advance.id != advance.id:
+            raise AdvanceNotActiveError()
+
+        locked_advance = Advance.objects.select_for_update().get(pk=advance.pk)
+
+        old_value = locked_advance.value
+        diff = correct_value - old_value
+        if diff == 0:
+            raise NoValueChangeError()
+
+        balance_before = get_available_balance(locked_advance)
+
+        movement = AdvanceMovement.objects.create(
+            advance=locked_advance,
+            type_movement='ingreso' if diff > 0 else 'egreso',
+            amount=abs(diff),
+            trips_quantity=0,
+            date=timezone.localdate(),
+            description=f'Corrección de valor original del anticipo #{locked_advance.id}: {justification}',
+        )
+
+        locked_advance.value = correct_value
+        locked_advance.save(update_fields=['value'])
+
+        balance_after = get_available_balance(locked_advance)
+
+        log_action(
+            request, 'update', 'Advance',
+            object_id=locked_advance.id,
+            previous_data={
+                'value': str(old_value),
+                'available_balance': str(balance_before),
+            },
+            new_data={
+                'value': str(correct_value),
+                'available_balance': str(balance_after),
+                'difference': str(diff),
+                'role': getattr(getattr(request, 'user', None), 'role', None),
+                'movement_created': {
+                    'id': movement.id,
+                    'type_movement': movement.type_movement,
+                    'amount': str(movement.amount),
+                },
+            },
+            justification=justification,
+        )
+
+        return movement

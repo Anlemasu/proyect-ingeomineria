@@ -46,12 +46,44 @@ class LoginView(APIView):
         auth_user = authenticate(request, username=username, password=password)
 
         if auth_user is None:
-            attempts = cache.get(attempts_key, 0) + 1
-            cache.set(attempts_key, attempts, timeout=60 * settings.LOGIN_LOCKOUT_MINUTES)
+            # 9.5: cache.get() + cache.set(valor+1) no es atómico — bajo
+            # intentos fallidos casi simultáneos contra el mismo username,
+            # dos requests pueden leer el mismo valor "viejo" y las dos
+            # escribir "+1" sobre él, perdiendo incrementos (dos intentos
+            # cuentan como uno). cache.add() (crea la clave en 0 solo si no
+            # existe; no-op si ya existe, sin importar la carrera entre
+            # threads) seguido de cache.incr() (atómico en todos los
+            # backends de cache de Django) evita esa pérdida sin importar
+            # cuántos intentos lleguen al mismo tiempo.
+            #
+            # Efecto secundario aceptado: antes el timeout se "renovaba" en
+            # cada intento fallido (ventana deslizante); con add()+incr()
+            # el timeout solo se fija una vez, en el primer intento de la
+            # ventana (ventana fija desde ahí). El límite de intentos sigue
+            # siendo exacto, solo cambia cuándo expira el contador si el
+            # atacante espacia los intentos en el tiempo.
+            cache.add(attempts_key, 0, timeout=60 * settings.LOGIN_LOCKOUT_MINUTES)
+            attempts = cache.incr(attempts_key)
+
+            # 9.6: el conteo de cache es efímero (se pierde al reiniciar o
+            # expirar) — se deja también un rastro persistente en el
+            # AuditLog para poder investigar después un patrón de fuerza
+            # bruta distribuido en el tiempo. Nunca se registra la
+            # contraseña; `object_id` queda en None porque un intento
+            # fallido no permite saber con certeza si `username`
+            # corresponde a un usuario real (podría ser un error de tipeo).
+            log_action(
+                request, 'login_failed', 'User',
+                new_data={'username': username, 'attempts': attempts},
+            )
 
             if attempts >= settings.LOGIN_MAX_ATTEMPTS:
                 cache.set(lockout_key, True, timeout=60 * settings.LOGIN_LOCKOUT_MINUTES)
                 cache.delete(attempts_key)
+                log_action(
+                    request, 'account_locked', 'User',
+                    new_data={'username': username},
+                )
                 return Response(
                     {'error': 'Cuenta bloqueada por 15 minutos por múltiples intentos fallidos.'},
                     status=status.HTTP_429_TOO_MANY_REQUESTS

@@ -32,7 +32,17 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = []
+# 9.4: antes hardcodeado en []. Con DEBUG=False (correcto en producción)
+# eso rechaza TODAS las requests (Django exige que el Host: de la request
+# esté en esta lista), lo que tienta a "arreglarlo" dejando DEBUG=True en
+# producción — reabriendo la exposición de información sensible (stack
+# traces, variables de entorno) que ya se cerró en la fase de contención
+# del .env. Se lee de una variable de entorno separada por comas, mismo
+# patrón que SECRET_KEY/DB_* arriba; en local, si no está definida, cae al
+# valor de desarrollo de siempre.
+ALLOWED_HOSTS = [
+    h.strip() for h in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()
+]
 
 
 # Application definition

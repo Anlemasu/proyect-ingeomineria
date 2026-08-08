@@ -826,3 +826,213 @@ class ConcurrentTripAdvanceBalanceCheckTests(TransactionTestCase):
             AdvanceMovement.objects.filter(advance=self.advance, type_movement='egreso').count(),
             1,
         )
+
+
+class ConcurrentClientChangeReallocationRaceTests(TransactionTestCase):
+    """
+    9.1 — reallocate_advance_on_client_change (trips/services.py) no
+    bloqueaba la fila del Client destino antes de leer el saldo de su
+    anticipo activo. Dos viajes de DOS clientes distintos cambiando su
+    cliente al MISMO cliente destino, casi al mismo tiempo, podían leer el
+    mismo saldo "viejo" antes de que cualquiera de los dos escribiera su
+    AdvanceMovement, y ambos aprobar un descuento que juntos ya no caben
+    (doble descuento contra el mismo anticipo). El fix bloquea la fila del
+    Client destino (mismo patrón que settle_pending_debts en
+    advances/services.py) dentro del mismo transaction.atomic() que ya
+    abre TripDetailView.patch.
+
+    TransactionTestCase, mismo motivo que ConcurrentTripAdvanceBalanceCheckTests
+    arriba: los hilos necesitan conexiones de BD independientes con commits
+    reales para reproducir la carrera; TestCase envuelve todo en una única
+    transacción no confirmada.
+    """
+
+    def setUp(self):
+        self.superuser = User.objects.create_user(
+            username='super_race801', email='super_race801@test.com', name='Super',
+            role='superuser', password='x12345',
+        )
+        owner = User.objects.create_user(
+            username='owner_race801', email='owner_race801@test.com', name='Owner',
+            role='commercial_admin', password='x12345',
+        )
+        vehicle_type = VehicleType.objects.create(name='Volqueta', capacity=Decimal('10.00'))
+        self.vehicle_a = Vehicle.objects.create(vehicle_type=vehicle_type, plaque='XYZ801')
+        self.vehicle_b = Vehicle.objects.create(vehicle_type=vehicle_type, plaque='XYZ802')
+        self.material = MaterialType.objects.create(name='Material Test')
+        self.origin = OriginSite.objects.create(name='Origen Test')
+        self.payment_advance = PaymentMethod.objects.create(name='Anticipo', is_advance=True)
+        self.today = timezone.localdate()
+
+        # Cliente destino: saldo que alcanza para exactamente UNO de los
+        # dos viajes que van a cambiarse hacia él (200000 cada uno).
+        self.target_client = Client.objects.create(
+            user=owner, nit='900800001', name='Cliente Destino',
+            abrev_name='CD', address='Calle 1', phone=3000000010,
+        )
+        self.target_advance = Advance.objects.create(
+            client=self.target_client, user=self.superuser, value=Decimal('300000'),
+            transfer_num=1, date=self.today,
+        )
+        AdvanceMovement.objects.create(
+            advance=self.target_advance, type_movement='ingreso', amount=Decimal('300000'),
+            trips_quantity=0, date=self.today, description='Anticipo inicial destino',
+        )
+
+        # Dos clientes de origen, cada uno con saldo de sobra para financiar
+        # su propio viaje — la reversión de su anticipo propio (al cambiar
+        # de cliente) no es lo que se está probando, solo el descuento
+        # contra el cliente destino compartido.
+        source_client_a = Client.objects.create(
+            user=owner, nit='900800002', name='Cliente Origen A',
+            abrev_name='COA', address='Calle 2', phone=3000000011,
+        )
+        source_client_b = Client.objects.create(
+            user=owner, nit='900800003', name='Cliente Origen B',
+            abrev_name='COB', address='Calle 3', phone=3000000012,
+        )
+        source_advance_a = Advance.objects.create(
+            client=source_client_a, user=self.superuser, value=Decimal('1000000'),
+            transfer_num=2, date=self.today,
+        )
+        AdvanceMovement.objects.create(
+            advance=source_advance_a, type_movement='ingreso', amount=Decimal('1000000'),
+            trips_quantity=0, date=self.today, description='Anticipo inicial A',
+        )
+        source_advance_b = Advance.objects.create(
+            client=source_client_b, user=self.superuser, value=Decimal('1000000'),
+            transfer_num=3, date=self.today,
+        )
+        AdvanceMovement.objects.create(
+            advance=source_advance_b, type_movement='ingreso', amount=Decimal('1000000'),
+            trips_quantity=0, date=self.today, description='Anticipo inicial B',
+        )
+
+        api = APIClient()
+        api.force_authenticate(user=self.superuser)
+        trip_a_resp = api.post('/api/trips/', {
+            'payment': self.payment_advance.id,
+            'origin_site': self.origin.id,
+            'material_type': self.material.id,
+            'client': source_client_a.id,
+            'vehicle': self.vehicle_a.id,
+            'value': '200000',
+            'date': str(self.today),
+        }, format='json')
+        trip_b_resp = api.post('/api/trips/', {
+            'payment': self.payment_advance.id,
+            'origin_site': self.origin.id,
+            'material_type': self.material.id,
+            'client': source_client_b.id,
+            'vehicle': self.vehicle_b.id,
+            'value': '200000',
+            'date': str(self.today),
+        }, format='json')
+        connection.close()
+        assert trip_a_resp.status_code == status.HTTP_201_CREATED, trip_a_resp.data
+        assert trip_b_resp.status_code == status.HTTP_201_CREATED, trip_b_resp.data
+        self.trip_a_id = trip_a_resp.data['id']
+        self.trip_b_id = trip_b_resp.data['id']
+
+    def _patch_client(self, trip_id):
+        api = APIClient()
+        api.force_authenticate(user=self.superuser)
+        try:
+            return api.patch(f'/api/trips/{trip_id}/', {
+                'client': self.target_client.id,
+            }, format='json')
+        finally:
+            connection.close()
+
+    def test_only_one_of_two_concurrent_client_changes_discounts_target_advance(self):
+        results = []
+        start_barrier = threading.Barrier(2)
+
+        def worker(trip_id):
+            start_barrier.wait()
+            results.append(self._patch_client(trip_id))
+
+        t1 = threading.Thread(target=worker, args=(self.trip_a_id,))
+        t2 = threading.Thread(target=worker, args=(self.trip_b_id,))
+        t1.start()
+        t2.start()
+        t1.join(timeout=15)
+        t2.join(timeout=15)
+
+        self.assertEqual(len(results), 2)
+        for r in results:
+            self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+
+        # Un solo egreso de 200000 debió aplicarse contra el destino — no dos.
+        egresos = AdvanceMovement.objects.filter(
+            advance=self.target_advance, type_movement='egreso'
+        )
+        self.assertEqual(
+            egresos.count(), 1,
+            'solo uno de los dos cambios de cliente debe descontar el anticipo destino',
+        )
+        self.assertEqual(
+            get_available_balance(Advance.objects.get(pk=self.target_advance.id)),
+            Decimal('100000'),
+        )
+
+        trips = list(Trip.objects.filter(id__in=[self.trip_a_id, self.trip_b_id]))
+        settled = [t for t in trips if t.advance_id == self.target_advance.id]
+        pending = [t for t in trips if t.advance_id is None]
+        self.assertEqual(len(settled), 1, [t.id for t in trips])
+        self.assertEqual(
+            len(pending), 1,
+            'el que pierde la carrera debe quedar como deuda pendiente del cliente destino, no descontado igual',
+        )
+
+
+class FormEncodedAnnulmentDetectionTests(TripAdvanceFixturesMixin, TestCase):
+    """
+    9.2 — antes de este fix, `request.data.get('state') is False` en
+    TripDetailView.patch solo detectaba una anulación cuando 'state' llegaba
+    como bool nativo de JSON. Un PATCH form-encoded (`state=false` como
+    string) igual anulaba el viaje — el serializer sí normaliza el string a
+    False y lo guarda — pero esa comparación cruda nunca lo detectaba, así
+    que se saltaba la justificación obligatoria, el AuditLog de tipo
+    'annul' (quedaba registrado como 'update' genérico) y la reversión del
+    saldo del anticipo. Cubre el mismo camino que los tests de anulación
+    JSON ya existentes, pero con format='multipart'.
+    """
+
+    def test_form_data_annulment_without_justification_is_rejected(self):
+        resp = self._create_trip(value='150000', payment=self.payment_cash)
+        trip_id = resp.data['id']
+
+        result = self.api.patch(
+            f'/api/trips/{trip_id}/', {'state': False}, format='multipart'
+        )
+        self.assertEqual(result.status_code, status.HTTP_400_BAD_REQUEST, result.data)
+        trip = Trip.objects.get(pk=trip_id)
+        self.assertTrue(
+            trip.state,
+            'el viaje no debe quedar anulado si falta la justificación, ni siquiera vía form-data',
+        )
+
+    def test_form_data_annulment_with_justification_is_audited_and_reverts_balance(self):
+        resp = self._create_trip(value='300000')  # medio de pago anticipo, descontado de self.advance
+        trip_id = resp.data['id']
+        self.assertEqual(get_available_balance(self.advance), Decimal('700000'))
+
+        result = self.api.patch(
+            f'/api/trips/{trip_id}/',
+            {'state': False, 'justification': 'Anulación vía form-data'},
+            format='multipart',
+        )
+        self.assertEqual(result.status_code, status.HTTP_200_OK, result.data)
+
+        trip = Trip.objects.get(pk=trip_id)
+        self.assertFalse(trip.state)
+
+        self.assertTrue(
+            AuditLog.objects.filter(action='annul', model_name='Trip', object_id=trip_id).exists(),
+            'debe quedar auditada específicamente como anulación, igual que la anulación vía JSON',
+        )
+        self.assertEqual(
+            get_available_balance(self.advance), Decimal('1000000'),
+            'el saldo del anticipo debe revertirse igual que en la anulación vía JSON',
+        )

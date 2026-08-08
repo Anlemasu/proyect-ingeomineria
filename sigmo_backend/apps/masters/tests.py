@@ -1,4 +1,6 @@
+from datetime import date, datetime, timezone as dt_timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -110,3 +112,72 @@ class TariffDeleteFallsBackToGeneralTests(TariffFixturesMixin, TestCase):
         self.api.delete(f'/api/masters/tariffs/{self.tariff_id}/')
         resp2 = self.api.delete(f'/api/masters/tariffs/{self.tariff_id}/')
         self.assertEqual(resp2.status_code, status.HTTP_400_BAD_REQUEST, resp2.data)
+
+
+class TariffEndDateUsesBogotaTimezoneTests(TariffFixturesMixin, TestCase):
+    """
+    9E — TariffDetailView.patch (RF-21, cierra y reemplaza) y
+    TariffDetailView.delete (8B.5, cierra sin reemplazo) usaban
+    `timezone.now().date()` para fijar `end_date`: eso extrae el día
+    calendario en UTC, no en `TIME_ZONE='America/Bogota'` (USE_TZ=True).
+    Entre las 19:00 y las 23:59 hora Bogotá (=00:00-04:59 UTC del día
+    siguiente), UTC ya cruzó la medianoche pero Bogotá no — `end_date`
+    quedaba adelantado un día. El fix usa `timezone.localdate()`, mismo
+    mecanismo que ya usa el resto del proyecto (cierre de caja, deuda
+    pendiente).
+
+    El proyecto no tiene freezegun ni un mecanismo equivalente instalado
+    (no está en requirements.txt) — se usa unittest.mock.patch sobre
+    `django.utils.timezone.now`, que es la única función que
+    `timezone.localdate()`/`timezone.localtime()` consultan internamente
+    cuando no reciben un valor explícito (ver
+    django.utils.timezone.localtime: `if value is None: value = now()`),
+    así que fijarla también controla de forma determinista cualquier
+    `timezone.now()` que llame el código bajo prueba — sin depender de la
+    hora real a la que corra la suite (que es justamente lo que hizo que
+    el bug se detectara solo algunas veces).
+    """
+
+    # 02:00 UTC del 15 de enero de 2026 = 21:00 hora Bogotá del 14 de enero
+    # (UTC-5) — dentro de la ventana crítica en la que UTC ya cambió de día
+    # calendario pero Bogotá todavía no.
+    CRITICAL_UTC_NOW = datetime(2026, 1, 15, 2, 0, 0, tzinfo=dt_timezone.utc)
+    EXPECTED_BOGOTA_DATE = date(2026, 1, 14)
+
+    def setUp(self):
+        super().setUp()
+        create_resp = self.api.post('/api/masters/tariffs/', {
+            'client': self.client_obj.id, 'vehicle_type': self.vehicle_type.id,
+            'value': '80000', 'start_date': str(self.today),
+        }, format='json')
+        assert create_resp.status_code == status.HTTP_201_CREATED, create_resp.data
+        self.tariff_id = create_resp.data['id']
+
+    def test_delete_sets_end_date_to_bogota_date_in_critical_utc_window(self):
+        with patch('django.utils.timezone.now', return_value=self.CRITICAL_UTC_NOW):
+            resp = self.api.delete(f'/api/masters/tariffs/{self.tariff_id}/')
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT, resp.data)
+
+        tariff = Tariff.objects.get(pk=self.tariff_id)
+        self.assertEqual(
+            tariff.end_date, self.EXPECTED_BOGOTA_DATE,
+            'end_date debe quedar en la fecha Bogotá, no un día adelantado por tomar la fecha UTC cruda',
+        )
+
+    def test_patch_replacement_closes_old_tariff_with_bogota_date_in_critical_utc_window(self):
+        with patch('django.utils.timezone.now', return_value=self.CRITICAL_UTC_NOW):
+            resp = self.api.patch(f'/api/masters/tariffs/{self.tariff_id}/', {
+                'value': '90000',
+            }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+        old_tariff = Tariff.objects.get(pk=self.tariff_id)
+        self.assertFalse(old_tariff.state)
+        self.assertEqual(
+            old_tariff.end_date, self.EXPECTED_BOGOTA_DATE,
+            'la tarifa cerrada por reemplazo (RF-21) debe quedar con la fecha Bogotá, no la fecha UTC',
+        )
+
+        new_tariff = Tariff.objects.get(pk=resp.data['id'])
+        self.assertTrue(new_tariff.state)
+        self.assertEqual(new_tariff.value, Decimal('90000'))

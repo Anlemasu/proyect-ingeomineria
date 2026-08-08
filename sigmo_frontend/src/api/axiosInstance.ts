@@ -34,9 +34,14 @@ function notifySubscribers(newToken: string | null) {
   refreshSubscribers = []
 }
 
-function forceSessionExpired() {
+// 9.7B: `message` es opcional — cuando el backend manda un motivo específico
+// en el cuerpo del 401 (ej. ActiveUserJWTAuthentication: "Tu cuenta ha sido
+// desactivada...", o "...contraseña fue actualizada...") se muestra ese en
+// vez del genérico. Sin mensaje específico (ej. token expirado por tiempo,
+// sin refresh token disponible), se mantiene el genérico de siempre.
+function forceSessionExpired(message?: string) {
   useAuthStore().clearSession()
-  toast.error('Sesión expirada. Inicia sesión nuevamente.')
+  toast.error(message || 'Sesión expirada. Inicia sesión nuevamente.')
   window.location.href = '/login'
 }
 
@@ -98,6 +103,13 @@ api.interceptors.response.use(
 
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean }
     const authStore = useAuthStore()
+    // 9.7B: se lee ANTES de intentar el refresh silencioso — es el 401
+    // original (ej. de ActiveUserJWTAuthentication) el que trae el motivo
+    // específico. Si el refresh también falla más abajo (ej. porque
+    // desactivar al usuario blacklisteó su refresh token), el error de esa
+    // llamada de refresh ya no trae este mensaje amigable, así que se
+    // captura acá y se reutiliza en el catch del refresh.
+    const specificMessage: string | undefined = error.response?.data?.detail
 
     if (status === 401 && !originalRequest._retry && authStore.refreshToken) {
       // 8A.3: refresh silencioso — antes de este fix, CUALQUIER 401
@@ -148,7 +160,7 @@ api.interceptors.response.use(
         // quedar esperando para siempre) y se fuerza el logout.
         isRefreshing = false
         notifySubscribers(null)
-        forceSessionExpired()
+        forceSessionExpired(specificMessage)
         return Promise.reject(refreshError)
       }
     }
@@ -159,7 +171,7 @@ api.interceptors.response.use(
       // claves de localStorage a mano aquí. Esto solo afecta la sesión de
       // ESTA pestaña; otras pestañas con su propia sesión en su propio
       // sessionStorage no se enteran ni se ven tocadas.
-      forceSessionExpired()
+      forceSessionExpired(specificMessage)
     } else if (status === 403) {
       toast.error('No tienes permisos para realizar esta acción.')
     } else if (status === 500) {

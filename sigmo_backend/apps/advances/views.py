@@ -8,8 +8,14 @@ from django.db import transaction
 from apps.audit.services import log_action
 
 from .models import Advance, AdvanceMovement
-from .serializers import AdvanceSerializer, AdvanceMovementSerializer
-from .services import annotate_available_balance, settle_pending_debts
+from .serializers import AdvanceSerializer, AdvanceMovementSerializer, AdvanceValueCorrectionSerializer
+from .services import (
+    annotate_available_balance,
+    settle_pending_debts,
+    correct_active_advance_value,
+    AdvanceNotActiveError,
+    NoValueChangeError,
+)
 
 
 def can_manage_advances(user):
@@ -197,3 +203,74 @@ class AdvanceBalanceView(APIView):
             'total_pending_debt': str(total_pending_debt),
             'net_balance': str(total_advances_balance - total_pending_debt),
         })
+
+
+class AdvanceCorrectValueView(APIView):
+    """
+    FASE 9C — corrige el valor original de un anticipo (típicamente un
+    error de digitación) creando un movimiento de ajuste, sin editar ni
+    borrar ningún AdvanceMovement existente (ver correct_active_advance_value
+    en advances/services.py).
+
+    Endpoint separado y explícito (POST .../correct-value/) en vez de
+    extender AdvanceDetailView.patch: el PATCH genérico ya bloquea `value`
+    de plano en cuanto el anticipo tiene movimientos (Fase 9.3) — meter
+    este flujo ahí exigiría una excepción especial al bloqueo justo en el
+    mismo lugar que lo declara, lo cual es más difícil de leer y más fácil
+    de des-sincronizar a futuro que un endpoint aparte, con su propio
+    contrato de entrada (correct_value + justification, siempre
+    obligatoria, sin los demás campos editables de un Advance normal).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        # Mismos 3 roles ya autorizados para gestionar anticipos en general
+        # (ver can_manage_advances arriba) — la Fase 9C no amplía ni reduce
+        # ese conjunto, solo lo reutiliza para esta operación puntual.
+        if not can_manage_advances(request.user):
+            log_action(request, 'access_denied', 'Advance', object_id=pk)
+            return Response(
+                {'error': 'No tiene permisos para corregir el valor de anticipos.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            advance = Advance.objects.get(pk=pk)
+        except Advance.DoesNotExist:
+            return Response(
+                {'error': 'Anticipo no encontrado.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = AdvanceValueCorrectionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        correct_value = serializer.validated_data['correct_value']  # type: ignore
+        justification = serializer.validated_data['justification']  # type: ignore
+
+        try:
+            movement = correct_active_advance_value(
+                advance,
+                correct_value=correct_value,
+                justification=justification,
+                request=request,
+            )
+        except AdvanceNotActiveError:
+            return Response({
+                'error': (
+                    'Solo se puede corregir el anticipo activo del cliente '
+                    '(el más reciente). Este anticipo ya fue reemplazado por '
+                    'uno más nuevo y quedó congelado.'
+                )
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except NoValueChangeError:
+            return Response({
+                'error': 'El valor corregido es igual al valor ya registrado: no hay nada que ajustar.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        advance.refresh_from_db()
+        return Response({
+            'advance': AdvanceSerializer(advance).data,
+            'movement': AdvanceMovementSerializer(movement).data,
+        }, status=status.HTTP_200_OK)

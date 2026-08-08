@@ -1,9 +1,15 @@
-from django.test import TestCase
+import threading
+
+from django.conf import settings
+from django.core.cache import cache
+from django.db import connection
+from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 
+from apps.audit.models import AuditLog
 from .models import User
 
 
@@ -371,3 +377,123 @@ class PasswordChangedAtRejectsOldTokensTests(TestCase):
         api.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
         resp = api.get('/api/clients/')
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+
+class LoginLockoutAtomicCounterTests(TransactionTestCase):
+    """
+    9.5 — antes, el conteo de intentos fallidos usaba cache.get() seguido
+    de un cache.set() separado ("+1"), no atómico: bajo intentos fallidos
+    casi simultáneos para el mismo username, dos requests podían leer el
+    mismo valor "viejo" y las dos escribir "+1" sobre él, perdiendo
+    incrementos (el conteo real quedaba por debajo del real, permitiendo
+    más intentos de los configurados). Ahora usa cache.add() + cache.incr()
+    (atómico incluso con LocMemCache dentro de un mismo proceso).
+
+    TransactionTestCase, mismo motivo que los demás tests de concurrencia
+    del proyecto: cada hilo necesita su propia conexión de BD (para
+    authenticate(), que sí golpea la BD) con commits reales; TestCase
+    envuelve todo en una única transacción no confirmada.
+
+    LOGIN_MAX_ATTEMPTS se sube por encima del número de hilos para que
+    ningún intento dispare el bloqueo a mitad de la carrera — lo que se
+    está probando es la exactitud del conteo, no el bloqueo en sí (eso ya
+    lo cubre el resto de LoginView).
+    """
+
+    def setUp(self):
+        # Username exclusivo de este test: no puede haber una clave de
+        # cache previa con este nombre, así que no hace falta limpiarla.
+        self.username = 'lockout_race_user_95'
+        User.objects.create_user(
+            username=self.username, email='lockout95@test.com', name='Lockout Race',
+            role='cashier', password='x12345',
+        )
+
+    def _failed_login(self):
+        api = APIClient()
+        try:
+            return api.post('/api/users/login/', {
+                'username': self.username, 'password': 'contrasena-incorrecta',
+            }, format='json')
+        finally:
+            connection.close()
+
+    @override_settings(LOGIN_MAX_ATTEMPTS=1000)
+    def test_concurrent_failed_attempts_do_not_lose_increments(self):
+        n_threads = 15
+        results = []
+        start_barrier = threading.Barrier(n_threads)
+
+        def worker():
+            start_barrier.wait()
+            results.append(self._failed_login())
+
+        threads = [threading.Thread(target=worker) for _ in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=15)
+
+        self.assertEqual(len(results), n_threads)
+        for r in results:
+            self.assertEqual(r.status_code, status.HTTP_401_UNAUTHORIZED, r.data)
+
+        self.assertEqual(
+            cache.get(f'attempts_{self.username}'), n_threads,
+            'el conteo final debe ser exacto: un incremento por cada intento fallido, sin pérdidas',
+        )
+
+
+class LoginFailureAuditLogTests(TestCase):
+    """
+    9.6 — los intentos fallidos y el bloqueo temporal por fuerza bruta
+    (RF-03) solo quedaban en cache (efímero: se pierde al reiniciar o
+    expirar) — ahora también dejan su rastro en el AuditLog persistente,
+    para poder investigar después un patrón de fuerza bruta distribuido en
+    el tiempo.
+    """
+
+    def setUp(self):
+        self.username = 'audit_login_user_96'
+        User.objects.create_user(
+            username=self.username, email='audit96@test.com', name='Audit Login',
+            role='cashier', password='x12345',
+        )
+        # LocMemCache no se limpia entre tests de una misma clase (a
+        # diferencia de la BD, que TestCase envuelve en una transacción por
+        # test) — sin esto, el bloqueo que deja test_account_lockout_...
+        # se filtraría al resto de tests de esta clase.
+        cache.delete(f'attempts_{self.username}')
+        cache.delete(f'lockout_{self.username}')
+
+    def test_failed_attempt_is_recorded_in_audit_log(self):
+        api = APIClient()
+        resp = api.post('/api/users/login/', {
+            'username': self.username, 'password': 'contrasena-incorrecta',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED, resp.data)
+
+        entry = AuditLog.objects.filter(action='login_failed', model_name='User').latest('timestamp')
+        self.assertEqual(entry.new_data.get('username'), self.username)
+        self.assertIsNone(entry.user, 'un intento fallido no tiene un usuario autenticado que registrar')
+        self.assertNotIn(
+            'contrasena-incorrecta', str(entry.new_data),
+            'nunca debe quedar la contraseña ingresada en el AuditLog',
+        )
+
+    def test_account_lockout_is_recorded_in_audit_log(self):
+        api = APIClient()
+        for _ in range(settings.LOGIN_MAX_ATTEMPTS):
+            api.post('/api/users/login/', {
+                'username': self.username, 'password': 'contrasena-incorrecta',
+            }, format='json')
+
+        lockout_entry = AuditLog.objects.filter(
+            action='account_locked', model_name='User'
+        ).latest('timestamp')
+        self.assertEqual(lockout_entry.new_data.get('username'), self.username)
+
+        failed_count = AuditLog.objects.filter(
+            action='login_failed', model_name='User', new_data__username=self.username,
+        ).count()
+        self.assertEqual(failed_count, settings.LOGIN_MAX_ATTEMPTS)

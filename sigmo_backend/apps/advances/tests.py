@@ -505,3 +505,224 @@ class AnnotatedBalanceMatchesPerObjectCalculationTests(PendingDebtFixturesMixin,
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         entry = next(a for a in resp.data if a['id'] == advance_a_id)
         self.assertEqual(Decimal(str(entry['available_balance'])), expected_balance)
+
+
+class AdvanceClientValueLockedAfterMovementsTests(PendingDebtFixturesMixin, TestCase):
+    """
+    9.3 — Advance.client y Advance.value quedan bloqueados para edición una
+    vez que el anticipo tiene al menos un AdvanceMovement asociado (ver
+    AdvanceSerializer.validate). Cualquier anticipo creado por la API
+    (AdvanceListCreateView.post) ya nace con su movimiento de ingreso
+    inicial, así que en la práctica queda bloqueado desde el instante en
+    que se crea — el caso "sin movimientos" solo es alcanzable creando el
+    Advance directamente por ORM (fuera del flujo normal de la API), como
+    hace el primer test de abajo.
+    """
+
+    def test_advance_without_movements_still_allows_editing_client_and_value(self):
+        other_owner = User.objects.create_user(
+            username='owner_93a', email='owner_93a@test.com', name='Owner93A',
+            role='commercial_admin', password='x12345',
+        )
+        other_client = Client.objects.create(
+            user=other_owner, nit='900930001', name='Cliente 9.3 A',
+            abrev_name='C93A', address='Calle 1', phone=3000900001,
+        )
+        advance = Advance.objects.create(
+            client=self.client_obj, user=self.superuser, value=Decimal('500000'),
+            transfer_num=901, date=self.today,
+        )
+        self.assertFalse(AdvanceMovement.objects.filter(advance=advance).exists())
+
+        resp = self.api.patch(f'/api/advances/{advance.id}/', {
+            'client': other_client.id, 'value': '600000',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        advance.refresh_from_db()
+        self.assertEqual(advance.client_id, other_client.id)
+        self.assertEqual(advance.value, Decimal('600000'))
+
+    def test_advance_with_movements_rejects_editing_client_and_value(self):
+        resp_a = self._create_advance(500000)
+        advance_id = resp_a.data['id']
+        self.assertTrue(AdvanceMovement.objects.filter(advance_id=advance_id).exists())
+
+        other_owner = User.objects.create_user(
+            username='owner_93b', email='owner_93b@test.com', name='Owner93B',
+            role='commercial_admin', password='x12345',
+        )
+        other_client = Client.objects.create(
+            user=other_owner, nit='900930002', name='Cliente 9.3 B',
+            abrev_name='C93B', address='Calle 1', phone=3000900002,
+        )
+
+        resp_client = self.api.patch(f'/api/advances/{advance_id}/', {
+            'client': other_client.id,
+        }, format='json')
+        self.assertEqual(resp_client.status_code, status.HTTP_400_BAD_REQUEST, resp_client.data)
+        self.assertIn('client', resp_client.data)
+
+        resp_value = self.api.patch(f'/api/advances/{advance_id}/', {
+            'value': '999999',
+        }, format='json')
+        self.assertEqual(resp_value.status_code, status.HTTP_400_BAD_REQUEST, resp_value.data)
+        self.assertIn('value', resp_value.data)
+
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(advance.client_id, self.client_obj.id)
+        self.assertEqual(advance.value, Decimal('500000'))
+
+    def test_advance_with_movements_still_allows_editing_other_fields(self):
+        resp_a = self._create_advance(500000)
+        advance_id = resp_a.data['id']
+
+        resp = self.api.patch(f'/api/advances/{advance_id}/', {
+            'observations': 'Nota actualizada',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(advance.observations, 'Nota actualizada')
+
+
+class AdvanceValueCorrectionTests(PendingDebtFixturesMixin, TestCase):
+    """
+    9C — corrección del valor original de un anticipo ACTIVO mediante un
+    movimiento de ajuste nuevo (correct_active_advance_value /
+    AdvanceCorrectValueView), sin editar ni borrar ningún AdvanceMovement
+    existente. No usa PendingDebtFixturesMixin._create_trip con
+    justificación porque en estos tests siempre hay saldo de sobra para el
+    viaje que se registra (no es deuda pendiente).
+    """
+
+    def _correct(self, advance_id, correct_value, justification='Corrección de error de digitación', api=None):
+        api = api or self.api
+        return api.post(f'/api/advances/{advance_id}/correct-value/', {
+            'correct_value': str(correct_value),
+            'justification': justification,
+        }, format='json')
+
+    def test_correcting_to_higher_value_increases_balance_and_audits(self):
+        resp_a = self._create_advance(1000000)
+        advance_id = resp_a.data['id']
+
+        resp = self._correct(advance_id, 1500000, justification='El valor real consignado era 1.500.000')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data['advance']['available_balance'], 1500000.0)
+        self.assertEqual(resp.data['movement']['type_movement'], 'ingreso')
+        self.assertEqual(Decimal(str(resp.data['movement']['amount'])), Decimal('500000'))
+
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(advance.value, Decimal('1500000'))
+        self.assertEqual(get_available_balance(advance), Decimal('1500000'))
+
+        movement = AdvanceMovement.objects.get(advance=advance, type_movement='ingreso', amount=Decimal('500000'))
+        self.assertIsNone(movement.trip, 'el movimiento de ajuste no está atado a ningún viaje')
+
+        entry = AuditLog.objects.filter(
+            action='update', model_name='Advance', object_id=advance_id
+        ).latest('timestamp')
+        self.assertEqual(entry.justification, 'El valor real consignado era 1.500.000')
+        self.assertEqual(Decimal(entry.new_data['value']), Decimal('1500000'))
+        self.assertEqual(Decimal(entry.new_data['difference']), Decimal('500000'))
+        self.assertEqual(entry.new_data['role'], 'superuser')
+        self.assertEqual(Decimal(entry.previous_data['value']), Decimal('1000000'))
+
+    def test_correcting_to_lower_value_without_trips_decreases_balance(self):
+        resp_a = self._create_advance(1000000)
+        advance_id = resp_a.data['id']
+
+        resp = self._correct(advance_id, 700000)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(advance.value, Decimal('700000'))
+        self.assertEqual(get_available_balance(advance), Decimal('700000'))
+
+        self.assertTrue(
+            AdvanceMovement.objects.filter(
+                advance=advance, type_movement='egreso', amount=Decimal('300000')
+            ).exists()
+        )
+
+    def test_correcting_to_lower_value_with_trips_can_go_negative(self):
+        resp_a = self._create_advance(1000000)
+        advance_id = resp_a.data['id']
+        self._create_trip(800000)  # descuenta 800000 del anticipo activo: saldo queda en 200000
+
+        resp = self._correct(advance_id, 500000, justification='El valor real era 500.000, no 1.000.000')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(advance.value, Decimal('500000'))
+        self.assertEqual(
+            get_available_balance(advance), Decimal('-300000'),
+            'un saldo negativo es información real y debe permitirse, no bloquearse',
+        )
+
+        entry = AuditLog.objects.filter(
+            action='update', model_name='Advance', object_id=advance_id
+        ).latest('timestamp')
+        self.assertEqual(Decimal(entry.previous_data['available_balance']), Decimal('200000'))
+        self.assertEqual(Decimal(entry.new_data['available_balance']), Decimal('-300000'))
+        self.assertEqual(Decimal(entry.new_data['difference']), Decimal('-500000'))
+
+    def test_cannot_correct_advance_that_is_no_longer_active(self):
+        resp_a = self._create_advance(1000000)
+        advance_a_id = resp_a.data['id']
+        self._create_advance(500000)  # B, más reciente: A queda congelado
+
+        resp = self._correct(advance_a_id, 2000000)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+
+        advance_a = Advance.objects.get(pk=advance_a_id)
+        self.assertEqual(
+            advance_a.value, Decimal('1000000'),
+            'no debe haberse tocado el valor de un anticipo ya congelado',
+        )
+        self.assertFalse(
+            AdvanceMovement.objects.filter(advance=advance_a, description__icontains='Corrección').exists()
+        )
+
+    def test_correction_without_justification_is_rejected(self):
+        resp_a = self._create_advance(1000000)
+        advance_id = resp_a.data['id']
+
+        resp = self.api.post(f'/api/advances/{advance_id}/correct-value/', {
+            'correct_value': '1200000',
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(advance.value, Decimal('1000000'))
+
+    def test_unauthorized_role_cannot_correct_value(self):
+        resp_a = self._create_advance(1000000)
+        advance_id = resp_a.data['id']
+
+        resp = self._correct(advance_id, 1200000, api=self.cashier_api)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN, resp.data)
+
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(advance.value, Decimal('1000000'))
+
+    def test_movement_history_shows_correction_without_altering_original(self):
+        resp_a = self._create_advance(1000000)
+        advance_id = resp_a.data['id']
+        original_movement_id = AdvanceMovement.objects.get(
+            advance_id=advance_id, type_movement='ingreso'
+        ).id
+
+        self._correct(advance_id, 1300000, justification='Ajuste de valor')
+
+        resp = self.api.get(f'/api/advances/{advance_id}/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        movements = resp.data['movements']
+        self.assertEqual(len(movements), 2, 'el movimiento original y el de ajuste deben coexistir')
+
+        original = next(m for m in movements if m['id'] == original_movement_id)
+        self.assertEqual(Decimal(str(original['amount'])), Decimal('1000000'))
+        self.assertEqual(original['description'], 'Anticipo registrado. Ref: 1')
+
+        adjustment = next(m for m in movements if m['id'] != original_movement_id)
+        self.assertEqual(Decimal(str(adjustment['amount'])), Decimal('300000'))
+        self.assertEqual(adjustment['type_movement'], 'ingreso')

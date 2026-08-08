@@ -14,6 +14,12 @@ class AuditLog(models.Model):
         ('access_denied',   'Acceso denegado'),
         ('revert',          'Reversión de cierre de caja'),
         ('recalculo_cierre', 'Recálculo automático de cierre de caja'),
+        # 9.6: antes los intentos fallidos y el bloqueo temporal por fuerza
+        # bruta (RF-03) solo quedaban en cache (efímero) — sin estos dos,
+        # no había forma de investigar después un patrón de fuerza bruta
+        # distribuido en el tiempo.
+        ('login_failed',    'Intento fallido de inicio de sesión'),
+        ('account_locked',  'Cuenta bloqueada temporalmente por intentos fallidos'),
     ]
 
     # Usuario que realizó la acción (null si no estaba autenticado)

@@ -441,7 +441,17 @@ class TariffDetailView(APIView):
                 previous = dict(TariffSerializer(obj).data)  # type: ignore
 
                 # Cerrar tarifa anterior (RF-21)
-                obj.end_date = timezone.now().date()
+                #
+                # 9E — timezone.now() es UTC (USE_TZ=True); llamarle .date()
+                # directo extrae el día calendario en UTC, no en
+                # TIME_ZONE='America/Bogota'. Entre las 19:00 y las 23:59
+                # hora Bogotá (=00:00-04:59 UTC del día siguiente), UTC ya
+                # cruzó la medianoche pero Bogotá no — end_date quedaba
+                # adelantado un día. timezone.localdate() sí convierte a la
+                # zona horaria local antes de extraer la fecha, mismo
+                # mecanismo que ya usa el resto del proyecto (cierre de
+                # caja, deuda pendiente).
+                obj.end_date = timezone.localdate()
                 obj.state = False
                 obj.save()
 
@@ -507,7 +517,9 @@ class TariffDetailView(APIView):
             )
 
         previous = dict(TariffSerializer(obj).data)  # type: ignore
-        obj.end_date = timezone.now().date()
+        # 9E — ver comentario en TariffDetailView.patch: timezone.now().date()
+        # extrae el día en UTC, no en la zona horaria del proyecto.
+        obj.end_date = timezone.localdate()
         obj.state = False
         obj.save()
 
