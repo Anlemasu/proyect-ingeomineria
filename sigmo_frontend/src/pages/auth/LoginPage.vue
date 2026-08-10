@@ -55,7 +55,7 @@ const onSubmit = handleSubmit(async (values) => {
         <div class="text-center mb-8">
           <img src="/logo_transparente.png" alt="Ingeominería" class="h-14 w-auto mx-auto mb-3" />
           <h1 class="text-2xl font-bold text-stone-900">SIGMO</h1>
-          <p class="text-stone-500 text-sm mt-1">Sistema de Información de Gestión Minera</p>
+          <p class="text-stone-500 text-sm mt-1">Sistema Integral de Gestión Minera y Operativa</p>
         </div>
 
         <form @submit.prevent="onSubmit" class="space-y-5" novalidate>

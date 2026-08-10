@@ -186,6 +186,7 @@ export interface DailySummaryPayment {
 export interface DailySummary {
   id: number
   date: string
+  state: 'closed' | 'reverted'
   total_trips: number
   total_volume: string
   avg_trip_value: string

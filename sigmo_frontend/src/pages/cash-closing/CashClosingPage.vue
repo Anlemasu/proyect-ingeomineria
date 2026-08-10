@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 
 import {
-  RefreshCw, Lock, CheckCircle, AlertTriangle,
+  RefreshCw, Lock, Unlock, CheckCircle, AlertTriangle,
   TrendingUp, Truck, BarChart2, Wallet,
 } from 'lucide-vue-next'
 
@@ -19,6 +19,7 @@ import type { DailySummary } from '@/types'
 
 const authStore   = useAuthStore()
 const queryClient = useQueryClient()
+const isSuperuser = computed(() => authStore.user?.role === 'superuser')
 
 // ── Preview del día ───────────────────────────────────────────────────────────
 const { data: todayData, isLoading: todayLoading, refetch: refetchToday } = useQuery({
@@ -40,6 +41,13 @@ const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } 
 })
 const history = computed(() => historyData.value ?? [])
 
+// El resumen del día en curso lo trae `today()` sin id (no crea el cierre),
+// pero si ya está cerrado el registro real vive en `history` — lo buscamos
+// ahí para poder revertirlo.
+const todayClosureRecord = computed(() =>
+  history.value.find(s => s.date === todayData.value?.date && s.state === 'closed') ?? null
+)
+
 // ── Cierre ────────────────────────────────────────────────────────────────────
 const confirmOpen  = ref(false)
 const closingLoading = ref(false)
@@ -57,6 +65,33 @@ async function executeClose() {
     toast.error(getApiErrorMessage(err))
   } finally {
     closingLoading.value = false
+  }
+}
+
+// ── Reversión de cierre (solo superuser) ───────────────────────────────────────
+const revertTarget       = ref<DailySummary | null>(null)
+const revertJustification = ref('')
+const revertLoading      = ref(false)
+
+function openRevert(summary: DailySummary) {
+  revertTarget.value       = summary
+  revertJustification.value = ''
+}
+
+async function confirmRevert() {
+  if (!revertTarget.value) return
+  revertLoading.value = true
+  try {
+    await cashClosingApi.revert(revertTarget.value.id, revertJustification.value.trim() || undefined)
+    toast.success(`Cierre del ${formatDate(revertTarget.value.date)} revertido`)
+    revertTarget.value = null
+    await refetchToday()
+    await refetchHistory()
+    queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
+  } catch (err) {
+    toast.error(getApiErrorMessage(err))
+  } finally {
+    revertLoading.value = false
   }
 }
 
@@ -167,9 +202,20 @@ const detailRevenue = computed(() =>
 
         <!-- Botón de cierre -->
         <div class="pt-4 border-t border-gray-100">
-          <div v-if="alreadyClosed" class="flex items-center gap-2 text-sm text-green-700">
-            <CheckCircle class="w-4 h-4" />
-            El cierre de caja ya fue ejecutado para el día de hoy.
+          <div v-if="alreadyClosed" class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2 text-sm text-green-700">
+              <CheckCircle class="w-4 h-4" />
+              El cierre de caja ya fue ejecutado para el día de hoy.
+            </div>
+            <button
+              v-if="isSuperuser && todayClosureRecord"
+              type="button"
+              @click="openRevert(todayClosureRecord)"
+              class="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors"
+            >
+              <Unlock class="w-4 h-4" />
+              Revertir cierre
+            </button>
           </div>
           <div v-else>
             <button
@@ -235,13 +281,26 @@ const detailRevenue = computed(() =>
                 {{ formatCurrency(s.payment_details.reduce((sum, p) => sum + Number(p.total), 0)) }}
               </td>
               <td class="px-4 py-3">
-                <button
-                  type="button"
-                  @click="detailSummary = s"
-                  class="text-xs text-gold-700 hover:text-gold-800 font-medium underline underline-offset-2"
-                >
-                  Ver desglose
-                </button>
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    @click="detailSummary = s"
+                    class="text-xs text-gold-700 hover:text-gold-800 font-medium underline underline-offset-2"
+                  >
+                    Ver desglose
+                  </button>
+                  <button
+                    v-if="isSuperuser && s.state === 'closed'"
+                    type="button"
+                    @click="openRevert(s)"
+                    class="text-xs text-amber-700 hover:text-amber-800 font-medium underline underline-offset-2"
+                  >
+                    Revertir
+                  </button>
+                  <span v-else-if="s.state === 'reverted'" class="text-xs text-gray-400 italic">
+                    Revertido
+                  </span>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -310,6 +369,68 @@ const detailRevenue = computed(() =>
                 <RefreshCw v-if="closingLoading" class="w-4 h-4 animate-spin" />
                 <Lock v-else class="w-4 h-4" />
                 {{ closingLoading ? 'Ejecutando cierre...' : 'Sí, ejecutar cierre' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- ── Modal confirmación reversión ───────────────────────────────────── -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-opacity duration-150"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-100"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="revertTarget"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+        >
+          <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <div class="flex items-start gap-3 mb-4">
+              <div class="p-2 bg-amber-100 rounded-lg shrink-0">
+                <Unlock class="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-gray-800">
+                  Revertir cierre — {{ formatDate(revertTarget.date) }}
+                </h3>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  Los viajes y gastos de ese día volverán a poder registrarse.
+                </p>
+              </div>
+            </div>
+
+            <label class="block text-xs font-medium text-gray-600 mb-1">
+              Justificación (opcional)
+            </label>
+            <textarea
+              v-model="revertJustification"
+              rows="2"
+              class="w-full mb-5 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+              placeholder="Motivo de la reversión..."
+            />
+
+            <div class="flex gap-2 justify-end">
+              <button
+                type="button"
+                @click="revertTarget = null"
+                :disabled="revertLoading"
+                class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+              >Cancelar</button>
+              <button
+                type="button"
+                @click="confirmRevert"
+                :disabled="revertLoading"
+                class="px-5 py-2 bg-amber-600 text-white text-sm font-semibold rounded-lg hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                <RefreshCw v-if="revertLoading" class="w-4 h-4 animate-spin" />
+                <Unlock v-else class="w-4 h-4" />
+                {{ revertLoading ? 'Revirtiendo...' : 'Sí, revertir cierre' }}
               </button>
             </div>
           </div>

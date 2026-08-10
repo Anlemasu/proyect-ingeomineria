@@ -10,4 +10,7 @@ export const cashClosingApi = {
 
   list: () =>
     api.get<DailySummary[]>('/cash-closing/'),
+
+  revert: (id: number, justification?: string) =>
+    api.post<DailySummary>(`/cash-closing/${id}/revert/`, { justification }),
 }

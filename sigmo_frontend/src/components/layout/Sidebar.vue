@@ -85,7 +85,7 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
     </div>
 
     <!-- Nav -->
-    <nav class="flex-1 py-3 overflow-y-auto overflow-x-hidden">
+    <nav class="flex-1 py-3 overflow-y-auto overflow-x-hidden dark-scrollbar">
       <template v-for="item in visibleNav" :key="item.type === 'leaf' ? item.path : item.label">
 
         <!-- Leaf item -->
