@@ -1,4 +1,4 @@
-<script setup lang="ts" generic="T extends Record<string, unknown>">
+<script setup lang="ts" generic="T">
 import { ref, computed, watch } from 'vue'
 import {
   useVueTable,

@@ -53,7 +53,7 @@ const totalValue = computed(() =>
 // ── Create form ───────────────────────────────────────────────────────────────
 const createSchema = toTypedSchema(z.object({
   description: z.string().min(1, 'La descripción es requerida').transform(s => s.trim()),
-  value: z.number({ required_error: 'El valor es requerido' }).positive('El valor debe ser mayor a cero'),
+  value: z.number({ error: 'El valor es requerido' }).positive('El valor debe ser mayor a cero'),
   date: z.string().min(1, 'La fecha es requerida'),
 }))
 
@@ -87,7 +87,7 @@ const editingExpense = ref<Expense | null>(null)
 
 const editSchema = toTypedSchema(z.object({
   description: z.string().min(1, 'La descripción es requerida').transform(s => s.trim()),
-  value: z.number({ required_error: 'El valor es requerido' }).positive('El valor debe ser mayor a cero'),
+  value: z.number({ error: 'El valor es requerido' }).positive('El valor debe ser mayor a cero'),
   date: z.string().min(1, 'La fecha es requerida'),
 }))
 

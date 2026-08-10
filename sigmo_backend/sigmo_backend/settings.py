@@ -131,8 +131,13 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 
+# Mismo patrón que ALLOWED_HOSTS: hardcodeado a localhost rompía toda
+# petición del frontend en producción (bloqueo CORS silencioso — el
+# navegador ni siquiera muestra el error real en la mayoría de los casos).
+# Se lee de env, separado por comas, con el valor de desarrollo como
+# fallback si no está definida.
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
+    o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',') if o.strip()
 ]
 
 SIMPLE_JWT = {
@@ -184,8 +189,22 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+# Sin esto, `collectstatic` no tiene dónde escribir y el admin de Django
+# queda sin estilos en producción (DEBUG=False apaga el servido de
+# estáticos que Django usa solo en desarrollo).
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 AUTH_USER_MODEL = 'users.User'
+
+# Endurecimiento HTTPS: apagado por defecto (False/0) para no romper el
+# acceso si el servidor de producción todavía no tiene HTTPS terminado ahí
+# (redirects en bucle, cookies que el navegador descarta). Se activa
+# explícitamente vía env una vez el dominio de producción ya sirve HTTPS.
+# Mismo patrón que DEBUG/ALLOWED_HOSTS/CORS_ALLOWED_ORIGINS arriba.
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'False') == 'True'
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
 
 CACHES = {
     'default': {

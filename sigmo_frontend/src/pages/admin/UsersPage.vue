@@ -76,7 +76,7 @@ const createSchema = toTypedSchema(z.object({
   password: passwordRules,
   password_confirm: z.string(),
   role: z.enum(['superuser', 'commercial_admin', 'cashier', 'accountant', 'auditor'], {
-    required_error: 'El rol es requerido',
+    error: 'El rol es requerido',
   }),
 }).refine(data => data.password === data.password_confirm, {
   message: 'Las contraseñas no coinciden',
