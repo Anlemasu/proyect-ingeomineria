@@ -310,12 +310,24 @@ class TripDetailView(APIView):
 
         # RF-36: cashier y commercial_admin solo pueden editar registros del
         # día en curso (mismo nivel en la matriz de roles: CRU, no D).
+        #
+        # Excepción: commercial_admin sí puede ajustar un registro histórico
+        # si el ÚNICO campo que envía es 'observations' — permiso nuevo,
+        # equivalente a lo que ya tiene superuser pero acotado a ese campo
+        # (todo lo demás sigue bloqueado). cashier no entra en esta excepción.
         if request.user.role in SAME_DAY_ONLY_ROLES and not is_registered_today:
-            log_action(request, 'access_denied', 'Trip', object_id=obj.id)
-            return Response(
-                {'error': 'Solo puede modificar registros del día en curso.'},
-                status=status.HTTP_403_FORBIDDEN
+            touched_fields = set(request.data.keys()) - {'justification'}
+            is_commercial_admin_observations_only = (
+                request.user.role == 'commercial_admin'
+                and bool(touched_fields)
+                and touched_fields.issubset({'observations'})
             )
+            if not is_commercial_admin_observations_only:
+                log_action(request, 'access_denied', 'Trip', object_id=obj.id)
+                return Response(
+                    {'error': 'Solo puede modificar registros del día en curso.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
 
         # Capturar datos anteriores antes de modificar (RF-38)
         previous = dict(TripReadSerializer(obj).data)  # type: ignore

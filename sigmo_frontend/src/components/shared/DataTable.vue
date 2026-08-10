@@ -10,7 +10,9 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/vue-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Copy } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
+import { copyTableToClipboard } from '@/utils/copyTableToClipboard'
 
 const props = defineProps<{
   columns: ColumnDef<T>[]
@@ -26,6 +28,7 @@ const pageIndex = ref(0)
 const table = useVueTable({
   get data() { return props.data },
   get columns() { return props.columns },
+  defaultColumn: { size: 150, minSize: 100 },
   getCoreRowModel: getCoreRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
   getPaginationRowModel: getPaginationRowModel(),
@@ -56,6 +59,17 @@ const pageCount = computed(() => table.getPageCount())
 // Reset to first page when page size or data changes
 watch(pageSize, () => { pageIndex.value = 0 })
 watch(() => props.data, () => { pageIndex.value = 0 })
+
+const tableEl = ref<HTMLTableElement | null>(null)
+async function handleCopy() {
+  if (!tableEl.value) return
+  try {
+    await copyTableToClipboard(tableEl.value)
+    toast.success('Tabla copiada al portapapeles')
+  } catch {
+    toast.error('No se pudo copiar la tabla')
+  }
+}
 </script>
 
 <template>
@@ -76,16 +90,25 @@ watch(() => props.data, () => { pageIndex.value = 0 })
         <option :value="50">50 por página</option>
       </select>
       <slot name="filters" />
+      <button
+        type="button"
+        @click="handleCopy"
+        class="ml-auto flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+        title="Copiar tabla al portapapeles"
+      >
+        <Copy class="w-4 h-4" />Copiar
+      </button>
     </div>
 
     <div class="border border-gray-200 rounded-lg overflow-auto bg-white max-h-[65vh]">
-      <table class="w-full text-sm">
+      <table ref="tableEl" class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
           <tr>
             <th
               v-for="header in table.getHeaderGroups()[0].headers"
               :key="header.id"
-              class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider"
+              :style="{ width: header.getSize() + 'px', minWidth: header.getSize() + 'px' }"
+              class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"
               :class="header.column.getCanSort() ? 'cursor-pointer select-none' : ''"
               @click="header.column.getToggleSortingHandler()?.($event)"
             >
@@ -121,7 +144,12 @@ watch(() => props.data, () => { pageIndex.value = 0 })
               :key="row.id"
               class="border-b border-gray-100 hover:bg-gray-50 transition-colors"
             >
-              <td v-for="cell in row.getVisibleCells()" :key="cell.id" class="px-4 py-3 text-gray-700">
+              <td
+                v-for="cell in row.getVisibleCells()"
+                :key="cell.id"
+                :style="{ width: cell.column.getSize() + 'px', minWidth: cell.column.getSize() + 'px' }"
+                class="px-4 py-3 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis"
+              >
                 <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
               </td>
             </tr>

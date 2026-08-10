@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 
 import {
-  RefreshCw, Pencil, Ban, CheckCircle, AlertTriangle, Search,
+  RefreshCw, Pencil, Ban, CheckCircle, AlertTriangle, Search, Copy, Printer,
 } from 'lucide-vue-next'
 
 import PageHeader       from '@/components/shared/PageHeader.vue'
@@ -22,6 +22,8 @@ import { useAuthStore }      from '@/stores/auth.store'
 import { todayBogota }       from '@/utils/formatDate'
 import { formatCurrency }    from '@/utils/formatCurrency'
 import { getApiErrorMessage } from '@/utils/handleApiError'
+import { copyTableToClipboard } from '@/utils/copyTableToClipboard'
+import { printAdjustmentRecord } from '@/utils/printAdjustmentRecord'
 import type { Trip } from '@/types'
 
 const authStore    = useAuthStore()
@@ -29,9 +31,13 @@ const queryClient  = useQueryClient()
 
 const role          = computed(() => authStore.user?.role ?? '')
 const isSuperuser   = computed(() => role.value === 'superuser')
+const isCommercialAdmin = computed(() => role.value === 'commercial_admin')
 const canAnnul      = computed(() => role.value === 'superuser' || role.value === 'commercial_admin')
 // Igual que en el formulario de registro: solo superuser/commercial_admin pueden mover la fecha del viaje
 const canChangeDate = computed(() => role.value === 'superuser' || role.value === 'commercial_admin')
+// RF-37 ampliado: commercial_admin también puede CONSULTAR fechas pasadas,
+// pero solo podrá editar el campo Observaciones (ver observationsOnlyMode).
+const canViewHistorical = computed(() => isSuperuser.value || isCommercialAdmin.value)
 
 const today = todayBogota()
 
@@ -47,6 +53,11 @@ const { data: tripsData, isLoading, refetch } = useQuery({
 })
 const trips = computed(() => tripsData.value ?? [])
 const isHistoricalView = computed(() => selectedDate.value !== today)
+// commercial_admin en vista histórica: solo puede editar Observaciones,
+// todo lo demás del drawer queda bloqueado (superuser sigue sin restricción).
+const observationsOnlyMode = computed(() =>
+  isHistoricalView.value && isCommercialAdmin.value && !isSuperuser.value
+)
 
 // ── Búsqueda por número de vale ───────────────────────────────────────────────
 const voucherSearch = ref('')
@@ -93,6 +104,7 @@ const editPayment       = ref<number | undefined>(undefined)
 const editValue         = ref<number | undefined>(undefined)
 const editDate          = ref('')
 const editExtern        = ref('')
+const editObservations  = ref('')
 const editJustification = ref('')
 const editLoading       = ref(false)
 
@@ -106,6 +118,7 @@ function openEdit(trip: Trip) {
   editValue.value         = parseFloat(trip.value)
   editDate.value          = trip.date
   editExtern.value        = trip.extern_voucher_num ?? ''
+  editObservations.value  = trip.observations ?? ''
   editJustification.value = ''
 }
 
@@ -217,6 +230,9 @@ async function saveEdit() {
     const currentExtern = orig.extern_voucher_num ?? ''
     if (editExtern.value !== currentExtern) patch.extern_voucher_num = editExtern.value.trim() || null
 
+    const currentObservations = orig.observations ?? ''
+    if (editObservations.value !== currentObservations) patch.observations = editObservations.value.trim() || null
+
     if (Object.keys(patch).length === 0) {
       toast.info('Sin cambios que guardar')
       editTrip.value = null
@@ -294,6 +310,22 @@ async function confirmAnnul() {
     annulLoading.value = false
   }
 }
+
+// ── Copiar tabla / imprimir registro ──────────────────────────────────────────
+const tableEl = ref<HTMLTableElement | null>(null)
+async function handleCopy() {
+  if (!tableEl.value) return
+  try {
+    await copyTableToClipboard(tableEl.value)
+    toast.success('Tabla copiada al portapapeles')
+  } catch {
+    toast.error('No se pudo copiar la tabla')
+  }
+}
+
+function handlePrint(trip: Trip) {
+  printAdjustmentRecord(trip)
+}
 </script>
 
 <template>
@@ -316,7 +348,7 @@ async function confirmAnnul() {
         />
       </div>
       <input
-        v-if="isSuperuser"
+        v-if="canViewHistorical"
         v-model="selectedDate"
         type="date"
         :max="today"
@@ -333,6 +365,14 @@ async function confirmAnnul() {
       >
         <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-gold-600' : ''" />
       </button>
+      <button
+        type="button"
+        @click="handleCopy"
+        class="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+        title="Copiar tabla al portapapeles"
+      >
+        <Copy class="w-4 h-4" />Copiar
+      </button>
       <span class="text-xs text-gray-400 sm:ml-auto">
         {{ filteredTrips.length }} viaje{{ filteredTrips.length !== 1 ? 's' : '' }} —
         {{ filteredTrips.filter(t => t.state).length }} activo{{ filteredTrips.filter(t => t.state).length !== 1 ? 's' : '' }}
@@ -341,18 +381,18 @@ async function confirmAnnul() {
 
     <!-- Tabla de viajes -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+      <div class="overflow-auto max-h-[65vh]">
+        <table ref="tableEl" class="w-full text-sm">
           <thead>
-            <tr class="bg-gray-50 border-b border-gray-100">
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">N° Vale</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Placa</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Material</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Medio de pago</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Estado</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Acciones</th>
+            <tr class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[90px]">N° Vale</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide min-w-[160px]">Cliente</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[100px]">Placa</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[140px]">Material</th>
+              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[120px]">Valor</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[130px]">Medio de pago</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[100px]">Estado</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[110px]">Acciones</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
@@ -374,25 +414,25 @@ async function confirmAnnul() {
               class="hover:bg-gray-50 transition-colors"
               :class="!trip.state ? 'opacity-40' : ''"
             >
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 whitespace-nowrap">
                 <span class="font-mono font-bold text-gold-800">#{{ trip.voucher_num }}</span>
               </td>
-              <td class="px-4 py-3 font-medium text-gray-900 max-w-[150px] truncate">
+              <td class="px-4 py-3 font-medium text-gray-900 max-w-[220px] truncate" :title="trip.client_detail?.name ?? '—'">
                 {{ trip.client_detail?.name ?? '—' }}
               </td>
-              <td class="px-4 py-3 font-mono tracking-wider text-gray-800">
+              <td class="px-4 py-3 font-mono tracking-wider text-gray-800 whitespace-nowrap">
                 {{ trip.vehicle_detail?.plaque ?? '—' }}
               </td>
-              <td class="px-4 py-3 text-xs text-gray-600">
+              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                 {{ trip.material_type_detail?.name ?? '—' }}
               </td>
-              <td class="px-4 py-3 text-right font-semibold text-gray-900">
+              <td class="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
                 {{ formatCurrency(trip.value) }}
               </td>
-              <td class="px-4 py-3 text-xs text-gray-600">
+              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                 {{ trip.payment_detail?.name ?? '—' }}
               </td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 whitespace-nowrap">
                 <span
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
                   :class="trip.state
@@ -404,9 +444,10 @@ async function confirmAnnul() {
                   {{ trip.state ? 'Activo' : 'Anulado' }}
                 </span>
               </td>
-              <td class="px-4 py-3">
-                <div v-if="trip.state" class="flex items-center gap-0.5">
+              <td class="px-4 py-3 whitespace-nowrap">
+                <div class="flex items-center gap-0.5">
                   <button
+                    v-if="trip.state"
                     type="button"
                     @click="openEdit(trip)"
                     class="p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
@@ -415,7 +456,7 @@ async function confirmAnnul() {
                     <Pencil class="w-4 h-4" />
                   </button>
                   <button
-                    v-if="canAnnul"
+                    v-if="trip.state && canAnnul && !observationsOnlyMode"
                     type="button"
                     @click="openAnnul(trip)"
                     class="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
@@ -423,8 +464,15 @@ async function confirmAnnul() {
                   >
                     <Ban class="w-4 h-4" />
                   </button>
+                  <button
+                    type="button"
+                    @click="handlePrint(trip)"
+                    class="p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
+                    title="Imprimir comprobante"
+                  >
+                    <Printer class="w-4 h-4" />
+                  </button>
                 </div>
-                <span v-else class="text-xs text-gray-400 px-1.5">—</span>
               </td>
             </tr>
           </tbody>
@@ -442,9 +490,9 @@ async function confirmAnnul() {
         leave-from-class="opacity-100"
         leave-to-class="opacity-0"
       >
-        <div v-if="editTrip" class="fixed inset-0 z-50 flex justify-end">
+        <div v-if="editTrip" class="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/30" @click="editTrip = null" />
-          <div class="relative bg-white w-full max-w-sm shadow-2xl flex flex-col">
+          <div class="relative bg-white w-full max-w-sm lg:max-w-2xl max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
               <div>
                 <h3 class="text-sm font-semibold text-gray-800">
@@ -461,7 +509,13 @@ async function confirmAnnul() {
               >✕</button>
             </div>
 
-            <div class="p-6 space-y-5 flex-1 overflow-y-auto">
+            <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-5 content-start flex-1 overflow-y-auto">
+              <!-- Aviso: commercial_admin en histórico solo edita Observaciones -->
+              <div v-if="observationsOnlyMode" class="lg:col-span-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700 flex items-start gap-2">
+                <AlertTriangle class="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>Registro histórico: solo puede editar el campo <strong>Observaciones</strong>. El resto de los campos está bloqueado.</span>
+              </div>
+
               <!-- Cliente -->
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Cliente</label>
@@ -469,6 +523,7 @@ async function confirmAnnul() {
                   :options="clientOptions"
                   v-model="editClient"
                   placeholder="Buscar cliente..."
+                  :disabled="observationsOnlyMode"
                 />
               </div>
 
@@ -479,6 +534,7 @@ async function confirmAnnul() {
                   :options="originOptions"
                   v-model="editOrigin"
                   placeholder="Buscar origen..."
+                  :disabled="observationsOnlyMode"
                 />
               </div>
 
@@ -487,7 +543,11 @@ async function confirmAnnul() {
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Tipo de material</label>
                 <select
                   v-model="editMaterial"
-                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
+                  :disabled="observationsOnlyMode"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  :class="observationsOnlyMode
+                    ? 'border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed'
+                    : 'border-gray-300 bg-white'"
                 >
                   <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
                 </select>
@@ -500,6 +560,7 @@ async function confirmAnnul() {
                   :options="vehicleOptions"
                   v-model="editVehicle"
                   placeholder="Buscar placa..."
+                  :disabled="observationsOnlyMode"
                 />
               </div>
 
@@ -509,9 +570,9 @@ async function confirmAnnul() {
                 <input
                   v-model="editDate"
                   type="date"
-                  :readonly="!canChangeDate"
+                  :readonly="!canChangeDate || observationsOnlyMode"
                   class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-                  :class="canChangeDate
+                  :class="canChangeDate && !observationsOnlyMode
                     ? 'border-gray-300 bg-white'
                     : 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'"
                 />
@@ -523,7 +584,11 @@ async function confirmAnnul() {
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Medio de pago</label>
                 <select
                   v-model="editPayment"
-                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
+                  :disabled="observationsOnlyMode"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  :class="observationsOnlyMode
+                    ? 'border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed'
+                    : 'border-gray-300 bg-white'"
                 >
                   <option v-for="p in paymentList" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
@@ -532,7 +597,7 @@ async function confirmAnnul() {
               <!-- Info anticipo (auto-asignado, igual que en el registro) -->
               <div
                 v-if="editIsAdvancePayment"
-                class="text-xs px-3 py-2 rounded-lg border"
+                class="lg:col-span-2 text-xs px-3 py-2 rounded-lg border"
                 :class="editActiveAdvance
                   ? 'bg-green-50 text-green-700 border-green-200'
                   : 'bg-red-50 text-red-700 border-red-200'"
@@ -549,7 +614,7 @@ async function confirmAnnul() {
 
               <!-- Saldo insuficiente: cambio de cliente, o valor/medio de pago
                    por encima del saldo del mismo cliente/anticipo (9.7A) -->
-              <div v-if="editNeedsJustification" class="px-3 py-2 rounded-lg bg-red-50 border border-red-200">
+              <div v-if="editNeedsJustification" class="lg:col-span-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
                 <div class="flex items-start gap-2 text-red-700 text-xs">
                   <AlertTriangle class="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <div class="space-y-0.5">
@@ -586,7 +651,7 @@ async function confirmAnnul() {
               <!-- Valor -->
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Valor del servicio</label>
-                <CurrencyInput v-model="editValue" />
+                <CurrencyInput v-model="editValue" :disabled="observationsOnlyMode" />
               </div>
 
               <!-- Vale externo -->
@@ -597,7 +662,23 @@ async function confirmAnnul() {
                   type="text"
                   maxlength="20"
                   placeholder="Opcional"
-                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  :readonly="observationsOnlyMode"
+                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  :class="observationsOnlyMode
+                    ? 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'
+                    : 'border-gray-300 bg-white'"
+                />
+              </div>
+
+              <!-- Observaciones (siempre editable, incluso en modo solo-observaciones) -->
+              <div class="lg:col-span-2">
+                <label class="block text-xs font-medium text-gray-700 mb-1.5">Observaciones</label>
+                <textarea
+                  v-model="editObservations"
+                  rows="3"
+                  maxlength="500"
+                  placeholder="Observaciones opcionales (máx. 500 caracteres)"
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none"
                 />
               </div>
             </div>

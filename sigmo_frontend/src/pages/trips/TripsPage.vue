@@ -344,6 +344,7 @@ const onSubmit = handleSubmit(async (values) => {
       value:              values.value,
       date:               values.date,
       extern_voucher_num: values.extern_voucher_num?.trim() || null,
+      observations:       values.observations?.trim() || null,
       ...(forceSubmit.value && justification.value.trim()
         ? { force: true, justification: justification.value.trim() }
         : {}),
@@ -813,14 +814,14 @@ const onSubmit = handleSubmit(async (values) => {
         leave-from-class="opacity-100"
         leave-to-class="opacity-0"
       >
-        <div v-if="detailTrip" class="fixed inset-0 z-50 flex justify-end">
+        <div v-if="detailTrip" class="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/30" @click="detailTrip = null" />
           <Transition
-            enter-active-class="transition-transform duration-200"
-            enter-from-class="translate-x-full"
-            enter-to-class="translate-x-0"
+            enter-active-class="transition-all duration-200"
+            enter-from-class="opacity-0 scale-95"
+            enter-to-class="opacity-100 scale-100"
           >
-            <div v-if="detailTrip" class="relative bg-white w-full max-w-md shadow-2xl flex flex-col">
+            <div v-if="detailTrip" class="relative bg-white w-full max-w-md lg:max-w-xl max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
               <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
                 <div>
                   <h3 class="text-sm font-semibold text-gray-800">Vale #{{ detailTrip.voucher_num }}</h3>

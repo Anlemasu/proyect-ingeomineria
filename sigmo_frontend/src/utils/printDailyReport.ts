@@ -2,6 +2,7 @@ import type { DailyReportData } from '@/types'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime } from '@/utils/formatDate'
 import { format } from 'date-fns'
+import { openCenteredWindow } from '@/utils/openCenteredWindow'
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '—')
@@ -171,7 +172,7 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
 
 export function printDailyReport(date: string, data: DailyReportData): void {
   const html = generateDailyReportHtml(date, data)
-  const win = window.open('', '_blank', 'width=1100,height=750')
+  const win = openCenteredWindow(1100, 750)
   if (!win) return
   win.document.write(html)
   win.document.close()

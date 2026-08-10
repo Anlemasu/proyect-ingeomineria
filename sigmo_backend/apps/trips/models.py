@@ -41,6 +41,7 @@ class Trip(models.Model):
     # registro sin saldo suficiente; se conserva aunque el viaje después se
     # liquide o se anule (es un dato histórico de por qué nació pendiente).
     pending_debt_justification = models.TextField(null=True, blank=True)
+    observations = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'TRIP'

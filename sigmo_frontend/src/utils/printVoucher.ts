@@ -1,6 +1,7 @@
 import type { Trip } from '@/types'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { format, parseISO } from 'date-fns'
+import { openCenteredWindow } from '@/utils/openCenteredWindow'
 
 function generateVoucherHtml(trip: Trip, pin: string, observations?: string | null): string {
   const now = new Date()
@@ -69,7 +70,7 @@ function generateVoucherHtml(trip: Trip, pin: string, observations?: string | nu
 
 export function printVoucher(trip: Trip, pin: string, observations?: string | null): void {
   const html = generateVoucherHtml(trip, pin, observations)
-  const win = window.open('', '_blank', 'width=420,height=650')
+  const win = openCenteredWindow(420, 650)
   if (!win) return
   win.document.write(html)
   win.document.close()

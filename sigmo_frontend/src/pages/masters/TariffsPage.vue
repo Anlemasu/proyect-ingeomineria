@@ -205,9 +205,9 @@ function openHistory(client: Client) {
 
     <!-- History Drawer -->
     <teleport to="body">
-      <div v-if="historyDrawer.open" class="fixed inset-0 z-50 flex justify-end">
+      <div v-if="historyDrawer.open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/40" @click="historyDrawer.open = false" />
-        <div class="relative bg-white w-full max-w-lg h-full overflow-y-auto shadow-xl">
+        <div class="relative bg-white w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl shadow-xl">
           <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 class="text-lg font-semibold">Historial de tarifas</h2>
             <button @click="historyDrawer.open = false" class="p-1 text-gray-400 hover:text-gray-600">

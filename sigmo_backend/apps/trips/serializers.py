@@ -43,6 +43,7 @@ class TripReadSerializer(serializers.ModelSerializer):
             'summary',
             'is_pending_debt',
             'pending_debt_justification',
+            'observations',
         ]
 
     def get_is_pending_debt(self, obj):
@@ -67,6 +68,7 @@ class TripWriteSerializer(serializers.ModelSerializer):
             'extern_voucher_num',
             'date',
             'state',
+            'observations',
         ]
 
     def validate_value(self, value):

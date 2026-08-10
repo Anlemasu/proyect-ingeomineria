@@ -8,7 +8,7 @@ import {
   type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState,
 } from '@tanstack/vue-table'
 import {
-  Search, FilterX, SlidersHorizontal, FileSpreadsheet, Printer,
+  Search, FilterX, SlidersHorizontal, FileSpreadsheet, Printer, Copy,
   ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight,
 } from 'lucide-vue-next'
 
@@ -27,6 +27,7 @@ import { formatDate, formatTime } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { printGeneralQuery } from '@/utils/printReport'
 import { exportGeneralQueryExcel } from '@/utils/exportGeneralQueryExcel'
+import { copyTableToClipboard } from '@/utils/copyTableToClipboard'
 import type { Trip, UserRole } from '@/types'
 
 // ── Configuración de columnas (rutas verificadas contra TripReadSerializer, Parte 8) ──
@@ -70,6 +71,33 @@ const COLUMN_CONFIG: ColumnConfigItem[] = [
 ]
 
 const STORAGE_KEY = 'sigmo_columns_general'
+
+// Ancho mínimo por columna — evita que el texto se sobreponga cuando hay
+// muchas columnas visibles a la vez (ver ajuste de tablas, punto 1).
+const COLUMN_MIN_WIDTH: Partial<Record<ColumnKey, number>> = {
+  voucher_num: 90,
+  date: 110,
+  date_register: 90,
+  'client_detail.name': 200,
+  'origin_site_detail.name': 180,
+  'vehicle_detail.plaque': 100,
+  'vehicle_detail.dumper_detail.ambiental_pin': 130,
+  'material_type_detail.name': 160,
+  'vehicle_detail.vehicle_type_detail.name': 150,
+  'vehicle_detail.vehicle_type_detail.capacity': 120,
+  'payment_detail.name': 140,
+  value: 130,
+  extern_voucher_num: 130,
+  state: 100,
+  invoice_number: 110,
+  certification_state: 140,
+  certification_num: 130,
+  advance: 140,
+  summary: 140,
+}
+function columnMinWidth(columnId: string): number {
+  return COLUMN_MIN_WIDTH[columnId as ColumnKey] ?? 120
+}
 
 // ── Rol actual y columnas permitidas ───────────────────────────────────────────
 const authStore = useAuthStore()
@@ -380,6 +408,17 @@ function handleExportExcel() {
 function handleExportPdf() {
   printGeneralQuery(sortedRows.value, visibleColumnConfigs.value, filterSummaryText.value, invoiceNumberMap.value)
 }
+
+const tableEl = ref<HTMLTableElement | null>(null)
+async function handleCopy() {
+  if (!tableEl.value) return
+  try {
+    await copyTableToClipboard(tableEl.value)
+    toast.success('Tabla copiada al portapapeles')
+  } catch {
+    toast.error('No se pudo copiar la tabla')
+  }
+}
 </script>
 
 <template>
@@ -515,6 +554,15 @@ function handleExportPdf() {
         >
           <Printer class="w-4 h-4" /> Exportar PDF
         </button>
+        <button
+          type="button"
+          @click="handleCopy"
+          :disabled="totalFilteredCount === 0"
+          class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          title="Copiar tabla al portapapeles"
+        >
+          <Copy class="w-4 h-4" /> Copiar
+        </button>
       </div>
     </div>
 
@@ -531,13 +579,14 @@ function handleExportPdf() {
 
     <!-- ── Tabla ──────────────────────────────────────────────────────────── -->
     <div v-else class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+      <div class="overflow-auto max-h-[65vh]">
+        <table ref="tableEl" class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
+            <tr class="sticky top-0 z-20 bg-gray-50">
               <th
                 v-for="header in table.getHeaderGroups()[0].headers"
                 :key="header.id"
+                :style="{ minWidth: columnMinWidth(header.id) + 'px' }"
                 class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"
                 :class="header.column.getCanSort() ? 'cursor-pointer select-none' : ''"
                 @click="header.column.getToggleSortingHandler()?.($event)"
@@ -552,7 +601,7 @@ function handleExportPdf() {
                 </div>
               </th>
             </tr>
-            <tr class="bg-white border-b border-gray-200">
+            <tr class="sticky top-[37px] z-20 bg-white border-b border-gray-200" data-copy-skip>
               <th v-for="header in table.getHeaderGroups()[0].headers" :key="`f-${header.id}`" class="px-3 py-1.5">
                 <input
                   type="text"
@@ -586,7 +635,12 @@ function handleExportPdf() {
                 class="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                 :class="!row.original.state ? 'opacity-50 line-through' : ''"
               >
-                <td v-for="cell in row.getVisibleCells()" :key="cell.id" class="px-3 py-2 text-gray-700 whitespace-nowrap">
+                <td
+                  v-for="cell in row.getVisibleCells()"
+                  :key="cell.id"
+                  :style="{ minWidth: columnMinWidth(cell.column.id) + 'px' }"
+                  class="px-3 py-2 text-gray-700 whitespace-nowrap"
+                >
                   <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
                 </td>
               </tr>

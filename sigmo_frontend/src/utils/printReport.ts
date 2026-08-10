@@ -2,6 +2,7 @@ import type { Trip } from '@/types'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime } from '@/utils/formatDate'
 import { format } from 'date-fns'
+import { openCenteredWindow } from '@/utils/openCenteredWindow'
 
 interface ColumnLite {
   key: string
@@ -114,7 +115,7 @@ export function printGeneralQuery(
   invoiceNumberMap: Record<number, string>,
 ): void {
   const html = generateGeneralQueryHtml(rows, columns, filterSummary, invoiceNumberMap)
-  const win = window.open('', '_blank', 'width=1100,height=750')
+  const win = openCenteredWindow(1100, 750)
   if (!win) return
   win.document.write(html)
   win.document.close()

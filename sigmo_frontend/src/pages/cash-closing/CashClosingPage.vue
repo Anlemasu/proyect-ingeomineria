@@ -448,9 +448,9 @@ const detailRevenue = computed(() =>
         leave-from-class="opacity-100"
         leave-to-class="opacity-0"
       >
-        <div v-if="detailSummary" class="fixed inset-0 z-50 flex justify-end">
+        <div v-if="detailSummary" class="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/30" @click="detailSummary = null" />
-          <div class="relative bg-white w-full max-w-sm shadow-2xl flex flex-col">
+          <div class="relative bg-white w-full max-w-sm max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
               <div>
                 <h3 class="text-sm font-semibold text-gray-800">

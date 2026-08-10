@@ -145,6 +145,7 @@ export interface Trip {
   advance: number | null
   invoice: number | null
   summary: number | null
+  observations: string | null
 }
 
 export interface AdvanceMovement {
