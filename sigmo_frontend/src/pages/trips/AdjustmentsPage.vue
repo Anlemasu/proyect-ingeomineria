@@ -541,16 +541,12 @@ function handlePrint(trip: Trip) {
               <!-- Tipo de material -->
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Tipo de material</label>
-                <select
+                <SearchableSelect
+                  :options="materialOptions"
                   v-model="editMaterial"
+                  placeholder="Buscar material..."
                   :disabled="observationsOnlyMode"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-                  :class="observationsOnlyMode
-                    ? 'border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed'
-                    : 'border-gray-300 bg-white'"
-                >
-                  <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
-                </select>
+                />
               </div>
 
               <!-- Vehículo -->
@@ -582,16 +578,12 @@ function handlePrint(trip: Trip) {
               <!-- Medio de pago -->
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Medio de pago</label>
-                <select
+                <SearchableSelect
+                  :options="paymentList"
                   v-model="editPayment"
+                  placeholder="Buscar medio de pago..."
                   :disabled="observationsOnlyMode"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-                  :class="observationsOnlyMode
-                    ? 'border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed'
-                    : 'border-gray-300 bg-white'"
-                >
-                  <option v-for="p in paymentList" :key="p.id" :value="p.id">{{ p.name }}</option>
-                </select>
+                />
               </div>
 
               <!-- Info anticipo (auto-asignado, igual que en el registro) -->

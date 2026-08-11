@@ -1,4 +1,5 @@
 import random
+import string
 from datetime import timedelta, time
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -11,7 +12,7 @@ from apps.cash_closing.services import execute_close, AlreadyClosedError
 from apps.clients.models import Client
 from apps.expenses.models import Expense
 from apps.invoices.models import Invoice
-from apps.masters.models import Vehicle, MaterialType, OriginSite, PaymentMethod, Tariff
+from apps.masters.models import City, MaterialType, OriginSite, PaymentMethod, Tariff, Vehicle, VehicleType
 from apps.trips.models import Trip
 from apps.users.models import User
 
@@ -20,22 +21,104 @@ EXPENSE_DESCRIPTIONS = [
     'Alimentación conductor', 'Lavado de vehículo', 'Imprevistos operativos',
 ]
 
+CITY_NAMES = ['BOGOTÁ', 'MEDELLÍN']
+ORIGIN_SITE_NAMES = ['Proyecto Norte', 'Proyecto Sur', 'Zona Industrial']
+MATERIAL_TYPE_NAMES = ['Escombros', 'Material de excavación', 'Tierra negra', 'Lodo', 'Arena']
+VEHICLE_TYPES = [('Volqueta Sencilla', Decimal('7.00')), ('Volqueta Doble', Decimal('15.00')), ('4 Manos', Decimal('20.00'))]
+PAYMENT_METHODS = [('Efectivo', False), ('Transferencia', False), ('Anticipo', True)]
+CLIENT_SEEDS = [
+    ('CLIENTE DEMO 1', 'CLI1', '9001112223'),
+    ('CLIENTE DEMO 2', 'CLI2', '9004445556'),
+    ('CLIENTE DEMO 3', 'CLI3', '9007778889'),
+]
+
 
 def round_money(value) -> Decimal:
     return Decimal(value).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+
+
+def generate_plaque(existing: set) -> str:
+    while True:
+        candidate = ''.join(random.choices(string.ascii_uppercase, k=3)) + ''.join(random.choices(string.digits, k=3))
+        if candidate not in existing:
+            existing.add(candidate)
+            return candidate
 
 
 class Command(BaseCommand):
     help = (
         'Genera datos históricos de prueba (viajes, anticipos consumidos, '
         'gastos, facturas y cierres de caja) reusando la lógica real del '
-        'proyecto. Requiere que ya existan clientes, usuarios y catálogos '
-        '(masters) activos — se recomienda correr clean_test_data antes.'
+        'proyecto. Si no hay clientes/catálogos de masters, los crea desde '
+        'cero (placas formato LLLNNN, sin pines). Requiere usuarios activos '
+        'ya existentes — se recomienda correr clean_test_data antes.'
     )
 
     def add_arguments(self, parser):
         parser.add_argument('--days', type=int, default=60, help='Días hacia atrás a generar (default 60).')
         parser.add_argument('--seed', type=int, default=None, help='Semilla random para reproducibilidad.')
+
+    def _ensure_catalog(self, admin_user, cashier_like):
+        if not City.objects.exists():
+            for name in CITY_NAMES:
+                City.objects.create(name=name)
+            self.stdout.write(f'  {len(CITY_NAMES)} ciudades creadas.')
+
+        if not OriginSite.objects.exists():
+            for name in ORIGIN_SITE_NAMES:
+                OriginSite.objects.create(name=name)
+            self.stdout.write(f'  {len(ORIGIN_SITE_NAMES)} sitios de origen creados.')
+
+        if not MaterialType.objects.exists():
+            for name in MATERIAL_TYPE_NAMES:
+                MaterialType.objects.create(name=name)
+            self.stdout.write(f'  {len(MATERIAL_TYPE_NAMES)} tipos de material creados.')
+
+        if not VehicleType.objects.exists():
+            for name, capacity in VEHICLE_TYPES:
+                VehicleType.objects.create(name=name, capacity=capacity)
+            self.stdout.write(f'  {len(VEHICLE_TYPES)} tipos de vehículo creados.')
+
+        if not PaymentMethod.objects.exists():
+            for name, is_advance in PAYMENT_METHODS:
+                PaymentMethod.objects.create(name=name, is_advance=is_advance)
+            self.stdout.write(f'  {len(PAYMENT_METHODS)} métodos de pago creados.')
+
+        # Placas formato LLLNNN (3 letras + 3 números), sin pin asignado
+        # (dumper=None) — la tabla de pines (PinsDumper) se deja vacía a
+        # propósito, no se crea ningún registro ahí.
+        if not Vehicle.objects.exists():
+            vehicle_types = list(VehicleType.objects.all())
+            existing_plaques = set(Vehicle.objects.values_list('plaque', flat=True))
+            for _ in range(5):
+                Vehicle.objects.create(
+                    plaque=generate_plaque(existing_plaques),
+                    vehicle_type=random.choice(vehicle_types),
+                    dumper=None,
+                )
+            self.stdout.write('  5 vehículos creados (sin pin asignado).')
+
+        if not Tariff.objects.exists():
+            vehicle_types = list(VehicleType.objects.all())
+            base_start = timezone.localdate() - timedelta(days=730)
+            for vt in vehicle_types:
+                Tariff.objects.create(
+                    vehicle_type=vt, value=round_money(vt.capacity * Decimal('20000')),
+                    start_date=base_start, state=True,
+                )
+            self.stdout.write(f'  {len(vehicle_types)} tarifas creadas.')
+
+        if not Client.objects.exists():
+            cities = list(City.objects.all())
+            for name, abrev, nit in CLIENT_SEEDS:
+                Client.objects.create(
+                    user=random.choice(cashier_like), nit=nit, name=name, abrev_name=abrev,
+                    address='CALLE FALSA 123', phone=random.randint(3000000000, 3199999999),
+                    city=random.choice(cities) if cities else None,
+                    facturation_name=name, email=f'{abrev.lower()}@example.com',
+                    validate_certification=True, state=True,
+                )
+            self.stdout.write(f'  {len(CLIENT_SEEDS)} clientes creados.')
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -44,29 +127,25 @@ class Command(BaseCommand):
         if options['seed'] is not None:
             random.seed(options['seed'])
 
-        clients = list(Client.objects.filter(state=True))
-        vehicles = list(Vehicle.objects.filter(vehicle_type__state=True))
-        material_types = list(MaterialType.objects.filter(state=True))
-        origin_sites = list(OriginSite.objects.filter(state=True))
-        payment_methods = list(PaymentMethod.objects.filter(state=True))
         admin_user = User.objects.filter(role='superuser', state=True).order_by('id').first()
         cashier_like = list(User.objects.filter(state=True, role__in=['cashier', 'commercial_admin', 'superuser']))
         accountant_like = list(User.objects.filter(state=True, role__in=['accountant', 'superuser']))
         any_active_user = list(User.objects.filter(state=True))
 
-        missing = [
-            name for name, values in [
-                ('clientes activos', clients), ('vehículos activos', vehicles),
-                ('tipos de material activos', material_types), ('sitios de origen activos', origin_sites),
-                ('métodos de pago activos', payment_methods), ('usuarios activos', any_active_user),
-            ] if not values
-        ]
-        if missing or admin_user is None:
-            if admin_user is None:
-                missing.append('un usuario superuser activo')
+        if admin_user is None or not any_active_user:
             raise CommandError(
-                'Faltan catálogos base para poder sembrar datos históricos: ' + ', '.join(missing) + '.'
+                'No hay usuarios activos (se requiere al menos un superuser activo). '
+                'Este comando no crea usuarios, solo clientes/catálogos/histórico.'
             )
+
+        self.stdout.write('Verificando catálogos base...')
+        self._ensure_catalog(admin_user, cashier_like or any_active_user)
+
+        clients = list(Client.objects.filter(state=True))
+        vehicles = list(Vehicle.objects.filter(vehicle_type__state=True))
+        material_types = list(MaterialType.objects.filter(state=True))
+        origin_sites = list(OriginSite.objects.filter(state=True))
+        payment_methods = list(PaymentMethod.objects.filter(state=True))
 
         tariff_by_vehicle_type = {
             t.vehicle_type_id: t.value
@@ -109,7 +188,7 @@ class Command(BaseCommand):
                         value_ = round_money(random.randint(15, 40) * Decimal('100000'))
                         transfer_num = random.randint(100000, 999999)
                         advance = Advance.objects.create(
-                            client=client, user=random.choice(cashier_like), value=value_,
+                            client=client, user=random.choice(cashier_like or any_active_user), value=value_,
                             transfer_num=transfer_num, date=day,
                             observations='Anticipo de prueba (seed histórico).',
                         )
@@ -195,7 +274,7 @@ class Command(BaseCommand):
             if random.random() >= 0.6:
                 continue
             invoice = Invoice.objects.create(
-                user=random.choice(accountant_like), number=f'FAC-{invoice_seq:05d}',
+                user=random.choice(accountant_like or any_active_user), number=f'FAC-{invoice_seq:05d}',
             )
             invoice_seq += 1
             for pos, trip in enumerate(group_trips, start=1):
@@ -215,7 +294,8 @@ class Command(BaseCommand):
                 self.stderr.write(self.style.WARNING(f'No se pudo cerrar {day}: {exc}'))
 
         self.stdout.write(self.style.SUCCESS(
-            f'Listo. Viajes: {Trip.objects.count()}, Anticipos: {Advance.objects.count()}, '
+            f'Listo. Clientes: {Client.objects.count()}, Vehículos: {Vehicle.objects.count()}, '
+            f'Viajes: {Trip.objects.count()}, Anticipos: {Advance.objects.count()}, '
             f'Facturas: {Invoice.objects.count()}, Gastos: {Expense.objects.count()}, '
             f'Cierres de caja: {closed} (ya existentes/saltados: {skipped}).'
         ))

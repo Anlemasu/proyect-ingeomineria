@@ -9,6 +9,7 @@ import { Plus, Pencil, ToggleLeft, ToggleRight } from 'lucide-vue-next'
 import type { ColumnDef } from '@tanstack/vue-table'
 import DataTable from '@/components/shared/DataTable.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
+import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import { vehicleTypesApi, vehiclesApi } from '@/api/vehicles.api'
@@ -110,6 +111,7 @@ const { data: pinsData } = useQuery({
 })
 const activePins = computed(() => (pinsData.value ?? []).filter((p: PinsDumper) => p.state))
 const activeTypes = computed(() => types.value.filter((t: VehicleType) => t.state))
+const pinOptions = computed(() => activePins.value.map(p => ({ id: p.id, name: `${p.plaque} - ${p.ambiental_pin}` })))
 
 const vehicleSchema = toTypedSchema(z.object({
   plaque: z.string().min(6, 'La placa debe tener 6 caracteres').max(6, 'La placa debe tener 6 caracteres').transform(s => s.trim().toUpperCase()),
@@ -223,18 +225,12 @@ const vehicleColumns: ColumnDef<Vehicle>[] = [
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de vehiculo *</label>
-              <select v-model.number="vehicleType" class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none" :class="vehicleTypeError ? 'border-red-400' : 'border-gray-300'">
-                <option value="">Seleccionar...</option>
-                <option v-for="t in activeTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
-              </select>
+              <SearchableSelect :options="activeTypes" v-model="vehicleType" placeholder="Buscar tipo de vehículo..." />
               <p v-if="vehicleTypeError" class="mt-1 text-xs text-red-600">{{ vehicleTypeError }}</p>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">PIN asociado (opcional)</label>
-              <select v-model.number="dumper" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none">
-                <option :value="null">Sin PIN</option>
-                <option v-for="p in activePins" :key="p.id" :value="p.id">{{ p.plaque }} - {{ p.ambiental_pin }}</option>
-              </select>
+              <SearchableSelect :options="pinOptions" v-model="dumper" placeholder="Sin PIN" clearable />
             </div>
             <div class="flex justify-end gap-3">
               <button type="button" @click="showVehicleModal = false" class="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">Cancelar</button>

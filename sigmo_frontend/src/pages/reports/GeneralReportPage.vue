@@ -446,24 +446,15 @@ async function handleCopy() {
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Tipo de material</label>
-          <select v-model="filters.materialType" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white">
-            <option :value="null">Todos</option>
-            <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
-          </select>
+          <SearchableSelect :options="materialOptions" v-model="filters.materialType" placeholder="Todos" :clearable="true" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Tipo de vehículo</label>
-          <select v-model="filters.vehicleType" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white">
-            <option :value="null">Todos</option>
-            <option v-for="v in vehicleTypeOptions" :key="v.id" :value="v.id">{{ v.name }}</option>
-          </select>
+          <SearchableSelect :options="vehicleTypeOptions" v-model="filters.vehicleType" placeholder="Todos" :clearable="true" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Medio de pago</label>
-          <select v-model="filters.payment" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white">
-            <option :value="null">Todos</option>
-            <option v-for="p in paymentOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
+          <SearchableSelect :options="paymentOptions" v-model="filters.payment" placeholder="Todos" :clearable="true" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Estado de facturación</label>

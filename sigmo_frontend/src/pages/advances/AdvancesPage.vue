@@ -12,6 +12,7 @@ type ARow = Record<string, unknown>
 
 import DataTable from '@/components/shared/DataTable.vue'
 import CurrencyInput from '@/components/shared/CurrencyInput.vue'
+import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import { advancesApi } from '@/api/advances.api'
 import { clientsApi } from '@/api/clients.api'
 import { getApiErrorMessage } from '@/utils/handleApiError'
@@ -264,7 +265,7 @@ const registroColumns: ColumnDef<ARow>[] = [
 ]
 
 // ── Tab 2: Estado de Cuenta ────────────────────────────────────────────────
-const selectedClientId = ref<number | ''>('')
+const selectedClientId = ref<number | null>(null)
 
 const selectedClientAdvances = computed(() =>
   selectedClientId.value
@@ -289,6 +290,60 @@ const selectedClientTotalConsumido = computed(() =>
 const selectedClientBalance = computed(() =>
   selectedClientAdvances.value.reduce((s, a) => s + a.available_balance, 0)
 )
+
+// Resumen de saldos de todos los clientes (vista antes de seleccionar uno)
+type ClientSummaryRow = { client: Client; totalIngresado: number; totalConsumido: number; saldo: number }
+
+const clientsSummary = computed<ClientSummaryRow[]>(() =>
+  clients.value.map(c => {
+    const clientAdvances = advances.value.filter(a => a.client === c.id)
+    const movements = clientAdvances.flatMap(a => a.movements)
+    const totalIngresado = movements
+      .filter(m => m.type_movement === 'ingreso')
+      .reduce((s, m) => s + parseFloat(m.amount), 0)
+    const totalConsumido = movements
+      .filter(m => m.type_movement === 'egreso')
+      .reduce((s, m) => s + parseFloat(m.amount), 0)
+    const saldo = clientAdvances.reduce((s, a) => s + a.available_balance, 0)
+    return { client: c, totalIngresado, totalConsumido, saldo }
+  })
+)
+
+const clientsSummaryColumns: ColumnDef<ARow>[] = [
+  {
+    accessorFn: row => (row as unknown as ClientSummaryRow).client.name,
+    id: 'client_name',
+    header: 'Cliente',
+  },
+  {
+    accessorKey: 'totalIngresado',
+    header: 'Saldo Total',
+    cell: info => formatCurrency(info.getValue() as number),
+  },
+  {
+    accessorKey: 'totalConsumido',
+    header: 'Saldo Ejecutado',
+    cell: info => formatCurrency(info.getValue() as number),
+  },
+  {
+    accessorKey: 'saldo',
+    header: 'Saldo',
+    cell: info => {
+      const val = info.getValue() as number
+      const cls = val > 0 ? 'text-green-600 font-medium' : val < 0 ? 'text-red-600 font-medium' : 'text-gray-400'
+      return h('span', { class: cls }, formatCurrency(val))
+    },
+  },
+  {
+    id: 'actions',
+    header: '',
+    cell: info => h('button', {
+      class: 'p-1 text-gray-400 hover:text-gold-700 transition-colors',
+      title: 'Ver estado de cuenta',
+      onClick: () => { selectedClientId.value = (info.row.original as unknown as ClientSummaryRow).client.id },
+    }, h(Eye, { class: 'w-4 h-4' })),
+  },
+]
 
 type MovementRow = AdvanceMovement & { client_name: string; advance_id: number }
 
@@ -337,7 +392,7 @@ const estadoAdvanceColumns: ColumnDef<ARow>[] = [
 ]
 
 // ── Tab 3: Historial ───────────────────────────────────────────────────────
-const filterClientId = ref<number | ''>('')
+const filterClientId = ref<number | null>(null)
 const filterDateFrom = ref('')
 const filterDateTo = ref('')
 
@@ -455,11 +510,12 @@ function exportHistorial() {
 // ── Cast data para DataTable ───────────────────────────────────────────────
 const advancesRows = computed(() => advances.value as unknown as ARow[])
 const estadoAdvanceRows = computed(() => selectedClientAdvances.value as unknown as ARow[])
+const clientsSummaryRows = computed(() => clientsSummary.value as unknown as ARow[])
 const estadoMovRows = computed(() => selectedClientMovements.value as unknown as ARow[])
 const historialRows = computed(() => allMovements.value as unknown as ARow[])
 
 watch(activeTab, () => {
-  filterClientId.value = ''
+  filterClientId.value = null
   filterDateFrom.value = ''
   filterDateTo.value = ''
 })
@@ -548,13 +604,12 @@ watch(activeTab, () => {
     <div v-else-if="activeTab === 'estado'" class="space-y-6">
       <div class="max-w-xs">
         <label class="block text-sm font-medium text-gray-700 mb-1">Seleccionar cliente</label>
-        <select
+        <SearchableSelect
+          :options="clients"
           v-model="selectedClientId"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-        >
-          <option value="">— Selecciona un cliente —</option>
-          <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
+          placeholder="Buscar cliente..."
+          clearable
+        />
       </div>
 
       <template v-if="selectedClientId">
@@ -612,23 +667,31 @@ watch(activeTab, () => {
         </div>
       </template>
 
-      <div v-else class="flex items-center justify-center h-48 text-gray-400 text-sm">
-        Selecciona un cliente para ver su estado de cuenta.
+      <div v-else>
+        <h3 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+          <FileText class="w-4 h-4 text-gray-400" />
+          Clientes
+          <span class="text-xs font-normal text-gray-400">(clic en el ojo para ver el estado de cuenta)</span>
+        </h3>
+        <DataTable
+          :data="clientsSummaryRows"
+          :columns="clientsSummaryColumns"
+          :is-loading="advancesLoading"
+        />
       </div>
     </div>
 
     <!-- ── Tab 3: Historial ────────────────────────────────────────────── -->
     <div v-else class="space-y-4">
       <div class="flex flex-wrap gap-3">
-        <div>
+        <div class="w-56">
           <label class="block text-xs text-gray-500 mb-1">Cliente</label>
-          <select
+          <SearchableSelect
+            :options="clients"
             v-model="filterClientId"
-            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-          >
-            <option value="">Todos</option>
-            <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
-          </select>
+            placeholder="Todos"
+            clearable
+          />
         </div>
         <div>
           <label class="block text-xs text-gray-500 mb-1">Desde</label>
@@ -649,7 +712,7 @@ watch(activeTab, () => {
         <div class="flex items-end">
           <button
             class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg transition-colors"
-            @click="filterClientId = ''; filterDateFrom = ''; filterDateTo = ''"
+            @click="filterClientId = null; filterDateFrom = ''; filterDateTo = ''"
           >
             Limpiar
           </button>
@@ -824,14 +887,11 @@ watch(activeTab, () => {
             <label class="block text-sm font-medium text-gray-700 mb-1">
               Cliente <span class="text-red-500">*</span>
             </label>
-            <select
+            <SearchableSelect
+              :options="clients"
               v-model="clientId"
-              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-              :class="clientError ? 'border-red-400' : 'border-gray-300'"
-            >
-              <option :value="undefined">— Selecciona un cliente —</option>
-              <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+              placeholder="Buscar cliente..."
+            />
             <p v-if="clientError" class="mt-1 text-xs text-red-500">{{ clientError }}</p>
           </div>
           <div v-else>

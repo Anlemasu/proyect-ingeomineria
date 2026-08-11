@@ -497,13 +497,11 @@ const onSubmit = handleSubmit(async (values) => {
             <label class="block text-xs font-medium text-gray-700 mb-1.5">
               Tipo de material <span class="text-red-500">*</span>
             </label>
-            <select
+            <SearchableSelect
+              :options="materialOptions"
               v-model="materialId"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
-            >
-              <option :value="undefined" disabled>Seleccionar...</option>
-              <option v-for="m in materialOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
-            </select>
+              placeholder="Buscar material..."
+            />
             <p v-if="materialError" class="mt-1 text-xs text-red-500">{{ materialError }}</p>
           </div>
 
@@ -512,13 +510,11 @@ const onSubmit = handleSubmit(async (values) => {
             <label class="block text-xs font-medium text-gray-700 mb-1.5">
               Tipo de vehículo <span class="text-red-500">*</span>
             </label>
-            <select
+            <SearchableSelect
+              :options="vehicleTypeOptions"
               v-model="vehicleTypeId"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
-            >
-              <option :value="undefined" disabled>Seleccionar...</option>
-              <option v-for="vt in vehicleTypeOptions" :key="vt.id" :value="vt.id">{{ vt.name }}</option>
-            </select>
+              placeholder="Buscar tipo de vehículo..."
+            />
             <p v-if="vehicleTypeError" class="mt-1 text-xs text-red-500">{{ vehicleTypeError }}</p>
           </div>
 
@@ -561,13 +557,11 @@ const onSubmit = handleSubmit(async (values) => {
             <label class="block text-xs font-medium text-gray-700 mb-1.5">
               Medio de pago <span class="text-red-500">*</span>
             </label>
-            <select
+            <SearchableSelect
+              :options="paymentList"
               v-model="paymentId"
-              class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
-            >
-              <option :value="undefined" disabled>Seleccionar...</option>
-              <option v-for="p in paymentList" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
+              placeholder="Buscar medio de pago..."
+            />
             <p v-if="paymentError" class="mt-1 text-xs text-red-500">{{ paymentError }}</p>
           </div>
 

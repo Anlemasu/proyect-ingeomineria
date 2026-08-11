@@ -8,6 +8,7 @@ import type { ColumnDef } from '@tanstack/vue-table'
 type ARow = Record<string, unknown>
 
 import DataTable from '@/components/shared/DataTable.vue'
+import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import { tripsApi } from '@/api/trips.api'
 import { invoicesApi } from '@/api/invoices.api'
 import { clientsApi } from '@/api/clients.api'
@@ -51,13 +52,14 @@ const { data: paymentMethodsData } = useQuery({
   queryFn: () => paymentMethodsApi.list().then(r => r.data),
 })
 const paymentMethods = computed(() => paymentMethodsData.value ?? [])
+const invoiceOptions = computed(() => invoices.value.map(i => ({ id: i.id, name: i.number })))
 
 // ── Filtros ────────────────────────────────────────────────────────────────
-const filterClient = ref<number | ''>('')
+const filterClient = ref<number | null>(null)
 const filterDateFrom = ref('')
 const filterDateTo = ref('')
-const filterInvoice = ref<number | ''>('')
-const filterPayment = ref<number | ''>('')
+const filterInvoice = ref<number | null>(null)
+const filterPayment = ref<number | null>(null)
 
 // ── Pendientes (state=true, invoice=null) ──────────────────────────────────
 const pendingTrips = computed<Trip[]>(() => {
@@ -122,14 +124,14 @@ const showInvoiceModal = ref(false)
 const invoiceMode = ref<'new' | 'existing'>('new')
 const invoiceNumber = ref('')
 const invoiceNumberError = ref('')
-const existingInvoiceId = ref<number | ''>('')
+const existingInvoiceId = ref<number | null>(null)
 const isAssigning = ref(false)
 
 function openInvoiceModal() {
   invoiceMode.value = 'new'
   invoiceNumber.value = ''
   invoiceNumberError.value = ''
-  existingInvoiceId.value = ''
+  existingInvoiceId.value = null
   showInvoiceModal.value = true
 }
 
@@ -266,11 +268,11 @@ const invoicedRows = computed(() => invoicedTrips.value as unknown as ARow[])
 
 // Reset filtros al cambiar tab
 watch(activeTab, () => {
-  filterClient.value = ''
+  filterClient.value = null
   filterDateFrom.value = ''
   filterDateTo.value = ''
-  filterInvoice.value = ''
-  filterPayment.value = ''
+  filterInvoice.value = null
+  filterPayment.value = null
   selectedIds.value = new Set()
 })
 </script>
@@ -314,15 +316,14 @@ watch(activeTab, () => {
 
     <!-- ── Filtros comunes ──────────────────────────────────────────────── -->
     <div class="flex flex-wrap gap-3">
-      <div>
+      <div class="w-56">
         <label class="block text-xs text-gray-500 mb-1">Cliente</label>
-        <select
+        <SearchableSelect
+          :options="clients"
           v-model="filterClient"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-        >
-          <option value="">Todos</option>
-          <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
+          placeholder="Todos"
+          clearable
+        />
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">Fecha desde</label>
@@ -341,31 +342,29 @@ watch(activeTab, () => {
         />
       </div>
       <!-- Método de pago (ambas tabs) -->
-      <div>
+      <div class="w-56">
         <label class="block text-xs text-gray-500 mb-1">Medio de pago</label>
-        <select
+        <SearchableSelect
+          :options="paymentMethods"
           v-model="filterPayment"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-        >
-          <option value="">Todos</option>
-          <option v-for="pm in paymentMethods" :key="pm.id" :value="pm.id">{{ pm.name }}</option>
-        </select>
+          placeholder="Todos"
+          clearable
+        />
       </div>
       <!-- Filtro adicional Tab 2 -->
-      <div v-if="activeTab === 'invoiced'">
+      <div v-if="activeTab === 'invoiced'" class="w-56">
         <label class="block text-xs text-gray-500 mb-1">Factura</label>
-        <select
+        <SearchableSelect
+          :options="invoiceOptions"
           v-model="filterInvoice"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-        >
-          <option value="">Todas</option>
-          <option v-for="inv in invoices" :key="inv.id" :value="inv.id">{{ inv.number }}</option>
-        </select>
+          placeholder="Todas"
+          clearable
+        />
       </div>
       <div class="flex items-end">
         <button
           class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg transition-colors"
-          @click="filterClient = ''; filterDateFrom = ''; filterDateTo = ''; filterInvoice = ''; filterPayment = ''"
+          @click="filterClient = null; filterDateFrom = ''; filterDateTo = ''; filterInvoice = null; filterPayment = null"
         >
           Limpiar
         </button>
@@ -584,15 +583,11 @@ watch(activeTab, () => {
             <label class="block text-sm font-medium text-gray-700 mb-1">
               Seleccionar factura <span class="text-red-500">*</span>
             </label>
-            <select
+            <SearchableSelect
+              :options="invoiceOptions"
               v-model="existingInvoiceId"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-            >
-              <option value="">— Selecciona una factura —</option>
-              <option v-for="inv in invoices" :key="inv.id" :value="inv.id">
-                {{ inv.number }}
-              </option>
-            </select>
+              placeholder="Buscar factura..."
+            />
             <p v-if="!invoices.length" class="mt-1 text-xs text-gray-400">No hay facturas registradas aún.</p>
           </div>
 
