@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { LogOut, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-vue-next'
+import { LogOut, ChevronDown, X } from 'lucide-vue-next'
 import { useAuth } from '@/composables/useAuth'
 import { useNavigation } from '@/composables/useNavigation'
 import { useSidebar } from '@/composables/useSidebar'
@@ -10,7 +10,7 @@ import type { NavItem, NavLeaf, NavGroup } from '@/constants/navigation'
 const route = useRoute()
 const { logout } = useAuth()
 const { visibleNav } = useNavigation()
-const { collapsed, isMobileOpen, close } = useSidebar()
+const { collapsed, isMobileOpen, close, toggleCollapsed } = useSidebar()
 
 // Track which groups are open
 const openGroups = ref<Set<string>>(new Set())
@@ -64,18 +64,21 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
   >
     <!-- Logo -->
     <div
-      class="flex items-center justify-between border-b border-stone-800 transition-all duration-300"
-      :class="collapsed ? 'p-4 lg:justify-center' : 'px-5 py-4'"
+      class="flex items-center justify-between lg:justify-center border-b border-stone-800 transition-all duration-300"
+      :class="collapsed ? 'px-2 py-2' : 'px-3 py-2'"
     >
-      <div class="flex items-center gap-2 min-w-0">
+      <button
+        class="flex items-center justify-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
+        :title="collapsed ? 'Expandir menú' : 'Colapsar menú'"
+        @click="toggleCollapsed"
+      >
         <img
           src="/logo_amarillo.jpeg"
           alt="Ingeominería"
-          class="rounded-md flex-shrink-0"
-          :class="collapsed ? 'w-10 h-10 object-cover' : 'h-11 w-auto object-contain'"
+          class="rounded-md flex-shrink-0 object-contain"
+          :class="collapsed ? 'w-11 h-auto' : 'h-16 w-auto'"
         />
-        <span v-if="!collapsed" class="text-white font-bold text-lg truncate">SIGMO</span>
-      </div>
+      </button>
       <button
         class="text-stone-300 hover:text-white lg:hidden"
         @click="close"
@@ -166,7 +169,7 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
       </template>
     </nav>
 
-    <!-- Bottom: collapse toggle + logout -->
+    <!-- Bottom: logout -->
     <div class="border-t border-stone-800 p-2 space-y-1">
       <button
         @click="logout"
@@ -176,17 +179,6 @@ const sidebarWidth = computed(() => collapsed.value ? 'lg:w-16' : 'lg:w-60')
       >
         <LogOut class="w-4 h-4 flex-shrink-0" />
         <span v-if="!collapsed">Cerrar sesión</span>
-      </button>
-
-      <button
-        @click="collapsed = !collapsed"
-        :title="collapsed ? 'Expandir menú' : 'Colapsar menú'"
-        class="hidden lg:flex items-center gap-3 w-full px-3 py-2 rounded-md text-sm text-stone-400 hover:bg-stone-800 hover:text-white transition-colors"
-        :class="collapsed ? 'justify-center' : ''"
-      >
-        <ChevronLeft v-if="!collapsed" class="w-4 h-4" />
-        <ChevronRight v-else class="w-4 h-4" />
-        <span v-if="!collapsed" class="text-xs">Colapsar</span>
       </button>
     </div>
   </aside>
