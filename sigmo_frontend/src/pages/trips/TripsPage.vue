@@ -389,7 +389,7 @@ const onSubmit = handleSubmit(async (values) => {
     <PageHeader title="Registro de Viajes" subtitle="Módulo principal de operación diaria" />
 
     <!-- ── FORMULARIO DE REGISTRO ─────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50">
       <div class="px-6 py-4 border-b border-gray-100">
         <h2 class="text-sm font-semibold text-gray-800">Nuevo Viaje</h2>
       </div>
@@ -669,7 +669,7 @@ const onSubmit = handleSubmit(async (values) => {
     <!-- Modal crear origen -->
     <Teleport to="body">
       <div v-if="showCreateOrigin" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+        <div class="bg-white rounded-xl shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-sm">
           <h3 class="text-sm font-semibold text-gray-800 mb-4">Nuevo origen de material</h3>
           <input
             v-model="newOriginName"
@@ -699,7 +699,7 @@ const onSubmit = handleSubmit(async (values) => {
     </Teleport>
 
     <!-- ── TABLA VIAJES DE HOY ────────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <div>
           <h2 class="text-sm font-semibold text-gray-800">Viajes de hoy — {{ today }}</h2>
@@ -816,7 +816,7 @@ const onSubmit = handleSubmit(async (values) => {
             enter-to-class="opacity-100 scale-100"
           >
             <div v-if="detailTrip" class="relative bg-white w-full max-w-md lg:max-w-xl max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
-              <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+              <div class="px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40 flex items-center justify-between shrink-0">
                 <div>
                   <h3 class="text-sm font-semibold text-gray-800">Vale #{{ detailTrip.voucher_num }}</h3>
                   <p class="text-xs text-gray-500 mt-0.5">{{ formatDate(detailTrip.date_register) }}</p>

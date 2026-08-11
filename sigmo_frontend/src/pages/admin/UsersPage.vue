@@ -336,7 +336,7 @@ const columns: ColumnDef<User>[] = [
     <teleport to="body">
       <div v-if="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="showCreateModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
           <h2 class="text-lg font-semibold mb-5">Nuevo usuario</h2>
           <form @submit.prevent="onCreateSubmit" class="space-y-4" novalidate>
 
@@ -431,7 +431,7 @@ const columns: ColumnDef<User>[] = [
     <teleport to="body">
       <div v-if="showEditModal && editingUser" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="showEditModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
           <h2 class="text-lg font-semibold mb-5">Editar usuario</h2>
           <form @submit.prevent="onEditSubmit" class="space-y-4" novalidate>
 
@@ -486,7 +486,7 @@ const columns: ColumnDef<User>[] = [
     <teleport to="body">
       <div v-if="showResetModal && resetTargetUser" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="showResetModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-md mx-4">
           <h2 class="text-lg font-semibold mb-1">Restablecer contraseña</h2>
           <p class="text-sm text-gray-500 mb-5">
             Establecer nueva contraseña temporal para

@@ -225,7 +225,7 @@ const columns: ColumnDef<Client>[] = [
     <teleport to="body">
       <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="showModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
           <h2 class="text-lg font-semibold mb-5">
             {{ editingClient ? 'Editar cliente' : 'Nuevo cliente' }}
           </h2>
@@ -317,7 +317,7 @@ const columns: ColumnDef<Client>[] = [
 
     <teleport to="body">
       <div v-if="showCreateCity" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+        <div class="bg-white rounded-xl shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-sm">
           <h3 class="text-sm font-semibold text-gray-800 mb-4">Nueva ciudad</h3>
           <input
             v-model="newCityName"

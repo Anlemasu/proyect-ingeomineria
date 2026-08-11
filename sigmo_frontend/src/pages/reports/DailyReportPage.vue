@@ -172,7 +172,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
     </div>
 
     <!-- ── Selector de fecha ──────────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex items-end gap-4 flex-wrap">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6 flex items-end gap-4 flex-wrap">
       <div>
         <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha del reporte</label>
         <input
@@ -201,7 +201,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
     </div>
 
     <!-- ── Día vacío ──────────────────────────────────────────────────────── -->
-    <div v-if="isEmptyDay" class="bg-white rounded-xl border border-gray-200 shadow-sm py-16 flex flex-col items-center justify-center text-center">
+    <div v-if="isEmptyDay" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 py-16 flex flex-col items-center justify-center text-center">
       <CalendarX2 class="w-12 h-12 text-gray-300 mb-3" />
       <p class="text-sm font-medium text-gray-500">Sin actividad registrada para el {{ formatDate(reportDate) }}</p>
     </div>
@@ -228,7 +228,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
       </div>
 
       <!-- ── Desglose por medio de pago ───────────────────────────────────── -->
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-100">
           <h2 class="text-sm font-semibold text-gray-800">Desglose por medio de pago</h2>
         </div>
@@ -266,7 +266,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
       </div>
 
       <!-- ── Viajes del día ───────────────────────────────────────────────── -->
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6">
         <div class="flex items-center gap-2 mb-4">
           <h2 class="text-sm font-semibold text-gray-800">Viajes del día</h2>
           <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">{{ trips.length }}</span>
@@ -275,7 +275,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
       </div>
 
       <!-- ── Gastos del día ───────────────────────────────────────────────── -->
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
           <h2 class="text-sm font-semibold text-gray-800">Gastos del día</h2>
           <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">{{ expenses.length }}</span>
@@ -318,7 +318,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
       </div>
 
       <!-- ── Anticipos consumidos ─────────────────────────────────────────── -->
-      <div v-if="canSeeAdvances" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div v-if="canSeeAdvances" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
           <h2 class="text-sm font-semibold text-gray-800">Anticipos consumidos</h2>
           <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">{{ advancesConsumed.length }}</span>

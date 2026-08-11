@@ -426,7 +426,7 @@ async function handleCopy() {
     <PageHeader title="Consulta de Viajes" description="Consulta libre de viajes registrados, con filtros y columnas configurables" />
 
     <!-- ── Barra de filtros ───────────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6">
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha desde</label>
@@ -563,13 +563,13 @@ async function handleCopy() {
     </div>
 
     <!-- ── Estado sin consulta aún ────────────────────────────────────────── -->
-    <div v-if="!hasQueried" class="bg-white rounded-xl border border-gray-200 shadow-sm py-20 flex flex-col items-center justify-center text-center">
+    <div v-if="!hasQueried" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 py-20 flex flex-col items-center justify-center text-center">
       <Search class="w-12 h-12 text-gray-300 mb-3" />
       <p class="text-sm font-medium text-gray-500">Aplica los filtros y presiona Consultar para ver los resultados.</p>
     </div>
 
     <!-- ── Tabla ──────────────────────────────────────────────────────────── -->
-    <div v-else class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div v-else class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
       <div class="overflow-auto max-h-[65vh]">
         <table ref="tableEl" class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">

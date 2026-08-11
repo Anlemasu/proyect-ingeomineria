@@ -235,7 +235,7 @@ async function confirmValidate() {
           v-for="link in auditorQuickLinks"
           :key="link.path"
           :to="link.path"
-          class="flex items-center gap-3 bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-gold-300 hover:shadow-md transition-all"
+          class="flex items-center gap-3 bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-4 hover:border-gold-300 hover:shadow-lg transition-all"
         >
           <div class="w-9 h-9 rounded-lg bg-gold-50 flex items-center justify-center shrink-0">
             <component :is="link.icon" class="w-4 h-4 text-gold-700" />
@@ -263,7 +263,7 @@ async function confirmValidate() {
           <RefreshCw class="w-3.5 h-3.5" /> Reintentar
         </button>
       </div>
-      <div v-else class="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-50">
+      <div v-else class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 divide-y divide-gray-50">
         <div v-if="recentAuditLoading" class="p-4 space-y-3">
           <div v-for="i in 5" :key="i" class="h-4 bg-gray-100 rounded animate-pulse" />
         </div>
@@ -340,7 +340,7 @@ async function confirmValidate() {
             </div>
           </div>
 
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100">
               <h3 class="text-sm font-semibold text-gray-800">Desglose por medio de pago</h3>
             </div>
@@ -367,7 +367,7 @@ async function confirmValidate() {
             </div>
           </div>
 
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 class="text-sm font-semibold text-gray-800">Últimos viajes registrados hoy</h3>
               <router-link :to="dailySummaryLinkTarget" class="text-xs text-gold-700 hover:text-gold-800 font-medium">
@@ -425,11 +425,11 @@ async function confirmValidate() {
       <div v-else-if="advancesLoading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div v-for="i in 3" :key="i" class="h-32 bg-gray-100 rounded-xl animate-pulse" />
       </div>
-      <div v-else-if="lowBalanceAdvances.length === 0" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-sm text-gray-400">
+      <div v-else-if="lowBalanceAdvances.length === 0" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6 text-center text-sm text-gray-400">
         Sin anticipos próximos a agotarse.
       </div>
       <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div v-for="{ advance: a, percent } in lowBalanceAdvances" :key="a.id" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+        <div v-for="{ advance: a, percent } in lowBalanceAdvances" :key="a.id" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-4 space-y-3">
           <p class="font-bold text-gray-900">{{ a.client_detail?.name ?? '—' }}</p>
           <div>
             <p class="text-xs text-gray-500">Saldo disponible</p>
@@ -475,7 +475,7 @@ async function confirmValidate() {
           <RefreshCw class="w-3.5 h-3.5" /> Reintentar
         </button>
       </div>
-      <div v-else class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div v-else class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
@@ -521,7 +521,7 @@ async function confirmValidate() {
           <RefreshCw class="w-3.5 h-3.5" /> Reintentar
         </button>
       </div>
-      <div v-else class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div v-else class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>

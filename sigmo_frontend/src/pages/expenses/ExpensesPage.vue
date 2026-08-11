@@ -228,7 +228,7 @@ const columns: ColumnDef<Expense>[] = [
     />
 
     <!-- ── Registration form ──────────────────────────────────────────────── -->
-    <div v-if="canCreate('expenses')" class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div v-if="canCreate('expenses')" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50">
       <div class="px-6 py-4 border-b border-gray-100">
         <h2 class="text-sm font-semibold text-gray-800">Registrar gasto</h2>
       </div>
@@ -290,7 +290,7 @@ const columns: ColumnDef<Expense>[] = [
     </div>
 
     <!-- ── Expenses list ───────────────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50">
       <div class="px-6 py-4 border-b border-gray-100">
         <h2 class="text-sm font-semibold text-gray-800">Gastos registrados</h2>
       </div>
@@ -374,7 +374,7 @@ const columns: ColumnDef<Expense>[] = [
           v-if="editingExpense"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
         >
-          <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+          <div class="bg-white rounded-xl shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-md">
             <div class="flex items-center justify-between mb-5">
               <h3 class="text-sm font-semibold text-gray-800">Editar gasto</h3>
               <button
@@ -465,7 +465,7 @@ const columns: ColumnDef<Expense>[] = [
           v-if="annulExpense"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
         >
-          <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+          <div class="bg-white rounded-xl shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-md">
             <div class="flex items-center justify-between mb-5">
               <h3 class="text-sm font-semibold text-gray-800">
                 Anular Gasto #{{ annulExpense.id }}

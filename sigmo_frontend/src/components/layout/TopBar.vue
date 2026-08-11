@@ -27,7 +27,7 @@ function handleLogout() {
 </script>
 
 <template>
-  <header class="h-14 bg-white border-b border-stone-200 flex items-center justify-between px-4 lg:px-6">
+  <header class="relative z-10 h-14 bg-white border-b-2 border-gold-500 rounded-b-md shadow-md shadow-stone-300/50 flex items-center justify-between px-4 lg:px-6">
     <div class="flex items-center gap-3 min-w-0">
       <button
         class="text-stone-500 hover:text-stone-700 lg:hidden flex-shrink-0"

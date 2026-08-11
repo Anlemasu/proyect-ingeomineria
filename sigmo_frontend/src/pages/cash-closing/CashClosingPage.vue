@@ -110,7 +110,7 @@ const detailRevenue = computed(() =>
     />
 
     <!-- ── Panel resumen del día ─────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-sm font-semibold text-gray-800">Resumen del día en curso</h2>
@@ -236,7 +236,7 @@ const detailRevenue = computed(() =>
     </div>
 
     <!-- ── Histórico de cierres ──────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100">
         <h2 class="text-sm font-semibold text-gray-800">Histórico de cierres</h2>
       </div>
@@ -322,7 +322,7 @@ const detailRevenue = computed(() =>
           v-if="confirmOpen"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
         >
-          <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+          <div class="bg-white rounded-xl shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-md">
             <div class="flex items-start gap-3 mb-4">
               <div class="p-2 bg-amber-100 rounded-lg shrink-0">
                 <AlertTriangle class="w-5 h-5 text-amber-600" />
@@ -390,7 +390,7 @@ const detailRevenue = computed(() =>
           v-if="revertTarget"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
         >
-          <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+          <div class="bg-white rounded-xl shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-md">
             <div class="flex items-start gap-3 mb-4">
               <div class="p-2 bg-amber-100 rounded-lg shrink-0">
                 <Unlock class="w-5 h-5 text-amber-600" />
@@ -451,7 +451,7 @@ const detailRevenue = computed(() =>
         <div v-if="detailSummary" class="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/30" @click="detailSummary = null" />
           <div class="relative bg-white w-full max-w-sm max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+            <div class="px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40 flex items-center justify-between shrink-0">
               <div>
                 <h3 class="text-sm font-semibold text-gray-800">
                   Cierre — {{ formatDate(detailSummary.date) }}

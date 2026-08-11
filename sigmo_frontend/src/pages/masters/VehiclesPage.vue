@@ -186,7 +186,7 @@ const vehicleColumns: ColumnDef<Vehicle>[] = [
     <teleport to="body">
       <div v-if="showTypeModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="showTypeModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-md mx-4">
           <h2 class="text-lg font-semibold mb-4">{{ editingType ? 'Editar tipo' : 'Nuevo tipo de vehiculo' }}</h2>
           <form @submit.prevent="onTypeSubmit" class="space-y-4" novalidate>
             <div>
@@ -215,7 +215,7 @@ const vehicleColumns: ColumnDef<Vehicle>[] = [
 
       <div v-if="showVehicleModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="showVehicleModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-md mx-4">
           <h2 class="text-lg font-semibold mb-4">Nuevo vehiculo</h2>
           <form @submit.prevent="onVehicleSubmit" class="space-y-4" novalidate>
             <div>

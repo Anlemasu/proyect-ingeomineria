@@ -132,7 +132,7 @@ const columns: ColumnDef<PinsDumper>[] = [
     <teleport to="body">
       <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="showModal = false" />
-        <div class="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
           <h2 class="text-lg font-semibold mb-4">Nuevo PIN ambiental</h2>
           <form @submit.prevent="onSubmit" class="grid grid-cols-1 sm:grid-cols-2 gap-4" novalidate>
             <div>
@@ -203,7 +203,7 @@ const columns: ColumnDef<PinsDumper>[] = [
       <!-- Import Modal -->
       <div v-if="showImport" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/50" @click="showImport = false" />
-        <div class="relative bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-lg mx-4">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-semibold">Importar pines desde Excel</h2>
             <button @click="showImport = false" class="text-gray-400 hover:text-gray-600"><X class="w-5 h-5" /></button>

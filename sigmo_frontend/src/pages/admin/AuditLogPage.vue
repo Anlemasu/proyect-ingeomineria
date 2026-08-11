@@ -351,7 +351,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
 
         <div class="relative bg-white w-full max-w-2xl max-h-[85vh] rounded-xl shadow-2xl overflow-y-auto flex flex-col">
           <!-- Drawer header -->
-          <div class="sticky top-0 bg-white z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div class="sticky top-0 bg-white z-10 flex items-center justify-between px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40">
             <div>
               <h2 class="text-base font-semibold text-gray-900">Detalle de entrada</h2>
               <p class="text-xs text-gray-400 mt-0.5">#{{ selectedEntry.id }}</p>

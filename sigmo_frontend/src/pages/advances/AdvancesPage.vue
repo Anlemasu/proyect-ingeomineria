@@ -743,7 +743,7 @@ watch(activeTab, () => {
       <!-- Panel -->
       <div class="relative flex flex-col w-full max-w-md max-h-[85vh] rounded-xl bg-white shadow-2xl overflow-hidden">
         <!-- Drawer header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+        <div class="flex items-center justify-between px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40 flex-shrink-0">
           <div>
             <p class="text-xs text-gray-400 uppercase tracking-wide">Detalle del anticipo</p>
             <p class="text-base font-semibold text-gray-900 mt-0.5">
@@ -875,7 +875,7 @@ watch(activeTab, () => {
     >
       <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <!-- Modal header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+        <div class="flex items-center justify-between px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40 flex-shrink-0">
           <h2 class="text-base font-semibold text-gray-900">
             {{ editingAdvance ? 'Editar Anticipo' : 'Registrar Anticipo' }}
           </h2>

@@ -519,7 +519,7 @@ watch(activeTab, () => {
     >
       <div class="bg-white rounded-2xl shadow-xl w-full max-w-md">
         <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div class="flex items-center justify-between px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40">
           <div>
             <h2 class="text-base font-semibold text-gray-900">Asignar Factura</h2>
             <p class="text-xs text-gray-400 mt-0.5">
