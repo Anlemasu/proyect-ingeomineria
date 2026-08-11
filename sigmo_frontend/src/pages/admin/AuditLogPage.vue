@@ -346,10 +346,10 @@ const columns: ColumnDef<AuditLogEntry>[] = [
 
     <!-- ── DETAIL DRAWER ─────────────────────────────────────────────────────── -->
     <teleport to="body">
-      <div v-if="showDetail && selectedEntry" class="fixed inset-0 z-50 flex items-start justify-end">
+      <div v-if="showDetail && selectedEntry" class="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/40" @click="closeDetail" />
 
-        <div class="relative bg-white h-full w-full max-w-2xl shadow-2xl overflow-y-auto flex flex-col">
+        <div class="relative bg-white w-full max-w-2xl max-h-[85vh] rounded-xl shadow-2xl overflow-y-auto flex flex-col">
           <!-- Drawer header -->
           <div class="sticky top-0 bg-white z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <div>

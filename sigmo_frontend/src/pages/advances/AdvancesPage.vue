@@ -731,17 +731,17 @@ watch(activeTab, () => {
     </div>
   </div>
 
-  <!-- ── Panel de detalle (drawer lateral) ─────────────────────────────── -->
+  <!-- ── Panel de detalle ───────────────────────────────────────────────── -->
   <Teleport to="body">
-    <template v-if="detailAdvance">
+    <div v-if="detailAdvance" class="fixed inset-0 z-50 flex items-center justify-center p-4">
       <!-- Overlay -->
       <div
-        class="fixed inset-0 z-40 bg-black/30"
+        class="absolute inset-0 bg-black/30"
         @click="closeDetail"
       />
 
-      <!-- Drawer -->
-      <div class="fixed inset-y-0 right-0 z-50 flex flex-col w-full max-w-md bg-white shadow-2xl border-l border-gray-200">
+      <!-- Panel -->
+      <div class="relative flex flex-col w-full max-w-md max-h-[85vh] rounded-xl bg-white shadow-2xl overflow-hidden">
         <!-- Drawer header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
@@ -863,7 +863,7 @@ watch(activeTab, () => {
           </div>
         </div>
       </div>
-    </template>
+    </div>
   </Teleport>
 
   <!-- ── Modal: Registrar / Editar Anticipo ────────────────────────────── -->
