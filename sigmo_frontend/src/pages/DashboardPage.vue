@@ -13,10 +13,13 @@ import { tripsApi } from '@/api/trips.api'
 import { expensesApi } from '@/api/expenses.api'
 import { advancesApi } from '@/api/advances.api'
 import { invoicesApi } from '@/api/invoices.api'
+import { auditApi } from '@/api/audit.api'
 import { useAuthStore } from '@/stores/auth.store'
 import { ROLE_LABELS, ROLE_COLORS } from '@/constants/roles'
+import { navigation, type NavLeaf } from '@/constants/navigation'
+import { ACTION_CONFIG, MODEL_LABEL } from '@/constants/audit'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate, todayBogota } from '@/utils/formatDate'
+import { formatDate, formatTime, todayBogota } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import type { Trip, Advance } from '@/types'
 
@@ -142,6 +145,33 @@ const tripsUnfactured = computed(() => (tripsUnfacturedData.value ?? [])
   .slice(0, 15),
 )
 
+// ── AUDITOR: accesos rápidos (derivados de navigation.ts, no hardcodeados) ────
+const auditorQuickLinks = computed<NavLeaf[]>(() => {
+  const leaves: NavLeaf[] = []
+  for (const item of navigation) {
+    if (item.type === 'leaf') {
+      if (item.path !== '/' && item.enabled !== false && item.roles.includes('auditor')) leaves.push(item)
+    } else {
+      for (const child of item.children) {
+        if (child.enabled !== false && child.roles.includes('auditor')) leaves.push(child)
+      }
+    }
+  }
+  return leaves
+})
+
+// ── AUDITOR: actividad reciente del log de auditoría ──────────────────────────
+const {
+  data: recentAuditData, isLoading: recentAuditLoading, isError: recentAuditIsError,
+  refetch: refetchRecentAudit,
+} = useQuery({
+  queryKey: ['dashboard', 'audit-recent'],
+  queryFn: () => auditApi.list().then(r => r.data),
+  enabled: computed(() => role.value === 'auditor'),
+  refetchInterval: 60_000,
+})
+const recentAudit = computed(() => (recentAuditData.value ?? []).slice(0, 8))
+
 // ── "Validar" — marcar viaje como que no requiere factura ─────────────────────
 const noFacturaInvoiceId = ref<number | null>(null)
 const confirmTrip = ref<Trip | null>(null)
@@ -179,19 +209,84 @@ async function confirmValidate() {
 </script>
 
 <template>
-  <!-- ── AUDITOR: pantalla de bienvenida estática, sin datos ─────────────────── -->
-  <div v-if="role === 'auditor'" class="min-h-[70vh] flex flex-col items-center justify-center text-center gap-3">
-    <div class="w-40 h-40 rounded-2xl bg-gold-500 flex items-center justify-center shadow-sm">
-      <span class="text-4xl font-bold text-stone-900">SIGMO</span>
+  <!-- ── AUDITOR: bienvenida + accesos rápidos + actividad reciente ──────────── -->
+  <div v-if="role === 'auditor'" class="space-y-6">
+    <!-- Banner de bienvenida -->
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col sm:flex-row items-center gap-6">
+      <img src="/logo_amarillo.jpeg" alt="Ingeominería" class="w-40 rounded-xl shadow-sm shrink-0" />
+      <div class="text-center sm:text-left">
+        <h1 class="text-2xl font-bold text-gray-900">SIGMO</h1>
+        <p class="text-gray-500 text-sm">Sistema Integral de Gestión Minera y Operativa</p>
+        <p class="text-gray-900 mt-3">Bienvenido, {{ authStore.user?.name }}</p>
+        <span
+          class="inline-block mt-2 text-xs font-medium px-3 py-1 rounded-full"
+          :class="ROLE_COLORS[authStore.user?.role ?? ''] ?? 'bg-gray-100 text-gray-800'"
+        >
+          {{ ROLE_LABELS[authStore.user?.role ?? ''] ?? authStore.user?.role }}
+        </span>
+      </div>
     </div>
-    <h1 class="text-2xl text-gray-900 mt-2">Bienvenido, {{ authStore.user?.name }}</h1>
-    <span
-      class="text-xs font-medium px-3 py-1 rounded-full"
-      :class="ROLE_COLORS[authStore.user?.role ?? ''] ?? 'bg-gray-100 text-gray-800'"
-    >
-      {{ ROLE_LABELS[authStore.user?.role ?? ''] ?? authStore.user?.role }}
-    </span>
-    <p class="text-gray-500 text-sm mt-2">Sistema de Información de Gestión Minera Outsourcing</p>
+
+    <!-- Accesos rápidos de consulta -->
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold text-gray-800">Accesos rápidos de consulta</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <router-link
+          v-for="link in auditorQuickLinks"
+          :key="link.path"
+          :to="link.path"
+          class="flex items-center gap-3 bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-gold-300 hover:shadow-md transition-all"
+        >
+          <div class="w-9 h-9 rounded-lg bg-gold-50 flex items-center justify-center shrink-0">
+            <component :is="link.icon" class="w-4 h-4 text-gold-700" />
+          </div>
+          <span class="text-sm font-medium text-gray-800">{{ link.label }}</span>
+        </router-link>
+      </div>
+    </section>
+
+    <!-- Actividad reciente del sistema -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-800">Actividad reciente del sistema</h2>
+        <router-link to="/admin/audit-log" class="text-xs text-gold-700 hover:text-gold-800 font-medium">
+          Ver log completo
+        </router-link>
+      </div>
+
+      <div v-if="recentAuditIsError" class="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <div class="flex items-center gap-2 text-amber-700 text-sm">
+          <AlertTriangle class="w-4 h-4 shrink-0" />
+          Error al cargar esta sección. Intenta de nuevo.
+        </div>
+        <button type="button" @click="refetchRecentAudit()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-100">
+          <RefreshCw class="w-3.5 h-3.5" /> Reintentar
+        </button>
+      </div>
+      <div v-else class="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-50">
+        <div v-if="recentAuditLoading" class="p-4 space-y-3">
+          <div v-for="i in 5" :key="i" class="h-4 bg-gray-100 rounded animate-pulse" />
+        </div>
+        <div v-else-if="recentAudit.length === 0" class="p-6 text-center text-sm text-gray-400">
+          Sin actividad registrada.
+        </div>
+        <div v-else v-for="entry in recentAudit" :key="entry.id" class="flex items-center justify-between gap-3 px-4 py-3">
+          <div class="flex items-center gap-3">
+            <span
+              class="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap"
+              :class="ACTION_CONFIG[entry.action]?.cls ?? 'bg-gray-100 text-gray-600'"
+            >
+              {{ ACTION_CONFIG[entry.action]?.label ?? entry.action_display }}
+            </span>
+            <span class="text-sm text-gray-800">{{ MODEL_LABEL[entry.model_name] ?? entry.model_name }}</span>
+          </div>
+          <div class="text-xs text-gray-400 text-right shrink-0">
+            <p>{{ entry.user_name }}</p>
+            <p>{{ formatDate(entry.timestamp) }} {{ formatTime(entry.timestamp) }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
 
   <!-- ── OTROS ROLES: dashboard operativo ─────────────────────────────────────── -->

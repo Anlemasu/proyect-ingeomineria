@@ -153,7 +153,10 @@ export const navigation: NavItem[] = [
         label: 'Anticipos',
         path: '/advances',
         icon: Wallet,
-        roles: ['superuser', 'accountant', 'commercial_admin'],
+        // cashier/auditor: acceso de solo consulta (no pueden crear/editar,
+        // ver AdvancesPage.vue canManage/isSuperuser) — backend ya lo permite:
+        // AdvanceListCreateView.get/AdvanceBalanceView.get no restringen por rol.
+        roles: ['superuser', 'accountant', 'commercial_admin', 'cashier', 'auditor'],
       },
       {
         type: 'leaf',

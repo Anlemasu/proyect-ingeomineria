@@ -36,6 +36,10 @@ const tabs = [
   { id: 'estado' as Tab, label: 'Estado de Cuenta' },
   { id: 'historial' as Tab, label: 'Historial de Movimientos' },
 ]
+// cajero: sin Historial de Movimientos (solo Registro y Estado de Cuenta)
+const visibleTabs = computed(() =>
+  authStore.user?.role === 'cashier' ? tabs.filter(t => t.id !== 'historial') : tabs
+)
 
 // ── Queries ────────────────────────────────────────────────────────────────
 const { data: advancesData, isLoading: advancesLoading } = useQuery({
@@ -578,7 +582,7 @@ watch(activeTab, () => {
     <div class="border-b border-gray-200 overflow-x-auto">
       <nav class="flex gap-1 w-max min-w-full" aria-label="Tabs">
         <button
-          v-for="tab in tabs"
+          v-for="tab in visibleTabs"
           :key="tab.id"
           class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
           :class="activeTab === tab.id
