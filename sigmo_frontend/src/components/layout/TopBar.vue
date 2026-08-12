@@ -35,9 +35,11 @@ function handleLogout() {
       >
         <Menu class="w-6 h-6" />
       </button>
-      <span class="font-semibold text-stone-800 truncate">
-        <span class="sm:hidden">SIGMO</span>
-        <span class="hidden sm:inline">SIGMO — Sistema Integral de Gestión Minera y Operativa</span>
+      <span class="sm:hidden font-bold tracking-wide text-stone-900 truncate">SIGMO</span>
+      <span class="hidden sm:flex items-baseline gap-2 min-w-0">
+        <span class="font-bold tracking-wide text-stone-900 flex-shrink-0">SIGMO</span>
+        <span class="text-gold-500 flex-shrink-0">●</span>
+        <span class="font-normal text-stone-400 truncate">Sistema Integral de Gestión Minera y Operativa</span>
       </span>
     </div>
 
