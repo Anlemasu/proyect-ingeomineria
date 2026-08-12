@@ -13,6 +13,20 @@ export const PERMISSIONS = {
     edit: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN],
     delete: [],
   },
+  // Tarifas: Contador tiene acceso de solo lectura (view), sin crear/editar.
+  tariffs: {
+    view: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.ACCOUNTANT, ROLES.AUDITOR],
+    create: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN],
+    edit: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN],
+    delete: [],
+  },
+  // Ciudades: Contador tiene acceso completo (crear/editar), a diferencia de Tarifas.
+  cities: {
+    view: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.ACCOUNTANT, ROLES.AUDITOR],
+    create: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.ACCOUNTANT],
+    edit: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.ACCOUNTANT],
+    delete: [],
+  },
   users: {
     view: [ROLES.SUPERUSER],
     create: [ROLES.SUPERUSER],

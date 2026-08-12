@@ -28,14 +28,13 @@ import { tripsApi }          from '@/api/trips.api'
 import { useAuthStore }       from '@/stores/auth.store'
 import { todayBogota, formatDate } from '@/utils/formatDate'
 import { formatCurrency }     from '@/utils/formatCurrency'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { printVoucher }       from '@/utils/printVoucher'
 import type { Trip } from '@/types'
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
 const authStore   = useAuthStore()
 const queryClient = useQueryClient()
-const isSuperuser   = computed(() => authStore.user?.role === 'superuser')
 const canChangeDate = computed(() =>
   authStore.user?.role === 'superuser' || authStore.user?.role === 'commercial_admin'
 )
@@ -215,14 +214,25 @@ watch([clientId, vehicleTypeId], ([c, v]) => {
 })
 
 // ── Saldo total de anticipos del cliente ──────────────────────────────────────
+// refetchInterval corto: si otro usuario/pestaña registra un viaje o anticipo
+// para este mismo cliente, el saldo se refleja aquí sin recargar la página.
 const { data: clientBalanceData } = useQuery({
   queryKey: computed(() => ['advance-balance', clientId.value]),
   queryFn: () => clientId.value
     ? advancesApi.balance(clientId.value).then(r => r.data)
     : Promise.resolve(null),
   enabled: computed(() => !!clientId.value),
+  refetchInterval: 8_000,
 })
-const clientBalance = computed(() => clientBalanceData.value?.balance ?? null)
+// net_balance = saldo de anticipos - deuda pendiente (ver AdvanceBalanceView
+// en el backend) — antes esto leía `.balance`, un campo que el backend
+// nunca devolvió, así que este indicador jamás llegaba a mostrarse.
+const clientBalance = computed(() =>
+  clientBalanceData.value ? Number(clientBalanceData.value.net_balance) : null
+)
+const clientPendingDebt = computed(() =>
+  clientBalanceData.value ? Number(clientBalanceData.value.total_pending_debt) : 0
+)
 
 // ── Pago con anticipo — Fix 3: auto-selección, sin dropdown ───────────────────
 // RF-31: un cliente solo tiene un anticipo activo (saldo > 0) a la vez.
@@ -236,6 +246,7 @@ const { data: advancesData } = useQuery({
     ? advancesApi.list({ client: clientId.value }).then(r => r.data)
     : Promise.resolve([]),
   enabled: computed(() => !!clientId.value),
+  refetchInterval: 8_000,
 })
 
 // El anticipo activo es el primero con saldo > 0
@@ -269,11 +280,11 @@ const forceSubmit   = ref(false)
 const justification = ref('')
 
 const canSubmit = computed(() => {
-  if (isAdvancePayment.value) {
-    if (!hasActiveAdvance.value) return false          // sin anticipo, siempre bloqueado
-    if (!balanceSufficient.value) {
-      return isSuperuser.value && forceSubmit.value && justification.value.trim().length > 0
-    }
+  // balanceSufficient ya es false tanto si no hay anticipo activo como si el
+  // saldo no alcanza — en ambos casos el backend permite forzar el registro
+  // con justificación (queda como deuda pendiente), para cualquier rol.
+  if (isAdvancePayment.value && !balanceSufficient.value) {
+    return forceSubmit.value && justification.value.trim().length > 0
   }
   return true
 })
@@ -295,7 +306,7 @@ async function createOrigin() {
     newOriginName.value    = ''
     toast.success(`Origen "${name}" creado`)
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   } finally {
     createOriginLoading.value = false
   }
@@ -314,7 +325,9 @@ const onSubmit = handleSubmit(async (values) => {
   if (!canSubmit.value) return
 
   // Resolver Vehicle.id: buscar por placa exacta o crear si no existe.
-  // Si el rol no tiene permiso para crear vehículos (cashier → 403), se muestra toast.
+  // Cualquier rol con acceso a este módulo puede crear la placa nueva
+  // (can_create_vehicle en el backend); si falla por otra razón, se muestra
+  // el motivo real del error.
   let vehicleId: number
   try {
     const vehiclesRes = await vehiclesApi.list({ plaque: plate })
@@ -328,8 +341,8 @@ const onSubmit = handleSubmit(async (values) => {
       })
       vehicleId = newVehicle.data.id
     }
-  } catch {
-    toast.error('Vehículo no registrado y sin permisos para crearlo. Contacte al administrador.')
+  } catch (err) {
+    toastApiError(err)
     return
   }
 
@@ -376,9 +389,12 @@ const onSubmit = handleSubmit(async (values) => {
   } catch (err: unknown) {
     const data = (err as { response?: { data?: Record<string, unknown> } })?.response?.data
     if (data?.saldo_disponible !== undefined) {
-      // El panel de saldo ya muestra la información — no duplicar con toast
+      // El panel ya resalta el detalle visualmente, pero se avisa también con
+      // un toast — si el usuario hizo scroll y no ve el panel, antes no se
+      // enteraba de nada.
+      toast.error(typeof data.error === 'string' ? data.error : 'Saldo del anticipo insuficiente para registrar este viaje.')
     } else {
-      toast.error(getApiErrorMessage(err))
+      toastApiError(err)
     }
   }
 })
@@ -409,12 +425,15 @@ const onSubmit = handleSubmit(async (values) => {
               :clearable="true"
             />
             <p v-if="clientError" class="mt-1 text-xs text-red-500">{{ clientError }}</p>
-            <div v-if="clientId && clientBalance !== null" class="mt-1.5">
+            <div v-if="clientId && clientBalance !== null" class="mt-1.5 space-y-0.5">
               <span
-                class="text-xs font-medium"
+                class="block text-xs font-medium"
                 :class="clientBalance > 0 ? 'text-green-600' : 'text-red-500'"
               >
                 Saldo disponible: {{ formatCurrency(clientBalance) }}
+              </span>
+              <span v-if="clientPendingDebt > 0" class="block text-xs font-medium text-amber-600">
+                Deuda pendiente por liquidar: {{ formatCurrency(clientPendingDebt) }}
               </span>
             </div>
           </div>
@@ -603,18 +622,9 @@ const onSubmit = handleSubmit(async (values) => {
             <span>Selecciona un cliente para verificar el anticipo disponible</span>
           </div>
 
-          <!-- Sin anticipo activo -->
-          <div
-            v-else-if="!hasActiveAdvance"
-            class="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm"
-          >
-            <AlertTriangle class="w-4 h-4 shrink-0" />
-            <span>Sin anticipo disponible para este cliente. No se puede registrar con anticipo.</span>
-          </div>
-
           <!-- Anticipo activo con saldo suficiente -->
           <div
-            v-else-if="balanceSufficient"
+            v-else-if="hasActiveAdvance && balanceSufficient"
             class="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm"
           >
             <CheckCircle class="w-4 h-4 shrink-0" />
@@ -624,19 +634,26 @@ const onSubmit = handleSubmit(async (values) => {
             </span>
           </div>
 
-          <!-- Anticipo activo con saldo insuficiente -->
+          <!-- Sin anticipo activo, o anticipo activo con saldo insuficiente: en
+               ambos casos el backend permite forzar el registro con justificación -->
           <div v-else class="px-4 py-3 rounded-lg bg-red-50 border border-red-200">
             <div class="flex items-start gap-2 text-red-700 text-sm">
               <AlertTriangle class="w-4 h-4 shrink-0 mt-0.5" />
               <div class="space-y-1">
-                <p class="font-semibold">Saldo insuficiente — Anticipo #{{ activeAdvance!.id }}</p>
-                <p>Saldo disponible: <strong>{{ formatCurrency(advanceBalance ?? 0) }}</strong></p>
-                <p>Valor del viaje: <strong>{{ formatCurrency(tripValue ?? 0) }}</strong></p>
-                <p>Diferencia: <strong>{{ formatCurrency((tripValue ?? 0) - (advanceBalance ?? 0)) }}</strong></p>
+                <template v-if="hasActiveAdvance">
+                  <p class="font-semibold">Saldo insuficiente — Anticipo #{{ activeAdvance!.id }}</p>
+                  <p>Saldo disponible: <strong>{{ formatCurrency(advanceBalance ?? 0) }}</strong></p>
+                  <p>Valor del viaje: <strong>{{ formatCurrency(tripValue ?? 0) }}</strong></p>
+                  <p>Diferencia: <strong>{{ formatCurrency((tripValue ?? 0) - (advanceBalance ?? 0)) }}</strong></p>
+                </template>
+                <template v-else>
+                  <p class="font-semibold">Sin anticipo disponible para este cliente</p>
+                  <p>Valor del viaje: <strong>{{ formatCurrency(tripValue ?? 0) }}</strong></p>
+                </template>
               </div>
             </div>
-            <!-- Override exclusivo para superusuario -->
-            <div v-if="isSuperuser" class="mt-3 pt-3 border-t border-red-200">
+            <!-- Registro forzado con justificación (todos los roles con acceso a este módulo) -->
+            <div class="mt-3 pt-3 border-t border-red-200">
               <label class="flex items-center gap-2 text-sm text-red-700 cursor-pointer select-none">
                 <input v-model="forceSubmit" type="checkbox" class="rounded border-red-300" />
                 <span class="font-medium">Forzar registro (requiere justificación)</span>

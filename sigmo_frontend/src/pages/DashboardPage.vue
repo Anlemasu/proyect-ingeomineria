@@ -20,7 +20,7 @@ import { navigation, type NavLeaf } from '@/constants/navigation'
 import { ACTION_CONFIG, MODEL_LABEL } from '@/constants/audit'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime, todayBogota } from '@/utils/formatDate'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import type { Trip, Advance } from '@/types'
 
 // "NO FACTURA" en vez de "No requiere factura" — Invoice.number tiene max_length=15
@@ -201,7 +201,7 @@ async function confirmValidate() {
     queryClient.invalidateQueries({ queryKey: ['trips'] })
     confirmTrip.value = null
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   } finally {
     validating.value = false
   }

@@ -12,7 +12,7 @@ import PageHeader from '@/components/shared/PageHeader.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import { originsApi } from '@/api/origins.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { usePermissions } from '@/composables/usePermissions'
 import type { OriginSite } from '@/types'
 
@@ -54,7 +54,7 @@ const { mutateAsync: update } = useMutation({
 const { mutate: toggle, isPending: togglePending } = useMutation({
   mutationFn: (item: OriginSite) => originsApi.update(item.id, { state: !item.state }),
   onSuccess: () => { qc.invalidateQueries({ queryKey: ['origins'] }); confirmToggle.value = null; toast.success('Estado actualizado.') },
-  onError: (err) => toast.error(getApiErrorMessage(err)),
+  onError: (err) => toastApiError(err),
 })
 
 const onSubmit = handleSubmit(async (values) => {
@@ -66,7 +66,7 @@ const onSubmit = handleSubmit(async (values) => {
     }
     showModal.value = false
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 

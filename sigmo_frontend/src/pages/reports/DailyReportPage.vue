@@ -15,7 +15,7 @@ import { expensesApi } from '@/api/expenses.api'
 import { usePermissions } from '@/composables/usePermissions'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime, todayBogota } from '@/utils/formatDate'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { printDailyReport } from '@/utils/printDailyReport'
 import { exportDailyReportExcel } from '@/utils/exportDailyReportExcel'
 import type { Trip, DailyReportData } from '@/types'
@@ -99,7 +99,7 @@ function handleExportExcel() {
   try {
     exportDailyReportExcel(reportDate.value, reportData.value)
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 }
 

@@ -30,7 +30,7 @@ class DailySummaryCloseView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if request.user.role not in ['superuser', 'cashier', 'commercial_admin']:
+        if request.user.role not in ['superuser', 'commercial_admin']:
             log_action(request, 'access_denied', 'DailySummary')
             return Response(
                 {'error': 'No tiene permisos para ejecutar el cierre de caja.'},
@@ -69,7 +69,8 @@ class DailySummaryRevertView(APIView):
     """
     POST /api/cash-closing/<id>/revert/
     Revierte un cierre de caja (state: closed -> reverted), exclusivo para
-    superuser y con justificación obligatoria (REQUISITO NUEVO 3.3).
+    superuser y commercial_admin, con justificación obligatoria (REQUISITO
+    NUEVO 3.3).
 
     No elimina el DailySummary ni sus DailySummaryPayment: se conserva el
     histórico de que el día tuvo un cierre. Tras revertir, los viajes y
@@ -79,10 +80,10 @@ class DailySummaryRevertView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if request.user.role != 'superuser':
+        if request.user.role not in ['superuser', 'commercial_admin']:
             log_action(request, 'access_denied', 'DailySummary', object_id=pk)
             return Response(
-                {'error': 'Solo el Superusuario puede revertir un cierre de caja.'},
+                {'error': 'Solo el Superusuario o el Administrador Comercial pueden revertir un cierre de caja.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 

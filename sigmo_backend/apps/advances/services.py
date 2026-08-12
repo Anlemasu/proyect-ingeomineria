@@ -146,12 +146,15 @@ def settle_pending_debts(advance: Advance, *, request=None) -> list[AdvanceMovem
     # de los Trip pendientes, que es la sección crítica real de esta función.
     Client.objects.select_for_update().get(pk=advance.client_id)
 
+    # 'id' como desempate: dos viajes con el mismo date_register (posible si
+    # dos requests caen en el mismo timestamp) antes quedaban en orden
+    # indeterminado — con 'id' el orden de creación siempre desempata igual.
     pending_trips = Trip.objects.filter(
         client=advance.client,
         state=True,
         advance__isnull=True,
         payment__is_advance=True,
-    ).order_by('date_register')
+    ).order_by('date_register', 'id')
 
     remaining = get_available_balance(advance)
     created_movements: list[AdvanceMovement] = []
@@ -185,9 +188,65 @@ def settle_pending_debts(advance: Advance, *, request=None) -> list[AdvanceMovem
     return created_movements
 
 
+def get_pending_debts_by_client() -> dict[int, Decimal]:
+    """
+    Deuda pendiente total (viajes sin liquidar contra ningún anticipo, ver
+    settle_pending_debts) agrupada por cliente, en UNA sola consulta — para
+    el listado general de "Estado de Cuenta" (AdvancesPage.vue), que antes
+    solo sumaba el available_balance de los anticipos sin restar esta deuda.
+    AdvanceBalanceView.get ya calcula lo mismo pero para un único cliente a
+    la vez; esto evita hacer esa misma consulta cliente por cliente.
+    """
+    from apps.trips.models import Trip  # import diferido: evita ciclo con trips.models
+
+    rows = Trip.objects.filter(
+        state=True, advance__isnull=True, payment__is_advance=True,
+    ).values('client').annotate(total=Sum('value'))
+    return {row['client']: row['total'] for row in rows}
+
+
+def compute_unlink_impact(advance: Advance, correct_value: Decimal) -> dict:
+    """
+    Calcula, SIN escribir nada, qué viajes de `advance` quedarían como deuda
+    pendiente si se corrigiera su valor a `correct_value` — usado tanto por
+    la previsualización (AdvanceCorrectValuePreviewView) como por
+    correct_active_advance_value (que repite este cálculo ya bajo lock, por
+    si algo cambió entre la previsualización y el envío real).
+
+    Si la reducción deja el saldo disponible en negativo, se sueltan los
+    viajes vinculados a este anticipo MÁS RECIENTES primero (orden LIFO por
+    date_register) — son los que "empujaron" el saldo hasta lo que ahora no
+    alcanza a cubrirse — hasta cubrir el faltante o quedarse sin viajes que
+    soltar. Si ni soltando todos alcanza, el resto de la reducción
+    simplemente se aplica igual (saldo negativo real, mismo criterio que ya
+    regía en esta función antes de esta lógica).
+    """
+    from apps.trips.models import Trip  # import diferido: evita ciclo con trips.models
+
+    diff = correct_value - advance.value
+    balance_before = get_available_balance(advance)
+    prospective_balance = balance_before + diff
+
+    trips_to_unlink: list = []
+    if diff < 0 and prospective_balance < 0:
+        shortfall = -prospective_balance
+        for trip in Trip.objects.filter(advance=advance, state=True).order_by('-date_register'):
+            if shortfall <= 0:
+                break
+            trips_to_unlink.append(trip)
+            shortfall -= trip.value
+
+    return {
+        'diff': diff,
+        'balance_before': balance_before,
+        'prospective_balance': prospective_balance,
+        'trips_to_unlink': trips_to_unlink,
+    }
+
+
 def correct_active_advance_value(
     advance: Advance, *, correct_value: Decimal, justification: str, request=None,
-) -> AdvanceMovement:
+) -> dict:
     """
     FASE 9C — corrige el valor original de un anticipo cuando se detectó un
     error de digitación, aunque ya se hayan descontado viajes contra él.
@@ -208,21 +267,31 @@ def correct_active_advance_value(
     ajuste calculado fuera contra el saldo disponible en vez de contra
     `advance.value`, lo ya consumido se sumaría o restaría dos veces.
 
-    Además del movimiento, actualiza `Advance.value` al valor corregido:
-    es necesario para que una SEGUNDA corrección futura calcule el diff
-    contra el valor ya corregido, no contra el original equivocado (si no
-    se actualizara, una corrección posterior "revertiría" silenciosamente
-    la anterior). Esto se hace a nivel de modelo (`.save(update_fields=...)`),
-    no a través de AdvanceSerializer — el bloqueo de edición de `value` de
-    la Fase 9.3 vive en el serializer (vía AdvanceDetailView.patch, el PATCH
-    genérico) y sigue intacto; este es un mecanismo explícito y separado,
-    auditado aparte, no un bypass silencioso de ese bloqueo.
+    REQUISITO NUEVO — si la reducción deja el saldo disponible en negativo,
+    antes de aplicar el ajuste se sueltan (ver compute_unlink_impact) los
+    viajes vinculados más recientes como deuda pendiente: se crea un
+    movimiento de "ingreso" que reversa (nunca borra) su egreso original, el
+    viaje pasa a `advance=None` con la misma justificación, y queda listo
+    para liquidarse automáticamente (FIFO) contra el próximo anticipo del
+    cliente — reutiliza settle_pending_debts, el mismo mecanismo que ya
+    existe para viajes registrados sin saldo suficiente.
 
-    Un saldo resultante negativo (la corrección hacia abajo deja al
-    cliente debiendo más de lo que ya se había descontado) se PERMITE
-    igual — mismo criterio que ya rige en sync_advance_movement_on_trip_change
-    cuando un ajuste de valor de viaje deja el anticipo en negativo: es
-    información real, no un error a bloquear.
+    Además del movimiento de ajuste, actualiza `Advance.value` al valor
+    corregido: es necesario para que una SEGUNDA corrección futura calcule
+    el diff contra el valor ya corregido, no contra el original equivocado
+    (si no se actualizara, una corrección posterior "revertiría"
+    silenciosamente la anterior). Esto se hace a nivel de modelo
+    (`.save(update_fields=...)`), no a través de AdvanceSerializer — el
+    bloqueo de edición de `value` de la Fase 9.3 vive en el serializer (vía
+    AdvanceDetailView.patch, el PATCH genérico) y sigue intacto; este es un
+    mecanismo explícito y separado, auditado aparte, no un bypass silencioso
+    de ese bloqueo.
+
+    Un saldo resultante negativo que ni soltando todos los viajes
+    vinculados alcanza a cubrir se PERMITE igual — mismo criterio que ya
+    regía en sync_advance_movement_on_trip_change cuando un ajuste de valor
+    de viaje deja el anticipo en negativo: es información real, no un error
+    a bloquear.
 
     Bloqueo: primero la fila del Client (mismo patrón que
     settle_pending_debts) para que la pregunta "¿sigue siendo el anticipo
@@ -231,10 +300,14 @@ def correct_active_advance_value(
     fila del propio Advance (mismo patrón que
     sync_advance_movement_on_trip_change) para serializar contra un
     descuento de viaje concurrente que esté a punto de escribir su propio
-    AdvanceMovement contra este mismo anticipo. El caller debe llamar esto
-    dentro de su propio transaction.atomic() — aquí se abre uno propio para
-    mantener la función autocontenida, igual que reverse_advance_discount.
+    AdvanceMovement contra este mismo anticipo; y los viajes candidatos a
+    soltar también con select_for_update() por la misma razón. El caller
+    debe llamar esto dentro de su propio transaction.atomic() — aquí se abre
+    uno propio para mantener la función autocontenida, igual que
+    reverse_advance_discount.
     """
+    from apps.trips.models import Trip  # import diferido: evita ciclo con trips.models
+
     with transaction.atomic():
         Client.objects.select_for_update().get(pk=advance.client_id)
 
@@ -251,6 +324,48 @@ def correct_active_advance_value(
 
         balance_before = get_available_balance(locked_advance)
 
+        unlinked_trips: list[dict] = []
+        impact = compute_unlink_impact(locked_advance, correct_value)
+        if impact['trips_to_unlink']:
+            trip_ids = [t.id for t in impact['trips_to_unlink']]
+            # Vuelve a traer los mismos viajes bajo lock — compute_unlink_impact
+            # los leyó sin bloquear, así que se relee bajo select_for_update()
+            # antes de escribir, preservando el orden LIFO ya calculado.
+            locked_trips = {
+                t.id: t for t in Trip.objects.select_for_update().filter(id__in=trip_ids)
+            }
+            for trip_id in trip_ids:
+                trip = locked_trips[trip_id]
+                AdvanceMovement.objects.create(
+                    advance=locked_advance,
+                    trip=trip,
+                    type_movement='ingreso',
+                    amount=trip.value,
+                    trips_quantity=0,
+                    date=timezone.localdate(),
+                    description=(
+                        f'Reversión por corrección de valor del anticipo '
+                        f'#{locked_advance.id} — viaje #{trip.voucher_num} '
+                        f'pasa a deuda pendiente.'
+                    ),
+                )
+                previous_trip_data = {'advance': trip.advance_id, 'pending_debt': False}
+                trip.advance = None
+                trip.pending_debt_justification = justification
+                trip.save(update_fields=['advance', 'pending_debt_justification'])
+                unlinked_trips.append({
+                    'trip': trip.id,
+                    'voucher_num': trip.voucher_num,
+                    'value': str(trip.value),
+                })
+                log_action(
+                    request, 'update', 'Trip',
+                    object_id=trip.id,
+                    previous_data=previous_trip_data,
+                    new_data={'advance': None, 'pending_debt': True, 'amount_released': str(trip.value)},
+                    justification=justification,
+                )
+
         movement = AdvanceMovement.objects.create(
             advance=locked_advance,
             type_movement='ingreso' if diff > 0 else 'egreso',
@@ -262,6 +377,16 @@ def correct_active_advance_value(
 
         locked_advance.value = correct_value
         locked_advance.save(update_fields=['value'])
+
+        # Si la corrección AUMENTÓ el valor, la capacidad nueva debe poder
+        # liquidar deuda pendiente del cliente igual que ya hace
+        # AdvanceListCreateView.post al crear un anticipo — antes esto solo
+        # se disparaba al crear uno nuevo, así que corregir hacia arriba el
+        # valor de uno YA existente nunca liquidaba nada, aunque el saldo
+        # resultante alcanzara para cubrir la deuda.
+        settled_movements: list[AdvanceMovement] = []
+        if diff > 0:
+            settled_movements = settle_pending_debts(locked_advance, request=request)
 
         balance_after = get_available_balance(locked_advance)
 
@@ -282,8 +407,16 @@ def correct_active_advance_value(
                     'type_movement': movement.type_movement,
                     'amount': str(movement.amount),
                 },
+                'unlinked_trips': unlinked_trips,
+                'settled_trips': [m.trip_id for m in settled_movements],
             },
             justification=justification,
         )
 
-        return movement
+        return {
+            'movement': movement,
+            'unlinked_trips': unlinked_trips,
+            'settled_trips': [
+                {'trip': m.trip_id, 'amount': str(m.amount)} for m in settled_movements
+            ],
+        }

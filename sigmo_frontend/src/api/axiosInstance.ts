@@ -173,7 +173,13 @@ api.interceptors.response.use(
       // sessionStorage no se enteran ni se ven tocadas.
       forceSessionExpired(specificMessage)
     } else if (status === 403) {
-      toast.error('No tienes permisos para realizar esta acción.')
+      // Se usa el mensaje específico del backend si viene uno (ej. "Solo el
+      // Superusuador puede revertir un cierre de caja.") — el interceptor es
+      // el único responsable de avisar en 403, así que los `catch` de cada
+      // página ya no deben mostrar su propio toast para este status.
+      const data = error.response?.data as Record<string, unknown> | undefined
+      const specific = (data?.error as string | undefined) ?? (data?.detail as string | undefined)
+      toast.error(specific || 'No tienes permisos para realizar esta acción.')
     } else if (status === 500) {
       toast.error('Error interno del servidor. Intenta de nuevo.')
     }

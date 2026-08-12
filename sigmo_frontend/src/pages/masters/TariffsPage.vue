@@ -144,7 +144,7 @@ function openHistory(client: Client) {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <PageHeader title="Tarifas" description="Tarifas por cliente y tipo de vehiculo" />
       <button
-        v-if="canEdit('masters') && dirtyKeys.size > 0"
+        v-if="canEdit('tariffs') && dirtyKeys.size > 0"
         @click="saveAll"
         :disabled="saving"
         class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60"
@@ -172,7 +172,7 @@ function openHistory(client: Client) {
             <td class="px-4 py-3 font-medium text-gray-800 sticky left-0 bg-gold-50">Tarifa general</td>
             <td v-for="t in activeTypes" :key="t.id" class="px-4 py-2">
               <CurrencyInput
-                v-if="canEdit('masters')"
+                v-if="canEdit('tariffs')"
                 :model-value="getCellValue(null, t.id)"
                 @update:model-value="(val) => setCellValue(null, t.id, val)"
                 class="w-36"
@@ -186,7 +186,7 @@ function openHistory(client: Client) {
             <td class="px-4 py-3 text-gray-700 sticky left-0 bg-white">{{ client.name }}</td>
             <td v-for="t in activeTypes" :key="t.id" class="px-4 py-2">
               <CurrencyInput
-                v-if="canEdit('masters')"
+                v-if="canEdit('tariffs')"
                 :model-value="getCellValue(client.id, t.id)"
                 @update:model-value="(val) => setCellValue(client.id, t.id, val)"
                 class="w-36"

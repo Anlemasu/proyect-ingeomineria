@@ -627,6 +627,61 @@ class AdvanceValueCorrectionTests(PendingDebtFixturesMixin, TestCase):
         self.assertEqual(entry.new_data['role'], 'superuser')
         self.assertEqual(Decimal(entry.previous_data['value']), Decimal('1000000'))
 
+    def test_correcting_to_higher_value_settles_existing_pending_debt(self):
+        """DIAGNÓSTICO — reproduce el bug reportado: corregir el valor hacia
+        arriba debería liquidar deuda pendiente ya existente del cliente,
+        igual que ya hace crear un anticipo nuevo (PendingDebtSettlementOnNewAdvanceTests)."""
+        resp_a = self._create_advance(100000)  # insuficiente
+        advance_id = resp_a.data['id']
+
+        trip_resp = self._create_trip(300000, justification='Sin saldo suficiente')
+        trip_id = trip_resp.data['id']
+        self.assertIsNone(trip_resp.data['advance'])
+
+        resp = self._correct(advance_id, 500000, justification='El valor real consignado era 500.000')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+        trip = Trip.objects.get(pk=trip_id)
+        self.assertEqual(
+            trip.advance_id, advance_id,
+            'la deuda pendiente debe liquidarse contra el mismo anticipo corregido',
+        )
+        self.assertEqual(
+            get_available_balance(Advance.objects.get(pk=advance_id)),
+            Decimal('200000'),  # 500000 - 300000
+        )
+
+    def test_correcting_to_higher_value_stops_at_first_uncovered_debt_fifo(self):
+        """DIAGNÓSTICO — si hay VARIAS deudas pendientes, el FIFO estricto
+        (igual que al crear un anticipo nuevo) se detiene en la primera que
+        no alcanza a cubrirse, aunque una deuda MÁS NUEVA y más chica sí
+        quepa en el saldo corregido."""
+        resp_a = self._create_advance(100000)
+        advance_id = resp_a.data['id']
+
+        # Ambos viajes deben exceder el saldo ORIGINAL de la activa (100000)
+        # para que los dos sean genuinamente deuda pendiente — el chequeo de
+        # "insuficiente" en TripListCreateView.post compara contra el saldo
+        # de movimientos real, que una deuda pendiente anterior NO toca.
+        resp1 = self._create_trip(300000, justification='Deuda 1 (más antigua, grande)')
+        trip1_id = resp1.data['id']
+        resp2 = self._create_trip(150000, justification='Deuda 2 (más nueva, chica)')
+        trip2_id = resp2.data['id']
+        self.assertIsNone(resp1.data['advance'])
+        self.assertIsNone(resp2.data['advance'])
+
+        # Alcanza para la deuda 2 (150000) pero NO para la deuda 1 (300000).
+        resp = self._correct(advance_id, 200000, justification='Corrección parcial')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+        trip1 = Trip.objects.get(pk=trip1_id)
+        trip2 = Trip.objects.get(pk=trip2_id)
+        self.assertIsNone(trip1.advance_id, 'la deuda más antigua sigue pendiente: no alcanzó el saldo')
+        self.assertIsNone(
+            trip2.advance_id,
+            'FIFO estricto: no debe saltarse la deuda 1 para liquidar la 2 aunque quepa sola',
+        )
+
     def test_correcting_to_lower_value_without_trips_decreases_balance(self):
         resp_a = self._create_advance(1000000)
         advance_id = resp_a.data['id']
@@ -644,27 +699,52 @@ class AdvanceValueCorrectionTests(PendingDebtFixturesMixin, TestCase):
             ).exists()
         )
 
-    def test_correcting_to_lower_value_with_trips_can_go_negative(self):
+    def test_correcting_to_lower_value_unlinks_most_recent_trip_as_pending_debt(self):
+        """REQUISITO NUEVO (esta sesión): antes, una reducción que dejaba el
+        saldo negativo simplemente se permitía tal cual. Ahora, si el saldo
+        resultante quedaría negativo, el/los viaje(s) vinculados MÁS
+        RECIENTES se sueltan como deuda pendiente (compute_unlink_impact)
+        hasta cubrir el faltante, en vez de dejar un saldo negativo."""
         resp_a = self._create_advance(1000000)
         advance_id = resp_a.data['id']
-        self._create_trip(800000)  # descuenta 800000 del anticipo activo: saldo queda en 200000
+        trip_resp = self._create_trip(800000)  # descuenta 800000 del anticipo activo: saldo queda en 200000
+        trip_id = trip_resp.data['id']
+        self.assertEqual(trip_resp.data['advance'], advance_id)
 
         resp = self._correct(advance_id, 500000, justification='El valor real era 500.000, no 1.000.000')
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(len(resp.data['unlinked_trips']), 1)
+        self.assertEqual(resp.data['unlinked_trips'][0]['trip'], trip_id)
 
         advance = Advance.objects.get(pk=advance_id)
+        trip = Trip.objects.get(pk=trip_id)
         self.assertEqual(advance.value, Decimal('500000'))
+        self.assertIsNone(trip.advance_id, 'el viaje debe soltarse como deuda pendiente, no quedar con saldo negativo')
         self.assertEqual(
-            get_available_balance(advance), Decimal('-300000'),
-            'un saldo negativo es información real y debe permitirse, no bloquearse',
+            get_available_balance(advance), Decimal('500000'),
+            'al soltar el viaje (800000) se recupera más que el faltante (300000): el saldo queda positivo',
         )
 
         entry = AuditLog.objects.filter(
             action='update', model_name='Advance', object_id=advance_id
         ).latest('timestamp')
-        self.assertEqual(Decimal(entry.previous_data['available_balance']), Decimal('200000'))
-        self.assertEqual(Decimal(entry.new_data['available_balance']), Decimal('-300000'))
         self.assertEqual(Decimal(entry.new_data['difference']), Decimal('-500000'))
+        self.assertEqual(len(entry.new_data['unlinked_trips']), 1)
+
+    def test_correcting_to_lower_value_with_no_linked_trips_never_goes_negative(self):
+        """Sin ningún viaje vinculado, reducir el valor (siempre a un
+        correct_value > 0, exigido por el serializer) nunca puede dejar el
+        saldo negativo: sin egresos por viajes que reclamar, el saldo
+        resultante es exactamente correct_value."""
+        resp_a = self._create_advance(1000000)
+        advance_id = resp_a.data['id']
+
+        resp = self._correct(advance_id, 100, justification='Corrección drástica, sin viajes vinculados')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data['unlinked_trips'], [])
+
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(get_available_balance(advance), Decimal('100'))
 
     def test_cannot_correct_advance_that_is_no_longer_active(self):
         resp_a = self._create_advance(1000000)

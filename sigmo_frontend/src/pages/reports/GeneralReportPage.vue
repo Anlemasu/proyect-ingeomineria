@@ -24,7 +24,7 @@ import { invoicesApi } from '@/api/invoices.api'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime } from '@/utils/formatDate'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { printGeneralQuery } from '@/utils/printReport'
 import { exportGeneralQueryExcel } from '@/utils/exportGeneralQueryExcel'
 import { copyTableToClipboard } from '@/utils/copyTableToClipboard'
@@ -401,7 +401,7 @@ function handleExportExcel() {
   try {
     exportGeneralQueryExcel(sortedRows.value, visibleColumnConfigs.value, invoiceNumberMap.value)
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 }
 

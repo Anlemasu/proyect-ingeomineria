@@ -76,7 +76,10 @@ export const navigation: NavItem[] = [
         label: 'Cierre de Caja',
         path: '/cash-closing',
         icon: Archive,
-        roles: ['superuser', 'cashier', 'commercial_admin'],
+        // Todos los roles ven el resumen del día e histórico (solo lectura);
+        // ejecutar/revertir el cierre queda restringido dentro del propio
+        // componente a superuser/commercial_admin (ver canManageClosing).
+        roles: ['superuser', 'cashier', 'commercial_admin', 'accountant', 'auditor'],
       },
     ],
   },
@@ -118,7 +121,7 @@ export const navigation: NavItem[] = [
         label: 'Tarifas',
         path: '/masters/tariffs',
         icon: DollarSign,
-        roles: ['superuser', 'commercial_admin', 'auditor'],
+        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor'],
       },
       {
         type: 'leaf',
@@ -139,7 +142,7 @@ export const navigation: NavItem[] = [
         label: 'Ciudades',
         path: '/masters/cities',
         icon: Map,
-        roles: ['superuser', 'commercial_admin', 'auditor'],
+        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor'],
       },
     ],
   },

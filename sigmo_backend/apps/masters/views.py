@@ -23,6 +23,22 @@ def is_commercial_admin(user):
 def can_manage_masters(user):
     return is_superuser(user) or is_commercial_admin(user)
 
+# Ciudades: a diferencia del resto de maestros, el rol accountant también
+# puede crear/editar (RF nuevo — Contador tiene acceso completo a Ciudades,
+# pero solo lectura en Tarifas, que sigue usando can_manage_masters).
+def can_manage_cities(user):
+    return can_manage_masters(user) or user.role == 'accountant'
+
+# Vehículos: además de superuser/commercial_admin (gestión completa desde
+# Maestros > Vehículos), cashier también puede CREAR uno — es el único rol
+# con acceso a Registro de Viajes que no cae ya en can_manage_masters, y
+# necesita poder registrar la placa de un vehículo nuevo al vuelo si el
+# viaje trae una placa que todavía no existe en el sistema (TripsPage.vue).
+# cashier no tiene ruta en el frontend hacia Maestros > Vehículos, así que
+# en la práctica esto no le abre esa pantalla de gestión, solo este endpoint.
+def can_create_vehicle(user):
+    return can_manage_masters(user) or user.role == 'cashier'
+
 
 # ── VehicleType ───────────────────────────────────────────────────────────────
 class VehicleTypeListCreateView(APIView):
@@ -306,7 +322,7 @@ class CityListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        if not can_manage_masters(request.user):
+        if not can_manage_cities(request.user):
             log_action(request, 'access_denied', 'City')
             return Response(
                 {'error': 'No tiene permisos para crear ciudades.'},
@@ -340,7 +356,7 @@ class CityDetailView(APIView):
         return Response(CitySerializer(obj).data)
 
     def patch(self, request, pk):
-        if not can_manage_masters(request.user):
+        if not can_manage_cities(request.user):
             log_action(request, 'access_denied', 'City', object_id=pk)
             return Response(
                 {'error': 'No tiene permisos para editar ciudades.'},
@@ -576,7 +592,7 @@ class VehicleListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        if not can_manage_masters(request.user):
+        if not can_create_vehicle(request.user):
             log_action(request, 'access_denied', 'Vehicle')
             return Response(
                 {'error': 'No tiene permisos para registrar vehículos.'},

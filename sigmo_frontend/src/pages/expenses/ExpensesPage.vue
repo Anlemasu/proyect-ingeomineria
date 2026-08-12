@@ -16,7 +16,7 @@ import type { Expense } from '@/types'
 import { usePermissions } from '@/composables/usePermissions'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, todayBogota } from '@/utils/formatDate'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 
 const { canCreate, canEdit } = usePermissions()
 const queryClient = useQueryClient()
@@ -78,7 +78,7 @@ const onCreateSubmit = handleCreate(async (values) => {
     queryClient.invalidateQueries({ queryKey: ['expenses'] })
     queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 
@@ -127,7 +127,7 @@ const onEditSubmit = handleEdit(async (values) => {
     queryClient.invalidateQueries({ queryKey: ['expenses'] })
     queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 
@@ -162,7 +162,7 @@ async function confirmAnnul() {
     queryClient.invalidateQueries({ queryKey: ['expenses'] })
     queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   } finally {
     annulLoading.value = false
   }

@@ -13,7 +13,7 @@ import PageHeader from '@/components/shared/PageHeader.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import { usersApi } from '@/api/users.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { useAuthStore } from '@/stores/auth.store'
 import type { User, UserRole } from '@/types'
 
@@ -175,7 +175,7 @@ const { mutate: toggleUser, isPending: togglePending } = useMutation({
     confirmToggle.value = null
     toast.success('Estado actualizado.')
   },
-  onError: (err) => { toast.error(getApiErrorMessage(err)) },
+  onError: (err) => { toastApiError(err) },
 })
 
 const { mutateAsync: resetUserPassword } = useMutation({
@@ -238,7 +238,7 @@ const onCreateSubmit = handleCreateSubmit(async (values) => {
     const fieldErrors = getFieldErrors(err)
     if (fieldErrors.email) setCreateFieldError('email', fieldErrors.email)
     else if (fieldErrors.username) setCreateFieldError('username', fieldErrors.username)
-    else toast.error(getApiErrorMessage(err))
+    else toastApiError(err)
   }
 })
 
@@ -251,7 +251,7 @@ const onEditSubmit = handleEditSubmit(async (values) => {
     const fieldErrors = getFieldErrors(err)
     if (fieldErrors.username) setEditFieldError('username', fieldErrors.username)
     else if (fieldErrors.email) setEditFieldError('email', fieldErrors.email)
-    else toast.error(getApiErrorMessage(err))
+    else toastApiError(err)
   }
 })
 
@@ -261,7 +261,7 @@ const onResetSubmit = handleResetSubmit(async (values) => {
     await resetUserPassword({ id: resetTargetUser.value.id, data: { new_password: values.password } })
     showResetModal.value = false
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 

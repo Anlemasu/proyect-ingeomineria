@@ -14,7 +14,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import { clientsApi } from '@/api/clients.api'
 import { citiesApi } from '@/api/cities.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { usePermissions } from '@/composables/usePermissions'
 import type { Client } from '@/types'
 
@@ -85,7 +85,7 @@ async function createCity() {
     showCreateCity.value = false
     newCityName.value = ''
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   } finally {
     createCityLoading.value = false
   }
@@ -154,7 +154,7 @@ const { mutate: toggleClient, isPending: togglePending } = useMutation({
     confirmToggle.value = null
     toast.success('Estado actualizado.')
   },
-  onError: (err) => { toast.error(getApiErrorMessage(err)) },
+  onError: (err) => { toastApiError(err) },
 })
 
 const onSubmit = handleSubmit(async (values) => {
@@ -168,7 +168,7 @@ const onSubmit = handleSubmit(async (values) => {
     }
     showModal.value = false
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 

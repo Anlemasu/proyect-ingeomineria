@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 
 import {
-  RefreshCw, Pencil, Ban, CheckCircle, AlertTriangle, Search, Copy, Printer,
+  RefreshCw, Pencil, Ban, CheckCircle, AlertTriangle, Search, Copy, Printer, FileSpreadsheet,
 } from 'lucide-vue-next'
 
 import PageHeader       from '@/components/shared/PageHeader.vue'
@@ -21,8 +21,9 @@ import { advancesApi }       from '@/api/advances.api'
 import { useAuthStore }      from '@/stores/auth.store'
 import { todayBogota }       from '@/utils/formatDate'
 import { formatCurrency }    from '@/utils/formatCurrency'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { copyTableToClipboard } from '@/utils/copyTableToClipboard'
+import { exportTableToExcel } from '@/utils/exportTableToExcel'
 import { printAdjustmentRecord } from '@/utils/printAdjustmentRecord'
 import type { Trip } from '@/types'
 
@@ -267,7 +268,7 @@ async function saveEdit() {
     queryClient.invalidateQueries({ queryKey: ['advance-balance'] })
     queryClient.invalidateQueries({ queryKey: ['dashboard', 'advances'] })
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   } finally {
     editLoading.value = false
   }
@@ -305,7 +306,7 @@ async function confirmAnnul() {
     queryClient.invalidateQueries({ queryKey: ['advance-balance'] })
     queryClient.invalidateQueries({ queryKey: ['dashboard', 'advances'] })
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   } finally {
     annulLoading.value = false
   }
@@ -320,6 +321,16 @@ async function handleCopy() {
     toast.success('Tabla copiada al portapapeles')
   } catch {
     toast.error('No se pudo copiar la tabla')
+  }
+}
+
+function handleExportExcel() {
+  if (!tableEl.value) return
+  try {
+    exportTableToExcel(tableEl.value, 'Ajustes_SIGMO')
+    toast.success('Tabla exportada a Excel')
+  } catch {
+    toast.error('No se pudo exportar la tabla')
   }
 }
 
@@ -372,6 +383,14 @@ function handlePrint(trip: Trip) {
         title="Copiar tabla al portapapeles"
       >
         <Copy class="w-4 h-4" />Copiar
+      </button>
+      <button
+        type="button"
+        @click="handleExportExcel"
+        class="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+        title="Exportar tabla a Excel"
+      >
+        <FileSpreadsheet class="w-4 h-4" />Exportar Excel
       </button>
       <span class="text-xs text-gray-400 sm:ml-auto">
         {{ filteredTrips.length }} viaje{{ filteredTrips.length !== 1 ? 's' : '' }} —

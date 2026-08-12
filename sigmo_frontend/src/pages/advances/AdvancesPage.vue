@@ -5,7 +5,7 @@ import { toast } from 'vue-sonner'
 import { useForm, useField } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import { Plus, Pencil, Download, AlertTriangle, X, Eye, FileText, Truck } from 'lucide-vue-next'
+import { Plus, Pencil, Download, AlertTriangle, X, Eye, FileText, Truck, Wrench } from 'lucide-vue-next'
 import type { ColumnDef } from '@tanstack/vue-table'
 
 type ARow = Record<string, unknown>
@@ -15,11 +15,11 @@ import CurrencyInput from '@/components/shared/CurrencyInput.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import { advancesApi } from '@/api/advances.api'
 import { clientsApi } from '@/api/clients.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, todayBogota } from '@/utils/formatDate'
-import type { Advance, AdvanceMovement, Client } from '@/types'
+import type { Advance, AdvanceMovement, Client, AdvanceCorrectValuePreview } from '@/types'
 
 const qc = useQueryClient()
 const authStore = useAuthStore()
@@ -45,9 +45,18 @@ const visibleTabs = computed(() =>
 const { data: advancesData, isLoading: advancesLoading } = useQuery({
   queryKey: ['advances'],
   queryFn: () => advancesApi.list().then(r => r.data),
-  refetchInterval: 60_000,
+  refetchInterval: 8_000,
 })
 const advances = computed(() => advancesData.value ?? [])
+
+const { data: pendingDebtsSummaryData } = useQuery({
+  queryKey: ['advances-pending-debts-summary'],
+  queryFn: () => advancesApi.pendingDebtsSummary().then(r => r.data),
+  refetchInterval: 8_000,
+})
+// Claves del objeto son client_id como string (formato JSON) — se busca por
+// String(clientId) al leerlo.
+const pendingDebtsByClient = computed(() => pendingDebtsSummaryData.value ?? {})
 
 const { data: clientsData } = useQuery({
   queryKey: ['clients'],
@@ -159,6 +168,83 @@ function closeModal() {
   editingAdvance.value = null
 }
 
+// ── Corrección de valor original (Superusuario/Contador/Admin Comercial) ──
+// Única forma real de cambiar `value` una vez el anticipo tiene movimientos
+// (siempre, desde que se crea) — ver advancesApi.correctValue.
+const correctingAdvance   = ref<Advance | null>(null)
+const correctValueInput   = ref<number | undefined>(undefined)
+const correctJustification = ref('')
+const correctPreview        = ref<AdvanceCorrectValuePreview | null>(null)
+const correctPreviewLoading = ref(false)
+const correctSubmitLoading  = ref(false)
+
+function openCorrectValue(advance: Advance) {
+  correctingAdvance.value    = advance
+  correctValueInput.value    = parseFloat(advance.value)
+  correctJustification.value = ''
+  correctPreview.value       = null
+}
+
+function closeCorrectValue() {
+  correctingAdvance.value = null
+  correctPreview.value    = null
+}
+
+// Previsualiza (debounced, sin escribir nada) el impacto ANTES de que el
+// usuario confirme — si la reducción deja el saldo negativo, el backend
+// devuelve qué viajes quedarían como deuda pendiente.
+let correctPreviewTimeout: ReturnType<typeof setTimeout> | undefined
+watch(correctValueInput, (val) => {
+  if (correctPreviewTimeout) clearTimeout(correctPreviewTimeout)
+  correctPreview.value = null
+  if (!correctingAdvance.value || val === undefined || val === null || val <= 0) return
+  if (val === parseFloat(correctingAdvance.value.value)) return
+
+  const advanceId = correctingAdvance.value.id
+  correctPreviewTimeout = setTimeout(async () => {
+    correctPreviewLoading.value = true
+    try {
+      const res = await advancesApi.previewCorrectValue(advanceId, val)
+      correctPreview.value = res.data
+    } catch (err) {
+      toastApiError(err)
+    } finally {
+      correctPreviewLoading.value = false
+    }
+  }, 400)
+})
+
+const correctWouldUnlink = computed(() => (correctPreview.value?.trips_to_unlink.length ?? 0) > 0)
+
+async function submitCorrectValue() {
+  if (!correctingAdvance.value || correctValueInput.value === undefined) return
+  if (!correctJustification.value.trim()) {
+    toast.error('La justificación es obligatoria para corregir el valor de un anticipo.')
+    return
+  }
+  correctSubmitLoading.value = true
+  try {
+    const res = await advancesApi.correctValue(correctingAdvance.value.id, {
+      correct_value: correctValueInput.value,
+      justification: correctJustification.value.trim(),
+    })
+    const settledCount = res.data.settled_trips.length
+    toast.success(
+      settledCount > 0
+        ? `Valor corregido correctamente. Se liquidaron ${settledCount} viaje(s) de deuda pendiente.`
+        : 'Valor del anticipo corregido correctamente.'
+    )
+    qc.invalidateQueries({ queryKey: ['advances'] })
+    qc.invalidateQueries({ queryKey: ['advances-pending-debts-summary'] })
+    qc.invalidateQueries({ queryKey: ['advance-balance'] })
+    closeCorrectValue()
+  } catch (err) {
+    toastApiError(err)
+  } finally {
+    correctSubmitLoading.value = false
+  }
+}
+
 const createMutation = useMutation({
   mutationFn: (data: Parameters<typeof advancesApi.create>[0]) => advancesApi.create(data),
   onSuccess: () => {
@@ -166,7 +252,7 @@ const createMutation = useMutation({
     qc.invalidateQueries({ queryKey: ['advances'] })
     closeModal()
   },
-  onError: (err) => toast.error(getApiErrorMessage(err)),
+  onError: (err) => toastApiError(err),
 })
 
 const updateMutation = useMutation({
@@ -182,31 +268,41 @@ const updateMutation = useMutation({
       if (updated) detailAdvance.value = updated
     }
   },
-  onError: (err) => toast.error(getApiErrorMessage(err)),
+  onError: (err) => toastApiError(err),
 })
 
 const onSubmit = handleSubmit(async (values) => {
-  if (editingAdvance.value) {
-    await updateMutation.mutateAsync({
-      id: editingAdvance.value.id,
-      data: {
-        value: values.value,
-        transfer_num: values.transfer_num,
+  // mutateAsync sigue rechazando la promesa aunque onError ya haya mostrado
+  // el toast — sin este try/catch, cualquier error de validación (ej. editar
+  // `value` de un anticipo con movimientos) quedaba como unhandled rejection
+  // en consola además del toast.
+  try {
+    if (editingAdvance.value) {
+      // `value` no va aquí: una vez el anticipo tiene movimientos (siempre,
+      // desde que se crea) el backend lo bloquea de plano — para eso existe
+      // el flujo separado "Corregir valor" (openCorrectValue más abajo).
+      await updateMutation.mutateAsync({
+        id: editingAdvance.value.id,
+        data: {
+          transfer_num: values.transfer_num,
+          date: values.date,
+          proforma_number: values.proforma_number ?? null,
+          observations: values.observations || null,
+        },
+      })
+    } else {
+      await createMutation.mutateAsync({
+        client: values.client!,
+        value: values.value!,
+        transfer_num: values.transfer_num!,
         date: values.date,
-        proforma_number: values.proforma_number ?? null,
-        observations: values.observations || null,
-      },
-    })
-  } else {
-    await createMutation.mutateAsync({
-      client: values.client!,
-      value: values.value!,
-      transfer_num: values.transfer_num!,
-      date: values.date,
-      trips_quantity: values.trips_quantity ?? 0,
-      proforma_number: values.proforma_number,
-      observations: values.observations || undefined,
-    })
+        trips_quantity: values.trips_quantity ?? 0,
+        proforma_number: values.proforma_number,
+        observations: values.observations || undefined,
+      })
+    }
+  } catch {
+    // ya manejado por onError de cada mutación (toastApiError)
   }
 })
 
@@ -263,6 +359,13 @@ const registroColumns: ColumnDef<ARow>[] = [
               onClick: () => openEdit(adv),
             }, h(Pencil, { class: 'w-4 h-4' }))
           : null,
+        canManage.value
+          ? h('button', {
+              class: 'p-1 text-gray-400 hover:text-gold-700 transition-colors',
+              title: 'Corregir valor',
+              onClick: () => openCorrectValue(adv),
+            }, h(Wrench, { class: 'w-4 h-4' }))
+          : null,
       ])
     },
   },
@@ -276,6 +379,22 @@ const selectedClientAdvances = computed(() =>
     ? advances.value.filter(a => a.client === selectedClientId.value)
     : []
 )
+
+// Deuda pendiente y saldo neto real del cliente (viajes registrados sin
+// saldo suficiente, aún sin liquidar contra ningún anticipo — ver
+// AdvanceBalanceView/settle_pending_debts en el backend). La suma simple de
+// `available_balance` de los anticipos (selectedClientBalance, más abajo) NO
+// incluye esta deuda, así que puede mostrar un saldo más alto del real.
+const { data: selectedClientBalanceData } = useQuery({
+  queryKey: computed(() => ['advance-balance', selectedClientId.value]),
+  queryFn: () => selectedClientId.value
+    ? advancesApi.balance(selectedClientId.value).then(r => r.data)
+    : Promise.resolve(null),
+  enabled: computed(() => !!selectedClientId.value),
+  refetchInterval: 8_000,
+})
+const pendingDebts = computed(() => selectedClientBalanceData.value?.pending_debts ?? [])
+const totalPendingDebt = computed(() => Number(selectedClientBalanceData.value?.total_pending_debt ?? 0))
 
 const selectedClientTotalIngresado = computed(() =>
   selectedClientAdvances.value
@@ -291,12 +410,22 @@ const selectedClientTotalConsumido = computed(() =>
     .reduce((s, m) => s + parseFloat(m.amount), 0)
 )
 
-const selectedClientBalance = computed(() =>
+const selectedClientAdvancesBalance = computed(() =>
   selectedClientAdvances.value.reduce((s, a) => s + a.available_balance, 0)
+)
+// Saldo neto real: saldo de anticipos menos deuda pendiente sin liquidar.
+const selectedClientBalance = computed(() =>
+  selectedClientAdvancesBalance.value - totalPendingDebt.value
 )
 
 // Resumen de saldos de todos los clientes (vista antes de seleccionar uno)
-type ClientSummaryRow = { client: Client; totalIngresado: number; totalConsumido: number; saldo: number }
+type ClientSummaryRow = {
+  client: Client
+  totalIngresado: number
+  totalConsumido: number
+  pendingDebt: number
+  saldo: number
+}
 
 const clientsSummary = computed<ClientSummaryRow[]>(() =>
   clients.value.map(c => {
@@ -308,8 +437,9 @@ const clientsSummary = computed<ClientSummaryRow[]>(() =>
     const totalConsumido = movements
       .filter(m => m.type_movement === 'egreso')
       .reduce((s, m) => s + parseFloat(m.amount), 0)
-    const saldo = clientAdvances.reduce((s, a) => s + a.available_balance, 0)
-    return { client: c, totalIngresado, totalConsumido, saldo }
+    const advancesBalance = clientAdvances.reduce((s, a) => s + a.available_balance, 0)
+    const pendingDebt = Number(pendingDebtsByClient.value[String(c.id)] ?? 0)
+    return { client: c, totalIngresado, totalConsumido, pendingDebt, saldo: advancesBalance - pendingDebt }
   })
 )
 
@@ -328,6 +458,14 @@ const clientsSummaryColumns: ColumnDef<ARow>[] = [
     accessorKey: 'totalConsumido',
     header: 'Saldo Ejecutado',
     cell: info => formatCurrency(info.getValue() as number),
+  },
+  {
+    accessorKey: 'pendingDebt',
+    header: 'Deuda Pendiente',
+    cell: info => {
+      const val = info.getValue() as number
+      return val > 0 ? h('span', { class: 'text-amber-600 font-medium' }, formatCurrency(val)) : '—'
+    },
   },
   {
     accessorKey: 'saldo',
@@ -351,12 +489,20 @@ const clientsSummaryColumns: ColumnDef<ARow>[] = [
 
 type MovementRow = AdvanceMovement & { client_name: string; advance_id: number }
 
+// `date` es un DateField (solo día, sin hora) — dos movimientos del mismo
+// día quedaban en orden indeterminado ordenando solo por esa columna. `id`
+// refleja el orden real de creación, así que desempata de forma consistente
+// (más reciente primero = id más alto primero).
+function sortMovementsDesc<T extends { date: string; id: number }>(movements: T[]): T[] {
+  return [...movements].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+}
+
 const selectedClientMovements = computed<MovementRow[]>(() =>
-  selectedClientAdvances.value
-    .flatMap(a =>
+  sortMovementsDesc(
+    selectedClientAdvances.value.flatMap(a =>
       a.movements.map(m => ({ ...m, client_name: a.client_detail?.name ?? '—', advance_id: a.id }))
     )
-    .sort((a, b) => b.date.localeCompare(a.date))
+  )
 )
 
 // Columnas anticipos en Tab 2 (lista compacta)
@@ -410,7 +556,7 @@ const allMovements = computed<MovementRow[]>(() => {
       result.push({ ...m, client_name: adv.client_detail?.name ?? '—', advance_id: adv.id })
     }
   }
-  return result.sort((a, b) => b.date.localeCompare(a.date))
+  return sortMovementsDesc(result)
 })
 
 const movementColumns: ColumnDef<ARow>[] = [
@@ -618,7 +764,7 @@ watch(activeTab, () => {
 
       <template v-if="selectedClientId">
         <!-- Balance cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" :class="totalPendingDebt > 0 ? 'lg:grid-cols-4' : ''">
           <div class="rounded-xl border border-gray-200 bg-white p-5">
             <p class="text-xs text-gray-500 uppercase tracking-wide">Total Ingresado</p>
             <p class="mt-1 text-2xl font-semibold text-green-600">
@@ -642,6 +788,42 @@ watch(activeTab, () => {
             >
               {{ formatCurrency(selectedClientBalance) }}
             </p>
+          </div>
+          <div v-if="totalPendingDebt > 0" class="rounded-xl border bg-amber-50 border-amber-200 p-5">
+            <p class="text-xs text-amber-700 uppercase tracking-wide">Deuda Pendiente</p>
+            <p class="mt-1 text-2xl font-semibold text-amber-700">
+              {{ formatCurrency(totalPendingDebt) }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Viajes registrados como deuda pendiente, aún sin liquidar contra
+             ningún anticipo — se liquidan automáticamente (FIFO) cuando se
+             registre el próximo anticipo de este cliente. -->
+        <div v-if="pendingDebts.length > 0">
+          <h3 class="text-sm font-semibold text-amber-700 mb-2 flex items-center gap-2">
+            <AlertTriangle class="w-4 h-4" />
+            Deuda pendiente por liquidar
+          </h3>
+          <div class="rounded-xl border border-amber-200 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-amber-50">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Vale</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Fecha</th>
+                  <th class="px-4 py-2 text-right text-xs font-semibold text-amber-700 uppercase tracking-wide">Valor</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Justificación</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-amber-100 bg-white">
+                <tr v-for="d in pendingDebts" :key="d.trip">
+                  <td class="px-4 py-2 font-medium text-gray-900">#{{ d.voucher_num }}</td>
+                  <td class="px-4 py-2 text-gray-700">{{ formatDate(d.date) }}</td>
+                  <td class="px-4 py-2 text-right font-semibold text-amber-700">{{ formatCurrency(parseFloat(d.value)) }}</td>
+                  <td class="px-4 py-2 text-gray-600">{{ d.justification || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -760,6 +942,14 @@ watch(activeTab, () => {
               Editar
             </button>
             <button
+              v-if="canManage"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold-300 bg-gold-50 text-gold-700 text-xs font-medium hover:bg-gold-100 transition-colors"
+              @click="openCorrectValue(detailAdvance); closeDetail()"
+            >
+              <Wrench class="w-3.5 h-3.5" />
+              Corregir valor
+            </button>
+            <button
               class="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               @click="closeDetail"
             >
@@ -831,7 +1021,7 @@ watch(activeTab, () => {
             </div>
             <div v-else class="space-y-2">
               <div
-                v-for="mov in [...detailAdvance.movements].sort((a, b) => b.date.localeCompare(a.date))"
+                v-for="mov in sortMovementsDesc(detailAdvance.movements)"
                 :key="mov.id"
                 class="flex items-start gap-3 rounded-lg border border-gray-100 bg-white px-4 py-3"
               >
@@ -919,8 +1109,10 @@ watch(activeTab, () => {
             <p v-if="dateError" class="mt-1 text-xs text-red-500">{{ dateError }}</p>
           </div>
 
-          <!-- Valor -->
-          <div>
+          <!-- Valor: solo editable al crear — una vez el anticipo tiene
+               movimientos (siempre, desde que se crea) el backend bloquea
+               este campo de plano; para eso existe "Corregir valor". -->
+          <div v-if="!editingAdvance">
             <label class="block text-sm font-medium text-gray-700 mb-1">
               Valor <span class="text-red-500">*</span>
             </label>
@@ -930,6 +1122,20 @@ watch(activeTab, () => {
               @update:model-value="handleValueChange($event)"
             />
             <p v-if="valueError" class="mt-1 text-xs text-red-500">{{ valueError }}</p>
+          </div>
+          <div v-else>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Valor original</label>
+            <p class="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-600">
+              {{ formatCurrency(parseFloat(editingAdvance.value)) }}
+            </p>
+            <button
+              v-if="canManage"
+              type="button"
+              @click="openCorrectValue(editingAdvance); closeModal()"
+              class="mt-1 text-xs text-gold-700 hover:text-gold-800 font-medium underline underline-offset-2"
+            >
+              Corregir valor
+            </button>
           </div>
 
           <!-- N° Consignación -->
@@ -1007,6 +1213,99 @@ watch(activeTab, () => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- ── Modal: Corregir valor del anticipo ─────────────────────────────── -->
+  <Teleport to="body">
+    <div
+      v-if="correctingAdvance"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+      @click.self="closeCorrectValue"
+    >
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40 flex-shrink-0">
+          <h2 class="text-base font-semibold text-gray-900">Corregir valor del anticipo</h2>
+          <button class="text-gray-400 hover:text-gray-600 transition-colors" @click="closeCorrectValue">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="px-6 py-5 space-y-4 overflow-y-auto">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wide">Cliente</p>
+              <p class="text-sm font-medium text-gray-900">{{ correctingAdvance.client_detail?.name }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wide">Valor original</p>
+              <p class="text-sm font-medium text-gray-900">{{ formatCurrency(parseFloat(correctingAdvance.value)) }}</p>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Valor correcto <span class="text-red-500">*</span>
+            </label>
+            <CurrencyInput
+              :model-value="correctValueInput ?? null"
+              @update:model-value="correctValueInput = $event ?? undefined"
+            />
+          </div>
+
+          <p v-if="correctPreviewLoading" class="text-xs text-gray-400">Calculando impacto...</p>
+
+          <div v-else-if="correctWouldUnlink" class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
+            <p class="text-sm font-semibold text-amber-700 flex items-center gap-1.5">
+              <AlertTriangle class="w-4 h-4 shrink-0" />
+              Esta corrección dejará como deuda pendiente:
+            </p>
+            <ul class="text-xs text-amber-700 space-y-1 pl-1">
+              <li v-for="t in correctPreview?.trips_to_unlink" :key="t.trip">
+                Vale #{{ t.voucher_num }} — {{ formatCurrency(parseFloat(t.value)) }}
+              </li>
+            </ul>
+            <p class="text-xs text-amber-600">
+              Estos viajes se liquidarán automáticamente contra el próximo anticipo que se le registre a este cliente.
+            </p>
+          </div>
+
+          <p v-else-if="correctPreview" class="text-xs text-gray-500">
+            Saldo disponible resultante: <strong>{{ formatCurrency(parseFloat(correctPreview.prospective_balance)) }}</strong>
+          </p>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Justificación <span class="text-red-500">*</span>
+            </label>
+            <textarea
+              v-model="correctJustification"
+              rows="3"
+              placeholder="Motivo de la corrección..."
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none"
+            />
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 flex-shrink-0">
+          <button
+            type="button"
+            @click="closeCorrectValue"
+            :disabled="correctSubmitLoading"
+            class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            :disabled="correctSubmitLoading || !correctValueInput || !correctJustification.trim()"
+            @click="submitCorrectValue"
+            class="px-4 py-2 text-sm font-medium bg-gold-500 text-stone-900 rounded-lg hover:bg-gold-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {{ correctSubmitLoading ? 'Aplicando...' : 'Confirmar corrección' }}
+          </button>
+        </div>
       </div>
     </div>
   </Teleport>

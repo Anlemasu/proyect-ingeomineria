@@ -11,7 +11,7 @@ import DataTable from '@/components/shared/DataTable.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import { pinsApi } from '@/api/pins.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { usePermissions } from '@/composables/usePermissions'
 import { formatDate } from '@/utils/formatDate'
 import type { PinsDumper, ImportResult } from '@/types'
@@ -70,7 +70,7 @@ const onSubmit = handleSubmit(async (values) => {
     await create({ ...values, capacity: String(values.capacity), phone: values.phone })
     showModal.value = false
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 
@@ -93,7 +93,7 @@ const { mutate: doImport, isPending: importPending } = useMutation({
     qc.invalidateQueries({ queryKey: ['pins'] })
     toast.success(`Importacion completada: ${res.data.created} creados, ${res.data.updated} actualizados.`)
   },
-  onError: (err) => toast.error(getApiErrorMessage(err)),
+  onError: (err) => toastApiError(err),
 })
 
 function confirmImport() {

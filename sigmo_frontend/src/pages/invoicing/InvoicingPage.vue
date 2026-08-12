@@ -13,7 +13,7 @@ import { tripsApi } from '@/api/trips.api'
 import { invoicesApi } from '@/api/invoices.api'
 import { clientsApi } from '@/api/clients.api'
 import { paymentMethodsApi } from '@/api/paymentMethods.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
@@ -182,7 +182,7 @@ const assignMutation = useMutation({
     if (err instanceof Error && !err.message.includes('validation')) {
       toast.error(err.message)
     } else {
-      toast.error(getApiErrorMessage(err))
+      toastApiError(err)
     }
   },
 })

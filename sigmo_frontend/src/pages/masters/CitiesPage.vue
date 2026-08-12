@@ -12,7 +12,7 @@ import PageHeader from '@/components/shared/PageHeader.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import { citiesApi } from '@/api/cities.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { usePermissions } from '@/composables/usePermissions'
 import type { City } from '@/types'
 
@@ -54,7 +54,7 @@ const { mutateAsync: update } = useMutation({
 const { mutate: toggle, isPending: togglePending } = useMutation({
   mutationFn: (item: City) => citiesApi.update(item.id, { state: !item.state }),
   onSuccess: () => { qc.invalidateQueries({ queryKey: ['cities'] }); confirmToggle.value = null; toast.success('Estado actualizado.') },
-  onError: (err) => toast.error(getApiErrorMessage(err)),
+  onError: (err) => toastApiError(err),
 })
 
 const onSubmit = handleSubmit(async (values) => {
@@ -66,7 +66,7 @@ const onSubmit = handleSubmit(async (values) => {
     }
     showModal.value = false
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 
@@ -77,8 +77,8 @@ const columns: ColumnDef<City>[] = [
     id: 'actions',
     header: 'Acciones',
     cell: ({ row }) => h('div', { class: 'flex items-center gap-2' }, [
-      canEdit('masters') ? h('button', { class: 'p-1 text-gray-500 hover:text-gold-700', onClick: () => openEdit(row.original) }, h(Pencil, { class: 'w-4 h-4' })) : null,
-      canEdit('masters') ? h('button', { class: 'p-1 text-gray-500 hover:text-amber-600', onClick: () => { confirmToggle.value = row.original } },
+      canEdit('cities') ? h('button', { class: 'p-1 text-gray-500 hover:text-gold-700', onClick: () => openEdit(row.original) }, h(Pencil, { class: 'w-4 h-4' })) : null,
+      canEdit('cities') ? h('button', { class: 'p-1 text-gray-500 hover:text-amber-600', onClick: () => { confirmToggle.value = row.original } },
         h(row.original.state ? ToggleRight : ToggleLeft, { class: 'w-4 h-4' })) : null,
     ].filter(Boolean)),
   },
@@ -89,7 +89,7 @@ const columns: ColumnDef<City>[] = [
   <div>
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <PageHeader title="Ciudades" description="Ciudades registradas" />
-      <button v-if="canCreate('masters')" @click="openCreate" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600">
+      <button v-if="canCreate('cities')" @click="openCreate" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600">
         <Plus class="w-4 h-4" /> Nueva ciudad
       </button>
     </div>

@@ -12,7 +12,7 @@ import PageHeader from '@/components/shared/PageHeader.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import { materialsApi } from '@/api/materials.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { usePermissions } from '@/composables/usePermissions'
 import type { MaterialType } from '@/types'
 
@@ -56,7 +56,7 @@ const { mutateAsync: update } = useMutation({
 const { mutate: toggle, isPending: togglePending } = useMutation({
   mutationFn: (item: MaterialType) => materialsApi.update(item.id, { state: !item.state }),
   onSuccess: () => { qc.invalidateQueries({ queryKey: ['materials'] }); confirmToggle.value = null; toast.success('Estado actualizado.') },
-  onError: (err) => toast.error(getApiErrorMessage(err)),
+  onError: (err) => toastApiError(err),
 })
 
 const onSubmit = handleSubmit(async (values) => {
@@ -69,7 +69,7 @@ const onSubmit = handleSubmit(async (values) => {
     }
     showModal.value = false
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 

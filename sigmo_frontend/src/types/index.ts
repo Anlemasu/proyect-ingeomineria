@@ -173,9 +173,57 @@ export interface Advance {
   movements: AdvanceMovement[]
 }
 
+export interface AdvanceBalanceDetail {
+  id: number
+  date: string
+  value: string
+  transfer_num: number
+  available_balance: string
+  is_active: boolean
+}
+
+export interface AdvancePendingDebt {
+  trip: number
+  voucher_num: number
+  date: string
+  value: string
+  justification: string | null
+}
+
+// Un viaje que la corrección de valor de un anticipo dejaría (o dejó) como
+// deuda pendiente — mismo shape en la previsualización y en la respuesta
+// real de POST /advances/<id>/correct-value/.
+export interface AdvanceUnlinkedTrip {
+  trip: number
+  voucher_num: number
+  date?: string
+  value: string
+}
+
+export interface AdvanceCorrectValuePreview {
+  balance_before: string
+  prospective_balance: string
+  trips_to_unlink: AdvanceUnlinkedTrip[]
+}
+
+export interface AdvanceCorrectValueResult {
+  advance: Advance
+  movement: AdvanceMovement
+  unlinked_trips: AdvanceUnlinkedTrip[]
+  settled_trips: { trip: number; amount: string }[]
+}
+
+// Refleja la forma real de GET /advances/balance/<client_id>/
+// (AdvanceBalanceView.get en el backend) — antes este tipo tenía un campo
+// `balance` que el backend nunca devolvió, así que cualquier lectura de
+// `clientBalanceData.value?.balance` siempre era `undefined`.
 export interface AdvanceBalance {
   client_id: number
-  balance: number
+  advances: AdvanceBalanceDetail[]
+  total_advances_balance: string
+  pending_debts: AdvancePendingDebt[]
+  total_pending_debt: string
+  net_balance: string
 }
 
 export interface DailySummaryPayment {

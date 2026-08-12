@@ -13,6 +13,8 @@ from .services import (
     annotate_available_balance,
     settle_pending_debts,
     correct_active_advance_value,
+    compute_unlink_impact,
+    get_pending_debts_by_client,
     AdvanceNotActiveError,
     NoValueChangeError,
 )
@@ -205,6 +207,20 @@ class AdvanceBalanceView(APIView):
         })
 
 
+class AdvancePendingDebtsSummaryView(APIView):
+    """
+    GET /advances/pending-debts/
+    Deuda pendiente total por cliente, en una sola consulta — usado por el
+    listado general de "Estado de Cuenta" (AdvancesPage.vue) para restar la
+    deuda del saldo de cada cliente sin pedir el balance uno por uno.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        summary = get_pending_debts_by_client()
+        return Response({str(client_id): str(total) for client_id, total in summary.items()})
+
+
 class AdvanceCorrectValueView(APIView):
     """
     FASE 9C — corrige el valor original de un anticipo (típicamente un
@@ -250,7 +266,7 @@ class AdvanceCorrectValueView(APIView):
         justification = serializer.validated_data['justification']  # type: ignore
 
         try:
-            movement = correct_active_advance_value(
+            result = correct_active_advance_value(
                 advance,
                 correct_value=correct_value,
                 justification=justification,
@@ -272,5 +288,59 @@ class AdvanceCorrectValueView(APIView):
         advance.refresh_from_db()
         return Response({
             'advance': AdvanceSerializer(advance).data,
-            'movement': AdvanceMovementSerializer(movement).data,
+            'movement': AdvanceMovementSerializer(result['movement']).data,
+            'unlinked_trips': result['unlinked_trips'],
+            'settled_trips': result['settled_trips'],
         }, status=status.HTTP_200_OK)
+
+
+class AdvanceCorrectValuePreviewView(APIView):
+    """
+    POST /advances/<id>/correct-value/preview/
+    Simula (sin escribir nada) el impacto de corregir el valor de un
+    anticipo a `correct_value` — mismo cálculo que hace
+    correct_active_advance_value antes de escribir (compute_unlink_impact),
+    para que el frontend pueda mostrar una advertencia clara ("estos viajes
+    quedarán como deuda pendiente") ANTES de que el usuario confirme y
+    escriba la justificación.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if not can_manage_advances(request.user):
+            return Response(
+                {'error': 'No tiene permisos para corregir el valor de anticipos.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            advance = Advance.objects.get(pk=pk)
+        except Advance.DoesNotExist:
+            return Response(
+                {'error': 'Anticipo no encontrado.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        correct_value = request.data.get('correct_value')
+        try:
+            correct_value = Decimal(str(correct_value))
+        except Exception:
+            return Response(
+                {'error': 'correct_value debe ser un número válido.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        impact = compute_unlink_impact(advance, correct_value)
+        return Response({
+            'balance_before': str(impact['balance_before']),
+            'prospective_balance': str(impact['prospective_balance']),
+            'trips_to_unlink': [
+                {
+                    'trip': t.id,
+                    'voucher_num': t.voucher_num,
+                    'date': t.date,
+                    'value': str(t.value),
+                }
+                for t in impact['trips_to_unlink']
+            ],
+        })

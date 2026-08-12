@@ -10,14 +10,16 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/vue-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Copy } from 'lucide-vue-next'
+import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Copy, FileSpreadsheet } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { copyTableToClipboard } from '@/utils/copyTableToClipboard'
+import { exportTableToExcel } from '@/utils/exportTableToExcel'
 
 const props = defineProps<{
   columns: ColumnDef<T>[]
   data: T[]
   isLoading?: boolean
+  exportFilename?: string
 }>()
 
 const globalFilter = ref('')
@@ -70,6 +72,16 @@ async function handleCopy() {
     toast.error('No se pudo copiar la tabla')
   }
 }
+
+function handleExportExcel() {
+  if (!tableEl.value) return
+  try {
+    exportTableToExcel(tableEl.value, props.exportFilename ?? 'Export_SIGMO')
+    toast.success('Tabla exportada a Excel')
+  } catch {
+    toast.error('No se pudo exportar la tabla')
+  }
+}
 </script>
 
 <template>
@@ -97,6 +109,14 @@ async function handleCopy() {
         title="Copiar tabla al portapapeles"
       >
         <Copy class="w-4 h-4" />Copiar
+      </button>
+      <button
+        type="button"
+        @click="handleExportExcel"
+        class="flex items-center gap-1.5 px-3 py-2 text-sm text-stone-600 border border-stone-300 rounded-md hover:bg-gold-50 hover:border-gold-300 hover:text-gold-700 transition-colors"
+        title="Exportar tabla a Excel"
+      >
+        <FileSpreadsheet class="w-4 h-4" />Exportar Excel
       </button>
     </div>
 

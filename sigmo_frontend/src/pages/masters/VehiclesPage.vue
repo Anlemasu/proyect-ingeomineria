@@ -14,7 +14,7 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import { vehicleTypesApi, vehiclesApi } from '@/api/vehicles.api'
 import { pinsApi } from '@/api/pins.api'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { usePermissions } from '@/composables/usePermissions'
 import type { VehicleType, Vehicle, PinsDumper } from '@/types'
 
@@ -63,7 +63,7 @@ const { mutateAsync: updateType } = useMutation({
 const { mutate: toggleType, isPending: toggleTypePending } = useMutation({
   mutationFn: (t: VehicleType) => vehicleTypesApi.update(t.id, { state: !t.state }),
   onSuccess: () => { qc.invalidateQueries({ queryKey: ['vehicle-types'] }); confirmToggleType.value = null; toast.success('Estado actualizado.') },
-  onError: (err) => toast.error(getApiErrorMessage(err)),
+  onError: (err) => toastApiError(err),
 })
 
 const onTypeSubmit = handleTypeSubmit(async (values) => {
@@ -76,7 +76,7 @@ const onTypeSubmit = handleTypeSubmit(async (values) => {
     }
     showTypeModal.value = false
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 
@@ -134,7 +134,7 @@ const onVehicleSubmit = handleVehicleSubmit(async (values) => {
     await createVehicle(values)
     showVehicleModal.value = false
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   }
 })
 

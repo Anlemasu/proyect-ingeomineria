@@ -2,6 +2,9 @@
 import { ref, computed } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
+import { format, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
+import type { ColumnDef } from '@tanstack/vue-table'
 
 import {
   RefreshCw, Lock, Unlock, CheckCircle, AlertTriangle,
@@ -9,23 +12,32 @@ import {
 } from 'lucide-vue-next'
 
 import PageHeader from '@/components/shared/PageHeader.vue'
+import DataTable  from '@/components/shared/DataTable.vue'
 
 import { cashClosingApi }    from '@/api/cashClosing.api'
 import { useAuthStore }      from '@/stores/auth.store'
 import { formatCurrency }    from '@/utils/formatCurrency'
 import { formatDate }        from '@/utils/formatDate'
-import { getApiErrorMessage } from '@/utils/handleApiError'
+import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import type { DailySummary } from '@/types'
 
 const authStore   = useAuthStore()
 const queryClient = useQueryClient()
-const isSuperuser = computed(() => authStore.user?.role === 'superuser')
+const canManageClosing = computed(() =>
+  authStore.user?.role === 'superuser' || authStore.user?.role === 'commercial_admin'
+)
+
+// ── Pestañas — el resumen y el histórico son de solo lectura para todos los
+// roles; solo ejecutar/revertir cierre queda restringido (canManageClosing).
+const activeTab = ref<'resumen' | 'mensual'>('resumen')
 
 // ── Preview del día ───────────────────────────────────────────────────────────
+// Refresco corto (8s) para que el resumen operativo del día se sienta "en
+// tiempo real" al registrar viajes, sin necesidad de WebSockets.
 const { data: todayData, isLoading: todayLoading, refetch: refetchToday } = useQuery({
   queryKey: ['cash-closing-today'],
   queryFn:  () => cashClosingApi.today().then(r => r.data),
-  refetchInterval: 30_000,
+  refetchInterval: 8_000,
 })
 
 const alreadyClosed = computed(() => todayData.value?.already_closed ?? false)
@@ -62,7 +74,7 @@ async function executeClose() {
     await refetchHistory()
     queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   } finally {
     closingLoading.value = false
   }
@@ -89,7 +101,7 @@ async function confirmRevert() {
     await refetchHistory()
     queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
   } catch (err) {
-    toast.error(getApiErrorMessage(err))
+    toastApiError(err)
   } finally {
     revertLoading.value = false
   }
@@ -100,6 +112,99 @@ const detailSummary = ref<DailySummary | null>(null)
 const detailRevenue = computed(() =>
   (detailSummary.value?.payment_details ?? []).reduce((s, p) => s + Number(p.total), 0)
 )
+
+// ── Histórico mensual (todos los roles) ────────────────────────────────────────
+const rangeFrom = ref('')
+const rangeTo   = ref('')
+
+const rangeFilteredHistory = computed(() => {
+  return history.value.filter(s => {
+    if (rangeFrom.value && s.date < rangeFrom.value) return false
+    if (rangeTo.value && s.date > rangeTo.value) return false
+    return true
+  })
+})
+
+interface MonthlyRow {
+  month: string
+  monthLabel: string
+  closures: number
+  total_trips: number
+  total_volume: number
+  total_expenses: number
+  total_revenue: number
+  // Desglose por medio de pago (anticipo, efectivo, transferencia, etc.) —
+  // se arma dinámicamente según los medios que aparezcan en los datos, para
+  // no hardcodear una lista fija que se desincronice de Maestros > Medios de Pago.
+  paymentTotals: Record<string, number>
+}
+
+const monthlyRows = computed<MonthlyRow[]>(() => {
+  const map = new Map<string, MonthlyRow>()
+  for (const s of rangeFilteredHistory.value) {
+    const month = s.date.slice(0, 7)
+    if (!map.has(month)) {
+      map.set(month, {
+        month,
+        monthLabel: format(parseISO(s.date), 'MMMM yyyy', { locale: es }),
+        closures: 0,
+        total_trips: 0,
+        total_volume: 0,
+        total_expenses: 0,
+        total_revenue: 0,
+        paymentTotals: {},
+      })
+    }
+    const row = map.get(month)!
+    row.closures += 1
+    row.total_trips += s.total_trips
+    row.total_volume += Number(s.total_volume)
+    row.total_expenses += Number(s.total_expenses)
+    for (const p of s.payment_details) {
+      const amount = Number(p.total)
+      row.total_revenue += amount
+      row.paymentTotals[p.payment_method_name] = (row.paymentTotals[p.payment_method_name] ?? 0) + amount
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.month.localeCompare(a.month))
+})
+
+// Nombres de medio de pago presentes en el rango filtrado, en orden estable
+// — determina qué columnas de desglose se agregan a la tabla mensual.
+const monthlyPaymentMethodNames = computed(() => {
+  const names = new Set<string>()
+  for (const row of monthlyRows.value) {
+    for (const name of Object.keys(row.paymentTotals)) names.add(name)
+  }
+  return Array.from(names).sort()
+})
+
+const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
+  { accessorKey: 'monthLabel', header: 'Mes' },
+  { accessorKey: 'closures', header: 'Cierres registrados' },
+  { accessorKey: 'total_trips', header: 'Viajes' },
+  {
+    accessorKey: 'total_volume',
+    header: 'Volumen m³',
+    cell: ({ row }) => row.original.total_volume.toLocaleString('es-CO'),
+  },
+  {
+    accessorKey: 'total_expenses',
+    header: 'Gastos',
+    cell: ({ row }) => formatCurrency(row.original.total_expenses),
+  },
+  ...monthlyPaymentMethodNames.value.map((name): ColumnDef<MonthlyRow> => ({
+    id: `payment_${name}`,
+    header: name,
+    accessorFn: row => row.paymentTotals[name] ?? 0,
+    cell: ({ getValue }) => formatCurrency(getValue() as number),
+  })),
+  {
+    accessorKey: 'total_revenue',
+    header: 'Total ingresos',
+    cell: ({ row }) => formatCurrency(row.original.total_revenue),
+  },
+])
 </script>
 
 <template>
@@ -109,12 +214,37 @@ const detailRevenue = computed(() =>
       subtitle="Resumen diario y ejecución del cierre"
     />
 
+    <!-- ── Pestañas ──────────────────────────────────────────────────────── -->
+    <div class="flex gap-1 border-b border-gray-200">
+      <button
+        type="button"
+        @click="activeTab = 'resumen'"
+        class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+        :class="activeTab === 'resumen'
+          ? 'border-gold-500 text-gold-700'
+          : 'border-transparent text-gray-500 hover:text-gray-700'"
+      >
+        Resumen del día
+      </button>
+      <button
+        type="button"
+        @click="activeTab = 'mensual'"
+        class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+        :class="activeTab === 'mensual'
+          ? 'border-gold-500 text-gold-700'
+          : 'border-transparent text-gray-500 hover:text-gray-700'"
+      >
+        Histórico mensual
+      </button>
+    </div>
+
+    <template v-if="activeTab === 'resumen'">
     <!-- ── Panel resumen del día ─────────────────────────────────────────── -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 class="text-sm font-semibold text-gray-800">Resumen del día en curso</h2>
-          <p class="text-xs text-gray-500 mt-0.5">Actualización automática cada 30 segundos</p>
+          <p class="text-xs text-gray-500 mt-0.5">Actualización automática cada pocos segundos</p>
         </div>
         <div class="flex items-center gap-2">
           <span
@@ -201,14 +331,14 @@ const detailRevenue = computed(() =>
         </div>
 
         <!-- Botón de cierre -->
-        <div class="pt-4 border-t border-gray-100">
+        <div v-if="alreadyClosed || canManageClosing" class="pt-4 border-t border-gray-100">
           <div v-if="alreadyClosed" class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-2 text-sm text-green-700">
               <CheckCircle class="w-4 h-4" />
               El cierre de caja ya fue ejecutado para el día de hoy.
             </div>
             <button
-              v-if="isSuperuser && todayClosureRecord"
+              v-if="canManageClosing && todayClosureRecord"
               type="button"
               @click="openRevert(todayClosureRecord)"
               class="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors"
@@ -290,7 +420,7 @@ const detailRevenue = computed(() =>
                     Ver desglose
                   </button>
                   <button
-                    v-if="isSuperuser && s.state === 'closed'"
+                    v-if="canManageClosing && s.state === 'closed'"
                     type="button"
                     @click="openRevert(s)"
                     class="text-xs text-amber-700 hover:text-amber-800 font-medium underline underline-offset-2"
@@ -305,6 +435,48 @@ const detailRevenue = computed(() =>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+    </template>
+
+    <!-- ── Histórico mensual (todos los roles) ──────────────────────────── -->
+    <div v-else-if="activeTab === 'mensual'" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-800">Histórico mensual de cierres</h2>
+          <p class="text-xs text-gray-500 mt-0.5">Agrupado por mes — filtra por rango de fechas si lo necesitas</p>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+          <label class="text-xs text-gray-500">Desde</label>
+          <input
+            v-model="rangeFrom"
+            type="date"
+            class="px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
+          />
+          <label class="text-xs text-gray-500">Hasta</label>
+          <input
+            v-model="rangeTo"
+            type="date"
+            class="px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
+          />
+          <button
+            v-if="rangeFrom || rangeTo"
+            type="button"
+            @click="rangeFrom = ''; rangeTo = ''"
+            class="text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2"
+          >
+            Limpiar
+          </button>
+        </div>
+      </div>
+
+      <div class="p-6">
+        <DataTable
+          :columns="monthlyColumns"
+          :data="monthlyRows"
+          :is-loading="historyLoading"
+          export-filename="Historico_Mensual_Cierres_SIGMO"
+        />
       </div>
     </div>
 
