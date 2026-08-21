@@ -22,6 +22,7 @@ function resolveExportValue(t: Trip, key: string, invoiceNumberMap: Record<numbe
     case 'payment_detail.name': return t.payment_detail?.name ?? '—'
     case 'value': return Number(t.value)
     case 'extern_voucher_num': return t.extern_voucher_num ?? '—'
+    case 'observations': return t.observations ?? '—'
     case 'state': return t.state ? 'Activo' : 'Anulado'
     case 'invoice_number': return t.invoice != null ? (invoiceNumberMap[t.invoice] ?? `#${t.invoice}`) : '—'
     case 'certification_state': return t.certification_state === true ? 'Sí' : t.certification_state === false ? 'No' : '—'

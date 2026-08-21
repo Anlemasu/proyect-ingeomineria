@@ -26,7 +26,7 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
   const viajesHeader = [
     'N° Vale', 'Hora registro', 'Cliente', 'Placa', 'PIN Ambiental', 'Origen',
     'Tipo Material', 'Tipo Vehículo', 'Valor', 'Medio de Pago',
-    'N° Vale Externo', 'N° Factura', 'Estado',
+    'N° Vale Externo', 'N° Factura', 'Observaciones', 'Estado',
   ]
   const viajesRows = data.trips.map(t => [
     t.voucher_num,
@@ -41,6 +41,7 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
     t.payment_detail?.name ?? '—',
     t.extern_voucher_num ?? '—',
     t.invoice ?? '—',
+    t.observations ?? '—',
     t.state ? 'Activo' : 'Anulado',
   ])
   const wsViajes = XLSX.utils.aoa_to_sheet([viajesHeader, ...viajesRows])

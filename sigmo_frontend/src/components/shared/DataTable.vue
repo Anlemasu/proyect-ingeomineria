@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="T">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   useVueTable,
   getCoreRowModel,
@@ -9,6 +10,7 @@ import {
   FlexRender,
   type ColumnDef,
   type SortingState,
+  type ColumnSizingState,
 } from '@tanstack/vue-table'
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Copy, FileSpreadsheet } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
@@ -27,10 +29,45 @@ const sorting = ref<SortingState>([])
 const pageSize = ref(10)
 const pageIndex = ref(0)
 
+// ── Ancho de columnas ajustable (persistido por ruta + set de columnas) ─────
+const route = useRoute()
+function deriveColumnId(c: ColumnDef<T>, idx: number): string {
+  if ('id' in c && c.id) return c.id
+  if ('accessorKey' in c && typeof c.accessorKey === 'string') return c.accessorKey
+  if (typeof c.header === 'string') return c.header
+  return `col_${idx}`
+}
+const storageKey = computed(() =>
+  `sigmo_dt_colw:${route.path}:${props.columns.map((c, i) => deriveColumnId(c, i)).join('|')}`
+)
+function loadColumnSizing(): ColumnSizingState {
+  try {
+    return JSON.parse(localStorage.getItem(storageKey.value) ?? '{}')
+  } catch {
+    return {}
+  }
+}
+const columnSizing = ref<ColumnSizingState>(loadColumnSizing())
+watch(storageKey, () => { columnSizing.value = loadColumnSizing() })
+
+let persistTimer: ReturnType<typeof setTimeout> | undefined
+function persistColumnSizing() {
+  clearTimeout(persistTimer)
+  persistTimer = setTimeout(() => {
+    localStorage.setItem(storageKey.value, JSON.stringify(columnSizing.value))
+  }, 250)
+}
+onBeforeUnmount(() => {
+  clearTimeout(persistTimer)
+  localStorage.setItem(storageKey.value, JSON.stringify(columnSizing.value))
+})
+
 const table = useVueTable({
   get data() { return props.data },
   get columns() { return props.columns },
-  defaultColumn: { size: 150, minSize: 100 },
+  defaultColumn: { size: 150, minSize: 80 },
+  enableColumnResizing: true,
+  columnResizeMode: 'onChange',
   getCoreRowModel: getCoreRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
   getPaginationRowModel: getPaginationRowModel(),
@@ -39,6 +76,7 @@ const table = useVueTable({
     get globalFilter() { return globalFilter.value },
     get sorting() { return sorting.value },
     get pagination() { return { pageIndex: pageIndex.value, pageSize: pageSize.value } },
+    get columnSizing() { return columnSizing.value },
   },
   onSortingChange: (updater) => {
     sorting.value = typeof updater === 'function' ? updater(sorting.value) : updater
@@ -53,6 +91,10 @@ const table = useVueTable({
       : updater
     pageIndex.value = next.pageIndex
     pageSize.value = next.pageSize
+  },
+  onColumnSizingChange: (updater) => {
+    columnSizing.value = typeof updater === 'function' ? updater(columnSizing.value) : updater
+    persistColumnSizing()
   },
 })
 
@@ -123,23 +165,35 @@ function handleExportExcel() {
     <div class="border border-stone-200 rounded-lg overflow-auto bg-white max-h-[65vh]">
       <table ref="tableEl" class="w-full text-sm">
         <thead class="bg-gold-50 border-b-2 border-gold-200 sticky top-0 z-10">
-          <tr>
+          <tr class="divide-x divide-gold-200/70">
             <th
               v-for="header in table.getHeaderGroups()[0].headers"
               :key="header.id"
               :style="{ width: header.getSize() + 'px', minWidth: header.getSize() + 'px' }"
-              class="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase tracking-wider whitespace-nowrap"
+              class="relative px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase tracking-wider"
               :class="header.column.getCanSort() ? 'cursor-pointer select-none' : ''"
               @click="header.column.getToggleSortingHandler()?.($event)"
             >
-              <div class="flex items-center gap-1">
-                <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
-                <span v-if="header.column.getCanSort()">
+              <div class="flex items-center gap-1 pr-2.5 min-w-0">
+                <span class="truncate min-w-0">
+                  <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
+                </span>
+                <span v-if="header.column.getCanSort()" class="shrink-0">
                   <ChevronUp v-if="header.column.getIsSorted() === 'asc'" class="w-3 h-3 text-gold-700" />
                   <ChevronDown v-else-if="header.column.getIsSorted() === 'desc'" class="w-3 h-3 text-gold-700" />
                   <ChevronsUpDown v-else class="w-3 h-3 text-stone-400" />
                 </span>
               </div>
+              <div
+                v-if="header.column.getCanResize()"
+                class="absolute top-0 right-0 z-20 h-full w-2.5 cursor-col-resize touch-none select-none"
+                :class="header.column.getIsResizing() ? 'bg-gold-500' : 'hover:bg-gold-400/80'"
+                title="Arrastra para ajustar el ancho — doble clic para restablecer"
+                @mousedown.stop="header.getResizeHandler()($event)"
+                @touchstart.stop="header.getResizeHandler()($event)"
+                @click.stop
+                @dblclick.stop="header.column.resetSize()"
+              />
             </th>
           </tr>
         </thead>
@@ -162,7 +216,7 @@ function handleExportExcel() {
             <tr
               v-for="row in table.getRowModel().rows"
               :key="row.id"
-              class="border-b border-stone-100 hover:bg-gold-50/50 transition-colors"
+              class="border-b border-stone-100 divide-x divide-stone-100 hover:bg-gold-50/50 transition-colors"
             >
               <td
                 v-for="cell in row.getVisibleCells()"

@@ -26,7 +26,22 @@ import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { copyTableToClipboard } from '@/utils/copyTableToClipboard'
 import { exportTableToExcel } from '@/utils/exportTableToExcel'
 import { printAdjustmentRecord } from '@/utils/printAdjustmentRecord'
+import { useResizableColumns } from '@/composables/useResizableColumns'
 import type { Trip } from '@/types'
+
+// ── Ancho de columnas ajustable (arrastrar borde, como Excel) ───────────────
+const ADJ_COLUMNS = [
+  { id: 'voucher_num', label: 'N° Vale', width: 90, minWidth: 70, align: 'left' as const },
+  { id: 'client', label: 'Cliente', width: 160, minWidth: 100, align: 'left' as const },
+  { id: 'plaque', label: 'Placa', width: 100, minWidth: 80, align: 'left' as const },
+  { id: 'material', label: 'Material', width: 140, minWidth: 90, align: 'left' as const },
+  { id: 'value', label: 'Valor', width: 120, minWidth: 90, align: 'right' as const },
+  { id: 'payment', label: 'Medio de pago', width: 130, minWidth: 90, align: 'left' as const },
+  { id: 'observations', label: 'Observaciones', width: 200, minWidth: 100, align: 'left' as const },
+  { id: 'state', label: 'Estado', width: 100, minWidth: 80, align: 'left' as const },
+  { id: 'actions', label: 'Acciones', width: 110, minWidth: 90, align: 'left' as const },
+]
+const { widths: colWidths, startResize, resetWidth } = useResizableColumns(ADJ_COLUMNS, 'sigmo_colw_adjustments')
 
 const authStore    = useAuthStore()
 const queryClient  = useQueryClient()
@@ -409,27 +424,38 @@ function confirmPrint() {
     <!-- Tabla de viajes -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
       <div class="overflow-auto max-h-[65vh]">
-        <table ref="tableEl" class="w-full text-sm">
+        <table ref="tableEl" class="w-full text-sm" style="table-layout: fixed">
+          <colgroup>
+            <col v-for="c in ADJ_COLUMNS" :key="c.id" :style="{ width: colWidths[c.id] + 'px' }" />
+          </colgroup>
           <thead>
-            <tr class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[90px]">N° Vale</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide min-w-[160px]">Cliente</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[100px]">Placa</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[140px]">Material</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[120px]">Valor</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[130px]">Medio de pago</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[100px]">Estado</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap min-w-[110px]">Acciones</th>
+            <tr class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100 divide-x divide-gray-200">
+              <th
+                v-for="c in ADJ_COLUMNS"
+                :key="c.id"
+                class="relative px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                :class="c.align === 'right' ? 'text-right' : 'text-left'"
+              >
+                <span class="block truncate pr-2">{{ c.label }}</span>
+                <span
+                  class="absolute top-0 right-0 z-20 h-full w-2.5 cursor-col-resize touch-none select-none hover:bg-gold-400/80"
+                  :title="`Arrastra para ajustar el ancho de ${c.label} — doble clic para restablecer`"
+                  @mousedown="startResize(c.id, $event)"
+                  @touchstart="startResize(c.id, $event)"
+                  @click.stop
+                  @dblclick.stop="resetWidth(c.id)"
+                />
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-50">
             <tr v-if="isLoading && trips.length === 0">
-              <td colspan="8" class="px-4 py-12 text-center text-xs text-gray-400">
+              <td colspan="9" class="px-4 py-12 text-center text-xs text-gray-400">
                 <RefreshCw class="w-4 h-4 animate-spin inline-block mr-2" />Cargando viajes...
               </td>
             </tr>
             <tr v-else-if="filteredTrips.length === 0">
-              <td colspan="8" class="px-4 py-12 text-center text-xs text-gray-400">
+              <td colspan="9" class="px-4 py-12 text-center text-xs text-gray-400">
                 {{ voucherSearch.trim()
                   ? 'Sin resultados para ese número de vale'
                   : isHistoricalView ? 'Sin viajes registrados en esta fecha' : 'Sin viajes registrados hoy' }}
@@ -438,28 +464,31 @@ function confirmPrint() {
             <tr
               v-for="trip in filteredTrips"
               :key="trip.id"
-              class="hover:bg-gray-50 transition-colors"
+              class="hover:bg-gray-50 transition-colors divide-x divide-gray-100"
               :class="!trip.state ? 'opacity-40' : ''"
             >
-              <td class="px-4 py-3 whitespace-nowrap">
+              <td class="px-4 py-3 whitespace-nowrap overflow-hidden text-ellipsis">
                 <span class="font-mono font-bold text-gold-800">#{{ trip.voucher_num }}</span>
               </td>
-              <td class="px-4 py-3 font-medium text-gray-900 max-w-[220px] truncate" :title="trip.client_detail?.name ?? '—'">
+              <td class="px-4 py-3 font-medium text-gray-900 truncate" :title="trip.client_detail?.name ?? '—'">
                 {{ trip.client_detail?.name ?? '—' }}
               </td>
-              <td class="px-4 py-3 font-mono tracking-wider text-gray-800 whitespace-nowrap">
+              <td class="px-4 py-3 font-mono tracking-wider text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis">
                 {{ trip.vehicle_detail?.plaque ?? '—' }}
               </td>
-              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">
                 {{ trip.material_type_detail?.name ?? '—' }}
               </td>
-              <td class="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
+              <td class="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">
                 {{ formatCurrency(trip.value) }}
               </td>
-              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+              <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">
                 {{ trip.payment_detail?.name ?? '—' }}
               </td>
-              <td class="px-4 py-3 whitespace-nowrap">
+              <td class="px-4 py-3 text-xs text-gray-600 truncate" :title="trip.observations ?? ''">
+                {{ trip.observations ?? '—' }}
+              </td>
+              <td class="px-4 py-3 whitespace-nowrap overflow-hidden">
                 <span
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
                   :class="trip.state
@@ -471,7 +500,7 @@ function confirmPrint() {
                   {{ trip.state ? 'Activo' : 'Anulado' }}
                 </span>
               </td>
-              <td class="px-4 py-3 whitespace-nowrap">
+              <td class="px-4 py-3 whitespace-nowrap overflow-hidden">
                 <div class="flex items-center gap-0.5">
                   <button
                     v-if="trip.state"

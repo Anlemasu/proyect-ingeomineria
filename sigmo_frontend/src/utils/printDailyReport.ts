@@ -67,6 +67,7 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
       <td>${escapeHtml(t.payment_detail?.name)}</td>
       <td>${escapeHtml(t.extern_voucher_num ?? '—')}</td>
       <td>${escapeHtml(t.invoice ?? '—')}</td>
+      <td>${escapeHtml(t.observations ?? '—')}</td>
       <td>${t.state ? 'Activo' : 'Anulado'}</td>
     </tr>`).join('')
 
@@ -75,9 +76,9 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
       <thead><tr>
         <th>N° Vale</th><th>Hora registro</th><th>Cliente</th><th>Placa</th><th>PIN Ambiental</th>
         <th>Origen</th><th>Tipo Material</th><th>Tipo Vehículo</th><th class="num">Valor</th>
-        <th>Medio de Pago</th><th>N° Vale Externo</th><th>N° Factura</th><th>Estado</th>
+        <th>Medio de Pago</th><th>N° Vale Externo</th><th>N° Factura</th><th>Observaciones</th><th>Estado</th>
       </tr></thead>
-      <tbody>${tripRows || '<tr><td colspan="13" class="empty">No se registraron viajes para esta fecha.</td></tr>'}</tbody>
+      <tbody>${tripRows || '<tr><td colspan="14" class="empty">No se registraron viajes para esta fecha.</td></tr>'}</tbody>
     </table>`
 
   const expenseRows = data.expenses.map(e => `

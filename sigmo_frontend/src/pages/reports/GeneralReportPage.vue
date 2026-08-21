@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, reactive, computed, h } from 'vue'
+import { ref, reactive, computed, h, onBeforeUnmount } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import {
   useVueTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel, getPaginationRowModel,
   FlexRender,
-  type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState,
+  type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState, type ColumnSizingState,
 } from '@tanstack/vue-table'
 import {
   Search, FilterX, SlidersHorizontal, FileSpreadsheet, Printer, Copy,
@@ -35,7 +35,7 @@ type ColumnKey =
   | 'voucher_num' | 'date' | 'date_register' | 'client_detail.name' | 'origin_site_detail.name'
   | 'vehicle_detail.plaque' | 'vehicle_detail.dumper_detail.ambiental_pin' | 'material_type_detail.name'
   | 'vehicle_detail.vehicle_type_detail.name' | 'vehicle_detail.vehicle_type_detail.capacity'
-  | 'payment_detail.name' | 'value' | 'extern_voucher_num'
+  | 'payment_detail.name' | 'value' | 'extern_voucher_num' | 'observations'
   | 'state' | 'invoice_number' | 'certification_state' | 'certification_num' | 'advance' | 'summary'
 
 interface ColumnConfigItem {
@@ -46,8 +46,6 @@ interface ColumnConfigItem {
 
 const RESTRICTED_ROLES: UserRole[] = ['superuser', 'commercial_admin', 'accountant', 'auditor']
 
-// 'observations' y 'user_registered' del prompt original se omiten: no existen en el
-// backend (Trip no tiene campo de observaciones persistido ni FK a User) — ver análisis Parte 8.
 const COLUMN_CONFIG: ColumnConfigItem[] = [
   { key: 'voucher_num', label: 'N° Vale', roles: 'all' },
   { key: 'date', label: 'Fecha del viaje', roles: 'all' },
@@ -62,6 +60,7 @@ const COLUMN_CONFIG: ColumnConfigItem[] = [
   { key: 'payment_detail.name', label: 'Medio de pago', roles: 'all' },
   { key: 'value', label: 'Valor', roles: 'all' },
   { key: 'extern_voucher_num', label: 'N° Vale externo', roles: 'all' },
+  { key: 'observations', label: 'Observaciones', roles: 'all' },
   { key: 'state', label: 'Estado', roles: RESTRICTED_ROLES },
   { key: 'invoice_number', label: 'N° Factura', roles: RESTRICTED_ROLES },
   { key: 'certification_state', label: 'Estado certificación', roles: RESTRICTED_ROLES },
@@ -88,6 +87,7 @@ const COLUMN_MIN_WIDTH: Partial<Record<ColumnKey, number>> = {
   'payment_detail.name': 140,
   value: 130,
   extern_voucher_num: 130,
+  observations: 220,
   state: 100,
   invoice_number: 110,
   certification_state: 140,
@@ -277,7 +277,7 @@ const columnFilters = ref<ColumnFiltersState>([])
 const pageSize = ref(25)
 const pageIndex = ref(0)
 
-const columns = computed<ColumnDef<Trip>[]>(() => [
+const baseColumns = computed<ColumnDef<Trip>[]>(() => [
   {
     id: 'voucher_num', accessorKey: 'voucher_num', header: 'N° Vale',
     cell: ({ row }) => h('span', { class: 'font-mono font-bold text-gold-800' }, `#${row.original.voucher_num}`),
@@ -307,6 +307,13 @@ const columns = computed<ColumnDef<Trip>[]>(() => [
   },
   { id: 'extern_voucher_num', accessorFn: row => row.extern_voucher_num ?? '—', header: 'N° Vale externo' },
   {
+    id: 'observations', accessorFn: row => row.observations ?? '—', header: 'Observaciones',
+    cell: ({ getValue }) => h('span', {
+      class: 'block truncate',
+      title: (getValue() as string) !== '—' ? (getValue() as string) : undefined,
+    }, getValue() as string),
+  },
+  {
     id: 'state', accessorFn: row => (row.state ? 'Activo' : 'Anulado'), header: 'Estado',
     cell: ({ row }) => h('span', {
       class: [
@@ -332,9 +339,39 @@ const columns = computed<ColumnDef<Trip>[]>(() => [
   { id: 'summary', accessorFn: row => row.summary, header: 'Cierre de caja (ID)', cell: ({ getValue }) => (getValue() != null ? `#${getValue()}` : '—') },
 ])
 
+// Ancho inicial de cada columna = su ancho mínimo configurado (ver columnMinWidth)
+const columns = computed<ColumnDef<Trip>[]>(() =>
+  baseColumns.value.map(c => ({ ...c, size: columnMinWidth((c as { id?: string }).id ?? '') }))
+)
+
+// ── Ancho de columnas ajustable (persistido en localStorage) ────────────────
+const COLWIDTH_STORAGE_KEY = 'sigmo_colwidths_general'
+function loadColumnSizing(): ColumnSizingState {
+  try {
+    return JSON.parse(localStorage.getItem(COLWIDTH_STORAGE_KEY) ?? '{}')
+  } catch {
+    return {}
+  }
+}
+const columnSizing = ref<ColumnSizingState>(loadColumnSizing())
+let persistSizingTimer: ReturnType<typeof setTimeout> | undefined
+function persistColumnSizing() {
+  clearTimeout(persistSizingTimer)
+  persistSizingTimer = setTimeout(() => {
+    localStorage.setItem(COLWIDTH_STORAGE_KEY, JSON.stringify(columnSizing.value))
+  }, 250)
+}
+onBeforeUnmount(() => {
+  clearTimeout(persistSizingTimer)
+  localStorage.setItem(COLWIDTH_STORAGE_KEY, JSON.stringify(columnSizing.value))
+})
+
 const table = useVueTable({
   get data() { return clientFilteredTrips.value },
   get columns() { return columns.value },
+  defaultColumn: { minSize: 80 },
+  enableColumnResizing: true,
+  columnResizeMode: 'onChange',
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
@@ -344,6 +381,7 @@ const table = useVueTable({
     get columnFilters() { return columnFilters.value },
     get columnVisibility() { return columnVisibility.value },
     get pagination() { return { pageIndex: pageIndex.value, pageSize: pageSize.value } },
+    get columnSizing() { return columnSizing.value },
   },
   onSortingChange: (updater) => {
     sorting.value = typeof updater === 'function' ? updater(sorting.value) : updater
@@ -361,6 +399,10 @@ const table = useVueTable({
     const next = typeof updater === 'function' ? updater({ pageIndex: pageIndex.value, pageSize: pageSize.value }) : updater
     pageIndex.value = next.pageIndex
     pageSize.value = next.pageSize
+  },
+  onColumnSizingChange: (updater) => {
+    columnSizing.value = typeof updater === 'function' ? updater(columnSizing.value) : updater
+    persistColumnSizing()
   },
 })
 
@@ -571,29 +613,46 @@ async function handleCopy() {
     <!-- ── Tabla ──────────────────────────────────────────────────────────── -->
     <div v-else class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
       <div class="overflow-auto max-h-[65vh]">
-        <table ref="tableEl" class="w-full text-sm">
+        <table ref="tableEl" class="w-full text-sm" style="table-layout: fixed">
           <thead class="bg-gray-50 border-b border-gray-200">
-            <tr class="sticky top-0 z-20 bg-gray-50">
+            <tr class="sticky top-0 z-20 bg-gray-50 divide-x divide-gray-200">
               <th
                 v-for="header in table.getHeaderGroups()[0].headers"
                 :key="header.id"
-                :style="{ minWidth: columnMinWidth(header.id) + 'px' }"
-                class="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap"
+                :style="{ width: header.getSize() + 'px', minWidth: header.getSize() + 'px' }"
+                class="relative px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider"
                 :class="header.column.getCanSort() ? 'cursor-pointer select-none' : ''"
                 @click="header.column.getToggleSortingHandler()?.($event)"
               >
-                <div class="flex items-center gap-1">
-                  <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
-                  <span v-if="header.column.getCanSort()">
+                <div class="flex items-center gap-1 pr-2.5 min-w-0">
+                  <span class="truncate min-w-0">
+                    <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
+                  </span>
+                  <span v-if="header.column.getCanSort()" class="shrink-0">
                     <ChevronUp v-if="header.column.getIsSorted() === 'asc'" class="w-3 h-3" />
                     <ChevronDown v-else-if="header.column.getIsSorted() === 'desc'" class="w-3 h-3" />
                     <ChevronsUpDown v-else class="w-3 h-3 text-gray-400" />
                   </span>
                 </div>
+                <div
+                  v-if="header.column.getCanResize()"
+                  class="absolute top-0 right-0 z-30 h-full w-2.5 cursor-col-resize touch-none select-none"
+                  :class="header.column.getIsResizing() ? 'bg-gold-500' : 'hover:bg-gold-400/80'"
+                  title="Arrastra para ajustar el ancho — doble clic para restablecer"
+                  @mousedown.stop="header.getResizeHandler()($event)"
+                  @touchstart.stop="header.getResizeHandler()($event)"
+                  @click.stop
+                  @dblclick.stop="header.column.resetSize()"
+                />
               </th>
             </tr>
-            <tr class="sticky top-[37px] z-20 bg-white border-b border-gray-200" data-copy-skip>
-              <th v-for="header in table.getHeaderGroups()[0].headers" :key="`f-${header.id}`" class="px-3 py-1.5">
+            <tr class="sticky top-[37px] z-20 bg-white border-b border-gray-200 divide-x divide-gray-100" data-copy-skip>
+              <th
+                v-for="header in table.getHeaderGroups()[0].headers"
+                :key="`f-${header.id}`"
+                :style="{ width: header.getSize() + 'px', minWidth: header.getSize() + 'px' }"
+                class="px-3 py-1.5"
+              >
                 <input
                   type="text"
                   :value="(header.column.getFilterValue() as string) ?? ''"
@@ -623,14 +682,14 @@ async function handleCopy() {
               <tr
                 v-for="row in table.getRowModel().rows"
                 :key="row.id"
-                class="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                class="border-b border-gray-100 divide-x divide-gray-100 hover:bg-gray-50 transition-colors"
                 :class="!row.original.state ? 'opacity-50 line-through' : ''"
               >
                 <td
                   v-for="cell in row.getVisibleCells()"
                   :key="cell.id"
-                  :style="{ minWidth: columnMinWidth(cell.column.id) + 'px' }"
-                  class="px-3 py-2 text-gray-700 whitespace-nowrap"
+                  :style="{ width: cell.column.getSize() + 'px', minWidth: cell.column.getSize() + 'px' }"
+                  class="px-3 py-2 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis"
                 >
                   <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
                 </td>

@@ -333,6 +333,15 @@ const registroColumns: ColumnDef<ARow>[] = [
     cell: info => info.getValue() ?? '—',
   },
   {
+    accessorKey: 'observations',
+    header: 'Observaciones',
+    size: 220,
+    cell: info => {
+      const val = (info.getValue() as string | null) ?? '—'
+      return h('span', { class: 'block truncate', title: val !== '—' ? val : undefined }, val)
+    },
+  },
+  {
     accessorKey: 'available_balance',
     header: 'Saldo Disponible',
     cell: info => {
@@ -520,6 +529,15 @@ const estadoAdvanceColumns: ColumnDef<ARow>[] = [
   {
     accessorKey: 'transfer_num',
     header: 'N° Consignación',
+  },
+  {
+    accessorKey: 'observations',
+    header: 'Observaciones',
+    size: 200,
+    cell: info => {
+      const val = (info.getValue() as string | null) ?? '—'
+      return h('span', { class: 'block truncate', title: val !== '—' ? val : undefined }, val)
+    },
   },
   {
     accessorKey: 'available_balance',

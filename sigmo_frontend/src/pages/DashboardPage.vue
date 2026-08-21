@@ -21,6 +21,7 @@ import { ACTION_CONFIG, MODEL_LABEL } from '@/constants/audit'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime, todayBogota } from '@/utils/formatDate'
 import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
+import { useResizableColumns } from '@/composables/useResizableColumns'
 import type { Trip, Advance } from '@/types'
 
 // "NO FACTURA" en vez de "No requiere factura" — Invoice.number tiene max_length=15
@@ -41,6 +42,50 @@ const showUnfacturedTrips = computed(() => ['accountant', 'superuser'].includes(
 const canValidate = computed(() => ['accountant', 'superuser'].includes(role.value ?? ''))
 
 const dailySummaryLinkTarget = '/trips'
+
+// ── Ancho de columnas ajustable (arrastrar borde, como Excel) ───────────────
+const PAYMENT_BREAKDOWN_COLUMNS = [
+  { id: 'payment', label: 'Medio de Pago', width: 180, minWidth: 100, align: 'left' as const },
+  { id: 'count', label: 'N° Viajes', width: 110, minWidth: 80, align: 'right' as const },
+  { id: 'total', label: 'Total (COP)', width: 150, minWidth: 100, align: 'right' as const },
+]
+const { widths: paymentColWidths, startResize: startPaymentResize, resetWidth: resetPaymentWidth } =
+  useResizableColumns(PAYMENT_BREAKDOWN_COLUMNS, 'sigmo_colw_dash_payment')
+
+const LAST_TRIPS_COLUMNS: { id: string; label: string; width: number; minWidth: number; align: 'left' | 'right' }[] = [
+  { id: 'voucher_num', label: 'N° Vale', width: 90, minWidth: 70, align: 'left' },
+  { id: 'date', label: 'Fecha', width: 90, minWidth: 70, align: 'left' },
+  { id: 'client', label: 'Cliente', width: 160, minWidth: 100, align: 'left' },
+  { id: 'plaque', label: 'Placa', width: 100, minWidth: 80, align: 'left' },
+  { id: 'vehicle_type', label: 'Tipo Vehículo', width: 140, minWidth: 90, align: 'left' },
+  { id: 'payment', label: 'Medio de Pago', width: 140, minWidth: 90, align: 'left' },
+]
+const { widths: lastTripsColWidths, startResize: startLastTripsResize, resetWidth: resetLastTripsWidth } =
+  useResizableColumns(LAST_TRIPS_COLUMNS, 'sigmo_colw_dash_last_trips')
+
+const FINISHED_ADVANCES_COLUMNS = [
+  { id: 'client', label: 'Cliente', width: 180, minWidth: 100, align: 'left' as const },
+  { id: 'value', label: 'Valor original (COP)', width: 160, minWidth: 100, align: 'right' as const },
+  { id: 'last_movement', label: 'Fecha último movimiento', width: 180, minWidth: 100, align: 'left' as const },
+  { id: 'advance_id', label: 'N° Anticipo', width: 120, minWidth: 90, align: 'left' as const },
+]
+const { widths: finishedAdvColWidths, startResize: startFinishedAdvResize, resetWidth: resetFinishedAdvWidth } =
+  useResizableColumns(FINISHED_ADVANCES_COLUMNS, 'sigmo_colw_dash_finished_advances')
+
+const UNFACTURED_TRIPS_COLUMNS = computed(() => {
+  const cols = [
+    { id: 'voucher_num', label: 'N° Vale', width: 90, minWidth: 70, align: 'left' as const },
+    { id: 'date', label: 'Fecha', width: 90, minWidth: 70, align: 'left' as const },
+    { id: 'client', label: 'Cliente', width: 170, minWidth: 100, align: 'left' as const },
+    { id: 'plaque', label: 'Placa', width: 100, minWidth: 80, align: 'left' as const },
+    { id: 'payment', label: 'Medio de Pago', width: 140, minWidth: 90, align: 'left' as const },
+    { id: 'value', label: 'Valor (COP)', width: 130, minWidth: 100, align: 'right' as const },
+  ]
+  if (canValidate.value) cols.push({ id: 'action', label: 'Acción', width: 110, minWidth: 90, align: 'left' as const })
+  return cols
+})
+const { widths: unfacturedColWidths, startResize: startUnfacturedResize, resetWidth: resetUnfacturedWidth } =
+  useResizableColumns(UNFACTURED_TRIPS_COLUMNS.value, 'sigmo_colw_dash_unfactured')
 
 // ── Resumen del día (cashier, commercial_admin, superuser) ────────────────────
 const {
@@ -345,22 +390,37 @@ async function confirmValidate() {
               <h3 class="text-sm font-semibold text-gray-800">Desglose por medio de pago</h3>
             </div>
             <div class="overflow-x-auto">
-              <table class="w-full text-sm">
+              <table class="w-full text-sm" style="table-layout: fixed">
+                <colgroup>
+                  <col v-for="c in PAYMENT_BREAKDOWN_COLUMNS" :key="c.id" :style="{ width: paymentColWidths[c.id] + 'px' }" />
+                </colgroup>
                 <thead>
-                  <tr class="bg-gray-50 border-b border-gray-100">
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Medio de Pago</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">N° Viajes</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Total (COP)</th>
+                  <tr class="bg-gray-50 border-b border-gray-100 divide-x divide-gray-200">
+                    <th
+                      v-for="c in PAYMENT_BREAKDOWN_COLUMNS"
+                      :key="c.id"
+                      class="relative px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                      :class="c.align === 'right' ? 'text-right' : 'text-left'"
+                    >
+                      <span class="block truncate pr-2">{{ c.label }}</span>
+                      <span
+                        class="absolute top-0 right-0 z-20 h-full w-2.5 cursor-col-resize touch-none select-none hover:bg-gold-400/80"
+                        @mousedown="startPaymentResize(c.id, $event)"
+                        @touchstart="startPaymentResize(c.id, $event)"
+                        @click.stop
+                        @dblclick.stop="resetPaymentWidth(c.id)"
+                      />
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
                   <tr v-if="paymentBreakdown.length === 0">
                     <td colspan="3" class="px-4 py-6 text-center text-xs text-gray-400">Sin viajes registrados hoy</td>
                   </tr>
-                  <tr v-for="p in paymentBreakdown" :key="p.name" class="hover:bg-gray-50">
-                    <td class="px-4 py-3 text-gray-700">{{ p.name }}</td>
-                    <td class="px-4 py-3 text-right text-gray-700">{{ p.count }}</td>
-                    <td class="px-4 py-3 text-right font-semibold text-gray-900">{{ formatCurrency(p.total) }}</td>
+                  <tr v-for="p in paymentBreakdown" :key="p.name" class="hover:bg-gray-50 divide-x divide-gray-100">
+                    <td class="px-4 py-3 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{{ p.name }}</td>
+                    <td class="px-4 py-3 text-right text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{{ p.count }}</td>
+                    <td class="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{ formatCurrency(p.total) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -375,28 +435,40 @@ async function confirmValidate() {
               </router-link>
             </div>
             <div class="overflow-x-auto">
-              <table class="w-full text-sm">
+              <table class="w-full text-sm" style="table-layout: fixed">
+                <colgroup>
+                  <col v-for="c in LAST_TRIPS_COLUMNS" :key="c.id" :style="{ width: lastTripsColWidths[c.id] + 'px' }" />
+                </colgroup>
                 <thead>
-                  <tr class="bg-gray-50 border-b border-gray-100">
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">N° Vale</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Placa</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo Vehículo</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Medio de Pago</th>
+                  <tr class="bg-gray-50 border-b border-gray-100 divide-x divide-gray-200">
+                    <th
+                      v-for="c in LAST_TRIPS_COLUMNS"
+                      :key="c.id"
+                      class="relative px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                      :class="c.align === 'right' ? 'text-right' : 'text-left'"
+                    >
+                      <span class="block truncate pr-2">{{ c.label }}</span>
+                      <span
+                        class="absolute top-0 right-0 z-20 h-full w-2.5 cursor-col-resize touch-none select-none hover:bg-gold-400/80"
+                        @mousedown="startLastTripsResize(c.id, $event)"
+                        @touchstart="startLastTripsResize(c.id, $event)"
+                        @click.stop
+                        @dblclick.stop="resetLastTripsWidth(c.id)"
+                      />
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
                   <tr v-if="lastTrips.length === 0">
                     <td colspan="6" class="px-4 py-6 text-center text-xs text-gray-400">Sin viajes registrados hoy</td>
                   </tr>
-                  <tr v-for="t in lastTrips" :key="t.id" class="hover:bg-gray-50">
-                    <td class="px-4 py-3 font-mono font-bold text-gold-800">#{{ t.voucher_num }}</td>
-                    <td class="px-4 py-3 text-gray-600 text-xs">{{ formatDate(t.date_register) }}</td>
-                    <td class="px-4 py-3 text-gray-900">{{ t.client_detail?.name ?? '—' }}</td>
-                    <td class="px-4 py-3 font-mono text-gray-700">{{ t.vehicle_detail?.plaque ?? '—' }}</td>
-                    <td class="px-4 py-3 text-gray-700">{{ t.vehicle_detail?.vehicle_type_detail?.name ?? '—' }}</td>
-                    <td class="px-4 py-3 text-gray-700">{{ t.payment_detail?.name ?? '—' }}</td>
+                  <tr v-for="t in lastTrips" :key="t.id" class="hover:bg-gray-50 divide-x divide-gray-100">
+                    <td class="px-4 py-3 font-mono font-bold text-gold-800 whitespace-nowrap overflow-hidden text-ellipsis">#{{ t.voucher_num }}</td>
+                    <td class="px-4 py-3 text-gray-600 text-xs whitespace-nowrap overflow-hidden text-ellipsis">{{ formatDate(t.date_register) }}</td>
+                    <td class="px-4 py-3 text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{ t.client_detail?.name ?? '—' }}</td>
+                    <td class="px-4 py-3 font-mono text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{{ t.vehicle_detail?.plaque ?? '—' }}</td>
+                    <td class="px-4 py-3 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{{ t.vehicle_detail?.vehicle_type_detail?.name ?? '—' }}</td>
+                    <td class="px-4 py-3 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{{ t.payment_detail?.name ?? '—' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -477,13 +549,27 @@ async function confirmValidate() {
       </div>
       <div v-else class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="w-full text-sm" style="table-layout: fixed">
+            <colgroup>
+              <col v-for="c in FINISHED_ADVANCES_COLUMNS" :key="c.id" :style="{ width: finishedAdvColWidths[c.id] + 'px' }" />
+            </colgroup>
             <thead>
-              <tr class="bg-gray-50 border-b border-gray-100">
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
-                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor original (COP)</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha último movimiento</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">N° Anticipo</th>
+              <tr class="bg-gray-50 border-b border-gray-100 divide-x divide-gray-200">
+                <th
+                  v-for="c in FINISHED_ADVANCES_COLUMNS"
+                  :key="c.id"
+                  class="relative px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                  :class="c.align === 'right' ? 'text-right' : 'text-left'"
+                >
+                  <span class="block truncate pr-2">{{ c.label }}</span>
+                  <span
+                    class="absolute top-0 right-0 z-20 h-full w-2.5 cursor-col-resize touch-none select-none hover:bg-gold-400/80"
+                    @mousedown="startFinishedAdvResize(c.id, $event)"
+                    @touchstart="startFinishedAdvResize(c.id, $event)"
+                    @click.stop
+                    @dblclick.stop="resetFinishedAdvWidth(c.id)"
+                  />
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-50">
@@ -493,11 +579,11 @@ async function confirmValidate() {
               <tr v-else-if="finishedAdvances.length === 0">
                 <td colspan="4" class="px-4 py-6 text-center text-xs text-gray-400">Sin anticipos finalizados recientemente.</td>
               </tr>
-              <tr v-for="{ advance: a, lastMovement } in finishedAdvances" :key="a.id" class="hover:bg-gray-50">
-                <td class="px-4 py-3 font-medium text-gray-900">{{ a.client_detail?.name ?? '—' }}</td>
-                <td class="px-4 py-3 text-right text-gray-700">{{ formatCurrency(a.value) }}</td>
-                <td class="px-4 py-3 text-gray-600 text-xs">{{ formatDate(lastMovement) }}</td>
-                <td class="px-4 py-3 text-gray-600">#{{ a.id }}</td>
+              <tr v-for="{ advance: a, lastMovement } in finishedAdvances" :key="a.id" class="hover:bg-gray-50 divide-x divide-gray-100">
+                <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{ a.client_detail?.name ?? '—' }}</td>
+                <td class="px-4 py-3 text-right text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{{ formatCurrency(a.value) }}</td>
+                <td class="px-4 py-3 text-gray-600 text-xs whitespace-nowrap overflow-hidden text-ellipsis">{{ formatDate(lastMovement) }}</td>
+                <td class="px-4 py-3 text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">#{{ a.id }}</td>
               </tr>
             </tbody>
           </table>
@@ -523,16 +609,27 @@ async function confirmValidate() {
       </div>
       <div v-else class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="w-full text-sm" style="table-layout: fixed">
+            <colgroup>
+              <col v-for="c in UNFACTURED_TRIPS_COLUMNS" :key="c.id" :style="{ width: unfacturedColWidths[c.id] + 'px' }" />
+            </colgroup>
             <thead>
-              <tr class="bg-gray-50 border-b border-gray-100">
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">N° Vale</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Placa</th>
-                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Medio de Pago</th>
-                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor (COP)</th>
-                <th v-if="canValidate" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Acción</th>
+              <tr class="bg-gray-50 border-b border-gray-100 divide-x divide-gray-200">
+                <th
+                  v-for="c in UNFACTURED_TRIPS_COLUMNS"
+                  :key="c.id"
+                  class="relative px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide"
+                  :class="c.align === 'right' ? 'text-right' : 'text-left'"
+                >
+                  <span class="block truncate pr-2">{{ c.label }}</span>
+                  <span
+                    class="absolute top-0 right-0 z-20 h-full w-2.5 cursor-col-resize touch-none select-none hover:bg-gold-400/80"
+                    @mousedown="startUnfacturedResize(c.id, $event)"
+                    @touchstart="startUnfacturedResize(c.id, $event)"
+                    @click.stop
+                    @dblclick.stop="resetUnfacturedWidth(c.id)"
+                  />
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-50">
@@ -545,14 +642,14 @@ async function confirmValidate() {
                   No hay viajes pendientes de facturar.
                 </td>
               </tr>
-              <tr v-for="t in tripsUnfactured" :key="t.id" class="hover:bg-gray-50">
-                <td class="px-4 py-3 font-mono font-bold text-gold-800">#{{ t.voucher_num }}</td>
-                <td class="px-4 py-3 text-gray-600 text-xs">{{ formatDate(t.date) }}</td>
-                <td class="px-4 py-3 text-gray-900">{{ t.client_detail?.name ?? '—' }}</td>
-                <td class="px-4 py-3 font-mono text-gray-700">{{ t.vehicle_detail?.plaque ?? '—' }}</td>
-                <td class="px-4 py-3 text-gray-700">{{ t.payment_detail?.name ?? '—' }}</td>
-                <td class="px-4 py-3 text-right font-semibold text-gray-900">{{ formatCurrency(t.value) }}</td>
-                <td v-if="canValidate" class="px-4 py-3">
+              <tr v-for="t in tripsUnfactured" :key="t.id" class="hover:bg-gray-50 divide-x divide-gray-100">
+                <td class="px-4 py-3 font-mono font-bold text-gold-800 whitespace-nowrap overflow-hidden text-ellipsis">#{{ t.voucher_num }}</td>
+                <td class="px-4 py-3 text-gray-600 text-xs whitespace-nowrap overflow-hidden text-ellipsis">{{ formatDate(t.date) }}</td>
+                <td class="px-4 py-3 text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{ t.client_detail?.name ?? '—' }}</td>
+                <td class="px-4 py-3 font-mono text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{{ t.vehicle_detail?.plaque ?? '—' }}</td>
+                <td class="px-4 py-3 text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">{{ t.payment_detail?.name ?? '—' }}</td>
+                <td class="px-4 py-3 text-right font-semibold text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{{ formatCurrency(t.value) }}</td>
+                <td v-if="canValidate" class="px-4 py-3 overflow-hidden">
                   <button
                     type="button"
                     @click="confirmTrip = t"

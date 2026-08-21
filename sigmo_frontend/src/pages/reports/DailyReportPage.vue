@@ -133,6 +133,15 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
     { id: 'extern_voucher', header: 'N° Vale Externo', cell: ({ row }) => row.original.extern_voucher_num ?? '—' },
     { id: 'invoice', header: 'N° Factura', cell: ({ row }) => row.original.invoice ?? '—' },
     {
+      id: 'observations',
+      header: 'Observaciones',
+      size: 220,
+      cell: ({ row }) => h('span', {
+        class: 'block truncate',
+        title: row.original.observations ?? undefined,
+      }, row.original.observations ?? '—'),
+    },
+    {
       id: 'state',
       header: 'Estado',
       cell: ({ row }) => h('span', {
