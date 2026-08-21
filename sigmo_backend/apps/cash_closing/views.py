@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Sum
@@ -20,7 +21,9 @@ from apps.masters.models import PaymentMethod
 class DailySummaryListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar los cierres de caja registrados.")
     def get(self, request):
+        """Listar los cierres de caja registrados."""
         summaries = DailySummary.objects.all().order_by('-date')
         serializer = DailySummarySerializer(summaries, many=True)
         return Response(serializer.data)
@@ -29,7 +32,9 @@ class DailySummaryListView(APIView):
 class DailySummaryCloseView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Ejecutar el cierre de caja de un día.")
     def post(self, request):
+        """Ejecutar el cierre de caja de un día."""
         if request.user.role not in ['superuser', 'commercial_admin']:
             log_action(request, 'access_denied', 'DailySummary')
             return Response(
@@ -79,7 +84,9 @@ class DailySummaryRevertView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Revertir un cierre de caja.")
     def post(self, request, pk):
+        """Revertir un cierre de caja."""
         if request.user.role not in ['superuser', 'commercial_admin']:
             log_action(request, 'access_denied', 'DailySummary', object_id=pk)
             return Response(
@@ -133,7 +140,9 @@ class DailySummaryTodayView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Consultar el resumen del día en curso sin cerrar caja.")
     def get(self, request):
+        """Consultar el resumen del día en curso sin cerrar caja."""
         today = timezone.localdate()
         trips = Trip.objects.filter(date=today, state=True)
 

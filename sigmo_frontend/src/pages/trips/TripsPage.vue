@@ -163,13 +163,17 @@ async function lookupPin(plate: string) {
       pinDisplay.value = exact.ambiental_pin
       pinFound.value   = true
     } else {
-      // Fix 4: "0" cuando no hay PIN registrado para esta placa
+      // Sin coincidencia: queda en "0" pero editable para digitarlo a mano
       pinDisplay.value = '0'
       pinFound.value   = false
     }
   } finally {
     pinLoading.value = false
   }
+}
+
+function onPinInput(e: Event) {
+  pinDisplay.value = (e.target as HTMLInputElement).value
 }
 
 // ── Tarifa automática ─────────────────────────────────────────────────────────
@@ -496,10 +500,14 @@ const onSubmit = handleSubmit(async (values) => {
             <label class="block text-xs font-medium text-gray-700 mb-1.5">PIN Ambiental</label>
             <input
               :value="pinDisplay"
+              @input="onPinInput"
               type="text"
-              readonly
-              placeholder="Auto-completado por placa"
-              class="w-full px-3 py-2 text-sm border border-gray-200 rounded-md bg-gray-50 text-gray-600 cursor-default font-mono"
+              :readonly="pinFound"
+              :placeholder="pinFound ? 'Auto-completado por placa' : 'Ingrese el PIN manualmente'"
+              class="w-full px-3 py-2 text-sm border rounded-md font-mono"
+              :class="pinFound
+                ? 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'
+                : 'border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-gold-400'"
             />
             <div v-if="plateInput && !pinLoading" class="mt-1.5">
               <span v-if="pinFound" class="inline-flex items-center gap-1.5 text-xs text-green-600 font-medium">

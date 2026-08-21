@@ -91,6 +91,7 @@ const { mutate: doImport, isPending: importPending } = useMutation({
   onSuccess: (res) => {
     importResult.value = res.data
     qc.invalidateQueries({ queryKey: ['pins'] })
+    qc.invalidateQueries({ queryKey: ['vehicles'] })
     toast.success(`Importacion completada: ${res.data.created} creados, ${res.data.updated} actualizados.`)
   },
   onError: (err) => toastApiError(err),
@@ -235,7 +236,7 @@ const columns: ColumnDef<PinsDumper>[] = [
 
           <!-- Import Result -->
           <div v-if="importResult" class="space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div class="bg-green-50 rounded-lg p-3 text-center">
                 <p class="text-2xl font-bold text-green-700">{{ importResult.created }}</p>
                 <p class="text-xs text-green-600">Creados</p>
@@ -243,6 +244,10 @@ const columns: ColumnDef<PinsDumper>[] = [
               <div class="bg-gold-50 rounded-lg p-3 text-center">
                 <p class="text-2xl font-bold text-gold-800">{{ importResult.updated }}</p>
                 <p class="text-xs text-gold-700">Actualizados</p>
+              </div>
+              <div class="bg-blue-50 rounded-lg p-3 text-center">
+                <p class="text-2xl font-bold text-blue-700">{{ importResult.vehicles_synced }}</p>
+                <p class="text-xs text-blue-600">Vehiculos sincronizados</p>
               </div>
               <div class="bg-red-50 rounded-lg p-3 text-center">
                 <p class="text-2xl font-bold text-red-700">{{ importResult.rejected_count }}</p>

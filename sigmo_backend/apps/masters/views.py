@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 from apps.audit.services import log_action
 from typing import cast
 from django.db import transaction
@@ -44,12 +45,16 @@ def can_create_vehicle(user):
 class VehicleTypeListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar tipos de vehículo.")
     def get(self, request):
+        """Listar tipos de vehículo."""
         vehicle_types = VehicleType.objects.all().order_by('name')
         serializer = VehicleTypeSerializer(vehicle_types, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Crear un nuevo tipo de vehículo.")
     def post(self, request):
+        """Crear un nuevo tipo de vehículo."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'VehicleType')
             return Response(
@@ -77,13 +82,17 @@ class VehicleTypeDetailView(APIView):
         except VehicleType.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un tipo de vehículo.")
     def get(self, request, pk):
+        """Consultar el detalle de un tipo de vehículo."""
         obj = self.get_object(pk)
         if not obj:
             return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(VehicleTypeSerializer(obj).data)
 
+    @extend_schema(summary="Editar un tipo de vehículo.")
     def patch(self, request, pk):
+        """Editar un tipo de vehículo."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'VehicleType', object_id=pk)
             return Response(
@@ -112,12 +121,16 @@ class VehicleTypeDetailView(APIView):
 class MaterialTypeListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar tipos de material.")
     def get(self, request):
+        """Listar tipos de material."""
         materials = MaterialType.objects.all().order_by('name')
         serializer = MaterialTypeSerializer(materials, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Crear un nuevo tipo de material.")
     def post(self, request):
+        """Crear un nuevo tipo de material."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'MaterialType')
             return Response(
@@ -145,13 +158,17 @@ class MaterialTypeDetailView(APIView):
         except MaterialType.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un tipo de material.")
     def get(self, request, pk):
+        """Consultar el detalle de un tipo de material."""
         obj = self.get_object(pk)
         if not obj:
             return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(MaterialTypeSerializer(obj).data)
 
+    @extend_schema(summary="Editar un tipo de material.")
     def patch(self, request, pk):
+        """Editar un tipo de material."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'MaterialType', object_id=pk)
             return Response(
@@ -180,12 +197,16 @@ class MaterialTypeDetailView(APIView):
 class PaymentMethodListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar medios de pago.")
     def get(self, request):
+        """Listar medios de pago."""
         payments = PaymentMethod.objects.all().order_by('name')
         serializer = PaymentMethodSerializer(payments, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Crear un nuevo medio de pago.")
     def post(self, request):
+        """Crear un nuevo medio de pago."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'PaymentMethod')
             return Response(
@@ -213,13 +234,17 @@ class PaymentMethodDetailView(APIView):
         except PaymentMethod.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un medio de pago.")
     def get(self, request, pk):
+        """Consultar el detalle de un medio de pago."""
         obj = self.get_object(pk)
         if not obj:
             return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(PaymentMethodSerializer(obj).data)
 
+    @extend_schema(summary="Editar un medio de pago.")
     def patch(self, request, pk):
+        """Editar un medio de pago."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'PaymentMethod', object_id=pk)
             return Response(
@@ -248,12 +273,16 @@ class PaymentMethodDetailView(APIView):
 class OriginSiteListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar orígenes de carga.")
     def get(self, request):
+        """Listar orígenes de carga."""
         origins = OriginSite.objects.all().order_by('name')
         serializer = OriginSiteSerializer(origins, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Crear un nuevo origen de carga.")
     def post(self, request):
+        """Crear un nuevo origen de carga."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'OriginSite')
             return Response(
@@ -281,13 +310,17 @@ class OriginSiteDetailView(APIView):
         except OriginSite.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un origen de carga.")
     def get(self, request, pk):
+        """Consultar el detalle de un origen de carga."""
         obj = self.get_object(pk)
         if not obj:
             return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(OriginSiteSerializer(obj).data)
 
+    @extend_schema(summary="Editar un origen de carga.")
     def patch(self, request, pk):
+        """Editar un origen de carga."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'OriginSite', object_id=pk)
             return Response(
@@ -316,12 +349,16 @@ class OriginSiteDetailView(APIView):
 class CityListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar ciudades.")
     def get(self, request):
+        """Listar ciudades."""
         cities = City.objects.all().order_by('name')
         serializer = CitySerializer(cities, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Crear una nueva ciudad.")
     def post(self, request):
+        """Crear una nueva ciudad."""
         if not can_manage_cities(request.user):
             log_action(request, 'access_denied', 'City')
             return Response(
@@ -349,13 +386,17 @@ class CityDetailView(APIView):
         except City.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de una ciudad.")
     def get(self, request, pk):
+        """Consultar el detalle de una ciudad."""
         obj = self.get_object(pk)
         if not obj:
             return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(CitySerializer(obj).data)
 
+    @extend_schema(summary="Editar una ciudad.")
     def patch(self, request, pk):
+        """Editar una ciudad."""
         if not can_manage_cities(request.user):
             log_action(request, 'access_denied', 'City', object_id=pk)
             return Response(
@@ -384,7 +425,9 @@ class CityDetailView(APIView):
 class TariffListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar tarifas, con filtros opcionales.")
     def get(self, request):
+        """Listar tarifas, con filtros opcionales."""
         client_id      = request.query_params.get('client')
         vehicle_type   = request.query_params.get('vehicle_type')
         state          = request.query_params.get('state')
@@ -398,7 +441,9 @@ class TariffListCreateView(APIView):
         serializer = TariffSerializer(tariffs, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Crear una nueva tarifa.")
     def post(self, request):
+        """Crear una nueva tarifa."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'Tariff')
             return Response(
@@ -426,13 +471,17 @@ class TariffDetailView(APIView):
         except Tariff.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de una tarifa.")
     def get(self, request, pk):
+        """Consultar el detalle de una tarifa."""
         obj = self.get_object(pk)
         if not obj:
             return Response({'error': 'No encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(TariffSerializer(obj).data)
 
+    @extend_schema(summary="Cerrar la tarifa vigente y crear su reemplazo.")
     def patch(self, request, pk):
+        """Cerrar la tarifa vigente y crear su reemplazo."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'Tariff', object_id=pk)
             return Response(
@@ -509,7 +558,9 @@ class TariffDetailView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @extend_schema(summary="Eliminar (desactivar) una tarifa personalizada de cliente.")
     def delete(self, request, pk):
+        """Eliminar (desactivar) una tarifa personalizada de cliente."""
         # 8B.5: elimina una tarifa personalizada de cliente para que ese
         # cliente vuelva a usar la tarifa general — a diferencia de PATCH
         # (RF-21: cierra la vieja y SIEMPRE crea una reemplazo), esto
@@ -552,7 +603,9 @@ class TariffDetailView(APIView):
 class PinsDumperListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar pines de volqueta, con filtro opcional por placa.")
     def get(self, request):
+        """Listar pines de volqueta, con filtro opcional por placa."""
         plaque = request.query_params.get('plaque')
         pins = PinsDumper.objects.all().order_by('plaque')
         if plaque:
@@ -560,7 +613,9 @@ class PinsDumperListCreateView(APIView):
         serializer = PinsDumperSerializer(pins, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Registrar un nuevo pin de volqueta.")
     def post(self, request):
+        """Registrar un nuevo pin de volqueta."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'PinsDumper')
             return Response(
@@ -583,7 +638,9 @@ class PinsDumperListCreateView(APIView):
 class VehicleListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar vehículos, con filtro opcional por placa.")
     def get(self, request):
+        """Listar vehículos, con filtro opcional por placa."""
         plaque = request.query_params.get('plaque')
         vehicles = Vehicle.objects.select_related('vehicle_type', 'dumper').all()
         if plaque:
@@ -591,7 +648,9 @@ class VehicleListCreateView(APIView):
         serializer = VehicleSerializer(vehicles, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Registrar un nuevo vehículo.")
     def post(self, request):
+        """Registrar un nuevo vehículo."""
         if not can_create_vehicle(request.user):
             log_action(request, 'access_denied', 'Vehicle')
             return Response(
@@ -612,7 +671,9 @@ class VehicleListCreateView(APIView):
 class PinsDumperImportView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Importar pines de volqueta desde un archivo Excel o CSV.")
     def post(self, request):
+        """Importar pines de volqueta desde un archivo Excel o CSV."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'PinsDumper')
             return Response(
@@ -650,6 +711,7 @@ class PinsDumperImportView(APIView):
                     'created': result['created'],
                     'updated': result['updated'],
                     'rejected': result['rejected_count'],
+                    'vehicles_synced': result['vehicles_synced'],
                 }
             }
         )

@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 from apps.audit.services import log_action
 from typing import cast
 
@@ -20,7 +21,9 @@ class ClientListCreateView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar clientes, con filtros opcionales.")
     def get(self, request):
+        """Listar clientes, con filtros opcionales."""
         clients = Client.objects.all().order_by('name')
 
         # RF-10: filtros opcionales por nombre, NIT y estado
@@ -42,7 +45,9 @@ class ClientListCreateView(APIView):
         serializer = ClientSerializer(clients, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Registrar un nuevo cliente.")
     def post(self, request):
+        """Registrar un nuevo cliente."""
         if not can_manage_clients(request.user):
             log_action(request, 'access_denied', 'Client')
             return Response(
@@ -75,7 +80,9 @@ class ClientDetailView(APIView):
         except Client.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un cliente.")
     def get(self, request, pk):
+        """Consultar el detalle de un cliente."""
         obj = self.get_object(pk)
         if not obj:
             return Response(
@@ -84,7 +91,9 @@ class ClientDetailView(APIView):
             )
         return Response(ClientSerializer(obj).data)
 
+    @extend_schema(summary="Editar los datos de un cliente.")
     def patch(self, request, pk):
+        """Editar los datos de un cliente."""
         if not can_manage_clients(request.user):
             log_action(request, 'access_denied', 'Client', object_id=pk)
             return Response(

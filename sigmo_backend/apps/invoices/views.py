@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 from apps.audit.services import log_action
 from apps.trips.models import Trip
 from typing import cast
@@ -18,12 +19,16 @@ def can_manage_invoices(user):
 class InvoiceListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar facturas registradas.")
     def get(self, request):
+        """Listar facturas registradas."""
         invoices = Invoice.objects.all().order_by('-id')
         serializer = InvoiceSerializer(invoices, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Crear una factura o asociarle viajes a una existente.")
     def post(self, request):
+        """Crear una factura o asociarle viajes a una existente."""
         if not can_manage_invoices(request.user):
             log_action(request, 'access_denied', 'Invoice')
             return Response(
@@ -135,7 +140,9 @@ class InvoiceDetailView(APIView):
         except Invoice.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de una factura.")
     def get(self, request, pk):
+        """Consultar el detalle de una factura."""
         obj = self.get_object(pk)
         if not obj:
             return Response(

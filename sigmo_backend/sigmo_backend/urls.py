@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+
 
 urlpatterns = [
     path('admin/',         admin.site.urls),
@@ -12,4 +14,10 @@ urlpatterns = [
     path('api/trips/',     include('apps.trips.urls')),
     path('api/cash-closing/', include('apps.cash_closing.urls')),
     path('api/audit/', include('apps.audit.urls')),
+
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    # Interfaz visual de Swagger
+    path('api/docs/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    # Interfaz visual de Redoc (Lectura limpia)
+    path('api/docs/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]

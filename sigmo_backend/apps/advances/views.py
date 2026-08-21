@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 from django.db import transaction
 from apps.audit.services import log_action
 
@@ -27,7 +28,9 @@ def can_manage_advances(user):
 class AdvanceListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar anticipos registrados, con filtro opcional por cliente.")
     def get(self, request):
+        """Listar anticipos registrados, con filtro opcional por cliente."""
         advances = Advance.objects.select_related('client', 'user').all().order_by('-date')
         client_id = request.query_params.get('client')
         if client_id:
@@ -38,7 +41,9 @@ class AdvanceListCreateView(APIView):
         serializer = AdvanceSerializer(advances, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Registrar un nuevo anticipo para un cliente.")
     def post(self, request):
+        """Registrar un nuevo anticipo para un cliente."""
         if not can_manage_advances(request.user):
             log_action(request, 'access_denied', 'Advance')
             return Response(
@@ -104,7 +109,9 @@ class AdvanceDetailView(APIView):
         except Advance.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un anticipo.")
     def get(self, request, pk):
+        """Consultar el detalle de un anticipo."""
         obj = self.get_object(pk)
         if not obj:
             return Response(
@@ -113,7 +120,9 @@ class AdvanceDetailView(APIView):
             )
         return Response(AdvanceSerializer(obj).data)
 
+    @extend_schema(summary="Editar un anticipo (solo Superusuario).")
     def patch(self, request, pk):
+        """Editar un anticipo (solo Superusuario)."""
         if request.user.role != 'superuser':
             log_action(request, 'access_denied', 'Advance', object_id=pk)
             return Response(
@@ -157,7 +166,9 @@ class AdvanceBalanceView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Consultar el estado de cuenta de anticipos de un cliente.")
     def get(self, request, client_id):
+        """Consultar el estado de cuenta de anticipos de un cliente."""
         from apps.trips.models import Trip  # import diferido: evita ciclo con trips.models
 
         # FASE 6.2: saldo de todos los anticipos del cliente en una sola
@@ -216,7 +227,9 @@ class AdvancePendingDebtsSummaryView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Consultar la deuda pendiente total por cliente.")
     def get(self, request):
+        """Consultar la deuda pendiente total por cliente."""
         summary = get_pending_debts_by_client()
         return Response({str(client_id): str(total) for client_id, total in summary.items()})
 
@@ -239,7 +252,9 @@ class AdvanceCorrectValueView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Corregir el valor de un anticipo activo.")
     def post(self, request, pk):
+        """Corregir el valor de un anticipo activo."""
         # Mismos 3 roles ya autorizados para gestionar anticipos en general
         # (ver can_manage_advances arriba) — la Fase 9C no amplía ni reduce
         # ese conjunto, solo lo reutiliza para esta operación puntual.
@@ -306,7 +321,9 @@ class AdvanceCorrectValuePreviewView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Simular el impacto de corregir el valor de un anticipo.")
     def post(self, request, pk):
+        """Simular el impacto de corregir el valor de un anticipo."""
         if not can_manage_advances(request.user):
             return Response(
                 {'error': 'No tiene permisos para corregir el valor de anticipos.'},

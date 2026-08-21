@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from drf_spectacular.utils import extend_schema
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth import authenticate
@@ -24,7 +25,9 @@ def is_superuser(user):
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(summary="Iniciar sesión y obtener tokens de acceso.")
     def post(self, request):
+        """Iniciar sesión y obtener tokens de acceso."""
         username = request.data.get('username')
         password = request.data.get('password')
 
@@ -120,7 +123,9 @@ class LoginView(APIView):
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Cerrar sesión e invalidar el token de actualización.")
     def post(self, request):
+        """Cerrar sesión e invalidar el token de actualización."""
         # BUG 3: sin esto, "cerrar sesión" solo borraba el token en el
         # cliente — el refresh token seguía siendo válido en el backend
         # hasta su expiración (hasta 1 día) y cualquiera que lo conservara
@@ -158,7 +163,9 @@ class LogoutView(APIView):
 class UserListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar usuarios del sistema.")
     def get(self, request):
+        """Listar usuarios del sistema."""
         if not is_superuser(request.user):
             log_action(request, 'access_denied', 'User')
             return Response(
@@ -169,7 +176,9 @@ class UserListCreateView(APIView):
         serializer = UserReadSerializer(users, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Crear un nuevo usuario.")
     def post(self, request):
+        """Crear un nuevo usuario."""
         if not is_superuser(request.user):
             log_action(request, 'access_denied', 'User')
             return Response(
@@ -201,7 +210,9 @@ class UserDetailView(APIView):
         except User.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un usuario.")
     def get(self, request, pk):
+        """Consultar el detalle de un usuario."""
         if not is_superuser(request.user):
             log_action(request, 'access_denied', 'User', object_id=pk)
             return Response(
@@ -216,7 +227,9 @@ class UserDetailView(APIView):
             )
         return Response(UserReadSerializer(user).data)
 
+    @extend_schema(summary="Editar los datos de un usuario.")
     def patch(self, request, pk):
+        """Editar los datos de un usuario."""
         if not is_superuser(request.user):
             log_action(request, 'access_denied', 'User', object_id=pk)
             return Response(
@@ -267,7 +280,9 @@ class ResetPasswordAdminView(APIView):
     """El superusuario restablece la contraseña temporal de otro usuario (RF-01)."""
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Restablecer la contraseña de un usuario (administrador).")
     def post(self, request, pk):
+        """Restablecer la contraseña de un usuario (administrador)."""
         if not is_superuser(request.user):
             log_action(request, 'access_denied', 'User', object_id=pk)
             return Response(
@@ -316,7 +331,9 @@ class ResetPasswordAdminView(APIView):
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Cambiar la contraseña del usuario autenticado.")
     def post(self, request):
+        """Cambiar la contraseña del usuario autenticado."""
         serializer = ChangePasswordSerializer(
             data=request.data,
             context={'request': request}

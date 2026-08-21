@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 from django.db import transaction
 from django.utils.dateparse import parse_date
 from apps.audit.services import log_action
@@ -24,7 +25,9 @@ def can_manage_expenses(user):
 class ExpenseListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar gastos registrados, con filtro opcional por fecha.")
     def get(self, request):
+        """Listar gastos registrados, con filtro opcional por fecha."""
         expenses = Expense.objects.all().order_by('-date')
 
         date = request.query_params.get('date')
@@ -41,7 +44,9 @@ class ExpenseListCreateView(APIView):
         serializer = ExpenseSerializer(expenses, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Registrar un nuevo gasto.")
     def post(self, request):
+        """Registrar un nuevo gasto."""
         if not can_manage_expenses(request.user):
             log_action(request, 'access_denied', 'Expense')
             return Response(
@@ -82,7 +87,9 @@ class ExpenseDetailView(APIView):
         except Expense.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un gasto.")
     def get(self, request, pk):
+        """Consultar el detalle de un gasto."""
         obj = self.get_object(pk)
         if not obj:
             return Response(
@@ -91,7 +98,9 @@ class ExpenseDetailView(APIView):
             )
         return Response(ExpenseSerializer(obj).data)
 
+    @extend_schema(summary="Editar o anular un gasto.")
     def patch(self, request, pk):
+        """Editar o anular un gasto."""
         if not can_manage_expenses(request.user):
             log_action(request, 'access_denied', 'Expense', object_id=pk)
             return Response(

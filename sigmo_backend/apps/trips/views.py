@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 from django.utils import timezone
 from apps.audit.services import log_action
 from typing import cast
@@ -62,7 +63,9 @@ SAME_DAY_ONLY_ROLES = {'cashier', 'commercial_admin'}
 class TripListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Listar viajes registrados, con filtros opcionales.")
     def get(self, request):
+        """Listar viajes registrados, con filtros opcionales."""
         trips = Trip.objects.select_related(
             'client', 'payment', 'vehicle', 'material_type', 'origin_site'
         ).all().order_by('-date_register')
@@ -90,7 +93,9 @@ class TripListCreateView(APIView):
         serializer = TripReadSerializer(trips, many=True)
         return Response(serializer.data)
 
+    @extend_schema(summary="Registrar un nuevo viaje.")
     def post(self, request):
+        """Registrar un nuevo viaje."""
         if not can_register_trips(request.user):
             log_action(request, 'access_denied', 'Trip')
             return Response(
@@ -230,7 +235,9 @@ class TripDetailView(APIView):
         except Trip.DoesNotExist:
             return None
 
+    @extend_schema(summary="Consultar el detalle de un viaje.")
     def get(self, request, pk):
+        """Consultar el detalle de un viaje."""
         obj = self.get_object(pk)
         if not obj:
             return Response(
@@ -239,7 +246,9 @@ class TripDetailView(APIView):
             )
         return Response(TripReadSerializer(obj).data)
 
+    @extend_schema(summary="Editar, anular o desvincular la factura de un viaje.")
     def patch(self, request, pk):
+        """Editar, anular o desvincular la factura de un viaje."""
         # 8B.4: desvincular una factura (`invoice` explícito en null) es una
         # operación separada, reservada a superuser/contabilidad — se
         # detecta ANTES del gate normal de can_update_trips() para que

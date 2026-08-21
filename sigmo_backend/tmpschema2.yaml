@@ -1,0 +1,856 @@
+openapi: 3.0.3
+info:
+  title: Documentación Endpoints SIGMO
+  version: 1.0.0
+  description: Documentación automatizada de los endpoints de mi proyecto.
+paths:
+  /api/advances/:
+    get:
+      operationId: advances_retrieve
+      description: Listar anticipos registrados, con filtro opcional por cliente.
+      summary: Listar anticipos registrados, con filtro opcional por cliente.
+      tags:
+      - advances
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: advances_create
+      description: Registrar un nuevo anticipo para un cliente.
+      summary: Registrar un nuevo anticipo para un cliente.
+      tags:
+      - advances
+      responses:
+        '200':
+          description: No response body
+  /api/advances/{id}/:
+    get:
+      operationId: advances_retrieve_2
+      description: Consultar el detalle de un anticipo.
+      summary: Consultar el detalle de un anticipo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - advances
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: advances_partial_update
+      description: Editar un anticipo (solo Superusuario).
+      summary: Editar un anticipo (solo Superusuario).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - advances
+      responses:
+        '200':
+          description: No response body
+  /api/advances/{id}/correct-value/:
+    post:
+      operationId: advances_correct_value_create
+      description: Corregir el valor de un anticipo activo.
+      summary: Corregir el valor de un anticipo activo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - advances
+      responses:
+        '200':
+          description: No response body
+  /api/advances/{id}/correct-value/preview/:
+    post:
+      operationId: advances_correct_value_preview_create
+      description: Simular el impacto de corregir el valor de un anticipo.
+      summary: Simular el impacto de corregir el valor de un anticipo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - advances
+      responses:
+        '200':
+          description: No response body
+  /api/advances/balance/{client_id}/:
+    get:
+      operationId: advances_balance_retrieve
+      description: Consultar el estado de cuenta de anticipos de un cliente.
+      summary: Consultar el estado de cuenta de anticipos de un cliente.
+      parameters:
+      - in: path
+        name: client_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - advances
+      responses:
+        '200':
+          description: No response body
+  /api/advances/pending-debts/:
+    get:
+      operationId: advances_pending_debts_retrieve
+      description: Consultar la deuda pendiente total por cliente.
+      summary: Consultar la deuda pendiente total por cliente.
+      tags:
+      - advances
+      responses:
+        '200':
+          description: No response body
+  /api/audit/:
+    get:
+      operationId: audit_retrieve
+      description: Consultar el log de auditoría del sistema.
+      summary: Consultar el log de auditoría del sistema.
+      tags:
+      - audit
+      responses:
+        '200':
+          description: No response body
+  /api/cash-closing/:
+    get:
+      operationId: cash_closing_retrieve
+      description: Listar los cierres de caja registrados.
+      summary: Listar los cierres de caja registrados.
+      tags:
+      - cash-closing
+      responses:
+        '200':
+          description: No response body
+  /api/cash-closing/{id}/revert/:
+    post:
+      operationId: cash_closing_revert_create
+      description: Revertir un cierre de caja.
+      summary: Revertir un cierre de caja.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - cash-closing
+      responses:
+        '200':
+          description: No response body
+  /api/cash-closing/close/:
+    post:
+      operationId: cash_closing_close_create
+      description: Ejecutar el cierre de caja de un día.
+      summary: Ejecutar el cierre de caja de un día.
+      tags:
+      - cash-closing
+      responses:
+        '200':
+          description: No response body
+  /api/cash-closing/today/:
+    get:
+      operationId: cash_closing_today_retrieve
+      description: Consultar el resumen del día en curso sin cerrar caja.
+      summary: Consultar el resumen del día en curso sin cerrar caja.
+      tags:
+      - cash-closing
+      responses:
+        '200':
+          description: No response body
+  /api/clients/:
+    get:
+      operationId: clients_retrieve
+      description: Listar clientes, con filtros opcionales.
+      summary: Listar clientes, con filtros opcionales.
+      tags:
+      - clients
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: clients_create
+      description: Registrar un nuevo cliente.
+      summary: Registrar un nuevo cliente.
+      tags:
+      - clients
+      responses:
+        '200':
+          description: No response body
+  /api/clients/{id}/:
+    get:
+      operationId: clients_retrieve_2
+      description: Consultar el detalle de un cliente.
+      summary: Consultar el detalle de un cliente.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - clients
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: clients_partial_update
+      description: Editar los datos de un cliente.
+      summary: Editar los datos de un cliente.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - clients
+      responses:
+        '200':
+          description: No response body
+  /api/expenses/:
+    get:
+      operationId: expenses_retrieve
+      description: Listar gastos registrados, con filtro opcional por fecha.
+      summary: Listar gastos registrados, con filtro opcional por fecha.
+      tags:
+      - expenses
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: expenses_create
+      description: Registrar un nuevo gasto.
+      summary: Registrar un nuevo gasto.
+      tags:
+      - expenses
+      responses:
+        '200':
+          description: No response body
+  /api/expenses/{id}/:
+    get:
+      operationId: expenses_retrieve_2
+      description: Consultar el detalle de un gasto.
+      summary: Consultar el detalle de un gasto.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - expenses
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: expenses_partial_update
+      description: Editar o anular un gasto.
+      summary: Editar o anular un gasto.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - expenses
+      responses:
+        '200':
+          description: No response body
+  /api/invoices/:
+    get:
+      operationId: invoices_retrieve
+      description: Listar facturas registradas.
+      summary: Listar facturas registradas.
+      tags:
+      - invoices
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: invoices_create
+      description: Crear una factura o asociarle viajes a una existente.
+      summary: Crear una factura o asociarle viajes a una existente.
+      tags:
+      - invoices
+      responses:
+        '200':
+          description: No response body
+  /api/invoices/{id}/:
+    get:
+      operationId: invoices_retrieve_2
+      description: Consultar el detalle de una factura.
+      summary: Consultar el detalle de una factura.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - invoices
+      responses:
+        '200':
+          description: No response body
+  /api/masters/cities/:
+    get:
+      operationId: masters_cities_retrieve
+      description: Listar ciudades.
+      summary: Listar ciudades.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: masters_cities_create
+      description: Crear una nueva ciudad.
+      summary: Crear una nueva ciudad.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/cities/{id}/:
+    get:
+      operationId: masters_cities_retrieve_2
+      description: Consultar el detalle de una ciudad.
+      summary: Consultar el detalle de una ciudad.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: masters_cities_partial_update
+      description: Editar una ciudad.
+      summary: Editar una ciudad.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/material-types/:
+    get:
+      operationId: masters_material_types_retrieve
+      description: Listar tipos de material.
+      summary: Listar tipos de material.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: masters_material_types_create
+      description: Crear un nuevo tipo de material.
+      summary: Crear un nuevo tipo de material.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/material-types/{id}/:
+    get:
+      operationId: masters_material_types_retrieve_2
+      description: Consultar el detalle de un tipo de material.
+      summary: Consultar el detalle de un tipo de material.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: masters_material_types_partial_update
+      description: Editar un tipo de material.
+      summary: Editar un tipo de material.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/origin-sites/:
+    get:
+      operationId: masters_origin_sites_retrieve
+      description: Listar orígenes de carga.
+      summary: Listar orígenes de carga.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: masters_origin_sites_create
+      description: Crear un nuevo origen de carga.
+      summary: Crear un nuevo origen de carga.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/origin-sites/{id}/:
+    get:
+      operationId: masters_origin_sites_retrieve_2
+      description: Consultar el detalle de un origen de carga.
+      summary: Consultar el detalle de un origen de carga.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: masters_origin_sites_partial_update
+      description: Editar un origen de carga.
+      summary: Editar un origen de carga.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/payment-methods/:
+    get:
+      operationId: masters_payment_methods_retrieve
+      description: Listar medios de pago.
+      summary: Listar medios de pago.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: masters_payment_methods_create
+      description: Crear un nuevo medio de pago.
+      summary: Crear un nuevo medio de pago.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/payment-methods/{id}/:
+    get:
+      operationId: masters_payment_methods_retrieve_2
+      description: Consultar el detalle de un medio de pago.
+      summary: Consultar el detalle de un medio de pago.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: masters_payment_methods_partial_update
+      description: Editar un medio de pago.
+      summary: Editar un medio de pago.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/pins/:
+    get:
+      operationId: masters_pins_retrieve
+      description: Listar pines de volqueta, con filtro opcional por placa.
+      summary: Listar pines de volqueta, con filtro opcional por placa.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: masters_pins_create
+      description: Registrar un nuevo pin de volqueta.
+      summary: Registrar un nuevo pin de volqueta.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/pins/import/:
+    post:
+      operationId: masters_pins_import_create
+      description: Importar pines de volqueta desde un archivo Excel o CSV.
+      summary: Importar pines de volqueta desde un archivo Excel o CSV.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/tariffs/:
+    get:
+      operationId: masters_tariffs_retrieve
+      description: Listar tarifas, con filtros opcionales.
+      summary: Listar tarifas, con filtros opcionales.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: masters_tariffs_create
+      description: Crear una nueva tarifa.
+      summary: Crear una nueva tarifa.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/tariffs/{id}/:
+    get:
+      operationId: masters_tariffs_retrieve_2
+      description: Consultar el detalle de una tarifa.
+      summary: Consultar el detalle de una tarifa.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: masters_tariffs_partial_update
+      description: Cerrar la tarifa vigente y crear su reemplazo.
+      summary: Cerrar la tarifa vigente y crear su reemplazo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: masters_tariffs_destroy
+      description: Eliminar (desactivar) una tarifa personalizada de cliente.
+      summary: Eliminar (desactivar) una tarifa personalizada de cliente.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '204':
+          description: No response body
+  /api/masters/vehicle-types/:
+    get:
+      operationId: masters_vehicle_types_retrieve
+      description: Listar tipos de vehículo.
+      summary: Listar tipos de vehículo.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: masters_vehicle_types_create
+      description: Crear un nuevo tipo de vehículo.
+      summary: Crear un nuevo tipo de vehículo.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/vehicle-types/{id}/:
+    get:
+      operationId: masters_vehicle_types_retrieve_2
+      description: Consultar el detalle de un tipo de vehículo.
+      summary: Consultar el detalle de un tipo de vehículo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: masters_vehicle_types_partial_update
+      description: Editar un tipo de vehículo.
+      summary: Editar un tipo de vehículo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/masters/vehicles/:
+    get:
+      operationId: masters_vehicles_retrieve
+      description: Listar vehículos, con filtro opcional por placa.
+      summary: Listar vehículos, con filtro opcional por placa.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: masters_vehicles_create
+      description: Registrar un nuevo vehículo.
+      summary: Registrar un nuevo vehículo.
+      tags:
+      - masters
+      responses:
+        '200':
+          description: No response body
+  /api/trips/:
+    get:
+      operationId: trips_retrieve
+      description: Listar viajes registrados, con filtros opcionales.
+      summary: Listar viajes registrados, con filtros opcionales.
+      tags:
+      - trips
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: trips_create
+      description: Registrar un nuevo viaje.
+      summary: Registrar un nuevo viaje.
+      tags:
+      - trips
+      responses:
+        '200':
+          description: No response body
+  /api/trips/{id}/:
+    get:
+      operationId: trips_retrieve_2
+      description: Consultar el detalle de un viaje.
+      summary: Consultar el detalle de un viaje.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - trips
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: trips_partial_update
+      description: Editar, anular o desvincular la factura de un viaje.
+      summary: Editar, anular o desvincular la factura de un viaje.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - trips
+      responses:
+        '200':
+          description: No response body
+  /api/users/:
+    get:
+      operationId: users_retrieve
+      description: Listar usuarios del sistema.
+      summary: Listar usuarios del sistema.
+      tags:
+      - users
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: users_create
+      description: Crear un nuevo usuario.
+      summary: Crear un nuevo usuario.
+      tags:
+      - users
+      responses:
+        '200':
+          description: No response body
+  /api/users/{id}/:
+    get:
+      operationId: users_retrieve_2
+      description: Consultar el detalle de un usuario.
+      summary: Consultar el detalle de un usuario.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: users_partial_update
+      description: Editar los datos de un usuario.
+      summary: Editar los datos de un usuario.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          description: No response body
+  /api/users/{id}/reset-password/:
+    post:
+      operationId: users_reset_password_create
+      description: Restablecer la contraseña de un usuario (administrador).
+      summary: Restablecer la contraseña de un usuario (administrador).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          description: No response body
+  /api/users/change-password/:
+    post:
+      operationId: users_change_password_create
+      description: Cambiar la contraseña del usuario autenticado.
+      summary: Cambiar la contraseña del usuario autenticado.
+      tags:
+      - users
+      responses:
+        '200':
+          description: No response body
+  /api/users/login/:
+    post:
+      operationId: users_login_create
+      description: Iniciar sesión y obtener tokens de acceso.
+      summary: Iniciar sesión y obtener tokens de acceso.
+      tags:
+      - users
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/users/logout/:
+    post:
+      operationId: users_logout_create
+      description: Cerrar sesión e invalidar el token de actualización.
+      summary: Cerrar sesión e invalidar el token de actualización.
+      tags:
+      - users
+      responses:
+        '200':
+          description: No response body
+  /api/users/token/refresh/:
+    post:
+      operationId: users_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+components:
+  schemas:
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh

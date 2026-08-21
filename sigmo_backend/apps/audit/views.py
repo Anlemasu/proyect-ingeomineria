@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 
 from .models import AuditLog
 from .serializers import AuditLogSerializer
@@ -16,7 +17,9 @@ class AuditLogListView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Consultar el log de auditoría del sistema.")
     def get(self, request):
+        """Consultar el log de auditoría del sistema."""
         if request.user.role not in ['superuser', 'auditor']:
             return Response(
                 {'error': 'No tiene permisos para consultar el log de auditoría.'},

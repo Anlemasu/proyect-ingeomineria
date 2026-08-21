@@ -301,4 +301,5 @@ export interface ImportResult {
   updated: number
   rejected_count: number
   rejected: Array<{ fila: number; placa?: string; motivo: string }>
+  vehicles_synced: number
 }

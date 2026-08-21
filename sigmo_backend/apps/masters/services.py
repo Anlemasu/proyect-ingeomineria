@@ -1,7 +1,7 @@
 import openpyxl
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from .models import PinsDumper
+from .models import PinsDumper, Vehicle
 
 
 # Mapeo de columnas del Excel exportado desde el PDF de la SDA
@@ -21,6 +21,7 @@ def parse_pins_from_excel(file) -> dict:
     created = 0
     updated = 0
     rejected = []
+    touched_plaques: set[str] = set()
 
     try:
         wb = openpyxl.load_workbook(file, data_only=True)
@@ -199,12 +200,28 @@ def parse_pins_from_excel(file) -> dict:
                     )
                     created += 1
 
+                touched_plaques.add(plaque)
+
             except Exception as e:
                 rejected.append({
                     'fila': fila_num,
                     'placa': plaque,
                     'motivo': f'Error al guardar: {str(e)}'
                 })
+
+        # Sincronizar Vehicle.dumper con lo importado (RF-23): no crea
+        # vehículos nuevos (requieren vehicle_type, que el Excel no trae),
+        # solo actualiza el dumper de los que ya existen para esa placa,
+        # apuntando al pin activo más reciente (o desvinculando si ya
+        # ninguno quedó activo).
+        vehicles_synced = 0
+        for plaque in touched_plaques:
+            if not Vehicle.objects.filter(plaque=plaque).exists():
+                continue
+            active_pin = PinsDumper.objects.filter(
+                plaque=plaque, state=True
+            ).order_by('-date_register').first()
+            vehicles_synced += Vehicle.objects.filter(plaque=plaque).update(dumper=active_pin)
 
     except Exception as e:
         return {
@@ -218,4 +235,5 @@ def parse_pins_from_excel(file) -> dict:
         'updated': updated,
         'rejected_count': len(rejected),
         'rejected': rejected,
+        'vehicles_synced': vehicles_synced,
     }
