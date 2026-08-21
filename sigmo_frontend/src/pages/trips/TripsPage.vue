@@ -14,6 +14,7 @@ import {
 import PageHeader       from '@/components/shared/PageHeader.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import CurrencyInput    from '@/components/shared/CurrencyInput.vue'
+import ConfirmDialog    from '@/components/shared/ConfirmDialog.vue'
 
 import { clientsApi }        from '@/api/clients.api'
 import { originsApi }        from '@/api/origins.api'
@@ -133,6 +134,14 @@ const pinDisplay = ref('')   // Fix 4: '0' cuando placa ingresada pero sin PIN r
 const pinFound   = ref(false)
 const pinLoading = ref(false)
 const pinTimer   = ref<ReturnType<typeof setTimeout> | null>(null)
+
+// Confirmación antes de abrir el diálogo de impresión del navegador
+const pendingVoucher = ref<{ trip: Trip; pin: string; obs: string | null } | null>(null)
+function confirmPrintVoucher() {
+  if (!pendingVoucher.value) return
+  printVoucher(pendingVoucher.value.trip, pendingVoucher.value.pin, pendingVoucher.value.obs)
+  pendingVoucher.value = null
+}
 
 function onPlateInput(e: Event) {
   const raw = (e.target as HTMLInputElement).value
@@ -373,7 +382,7 @@ const onSubmit = handleSubmit(async (values) => {
     toast.success(`Viaje #${trip.voucher_num} registrado correctamente`)
 
     // PIN viene del formulario (pinDisplay), no del response backend (puede omitir dumper_detail)
-    printVoucher(trip, pinDisplay.value || '0', values.observations?.trim() || null)
+    pendingVoucher.value = { trip, pin: pinDisplay.value || '0', obs: values.observations?.trim() || null }
 
     queryClient.invalidateQueries({ queryKey: ['trips', 'today'] })
     queryClient.invalidateQueries({ queryKey: ['advance-balance', values.client] })
@@ -909,5 +918,15 @@ const onSubmit = handleSubmit(async (values) => {
         </div>
       </Transition>
     </Teleport>
+
+    <ConfirmDialog
+      :open="!!pendingVoucher"
+      title="Imprimir vale"
+      :description="pendingVoucher ? `¿Desea imprimir el vale del viaje #${pendingVoucher.trip.voucher_num}?` : ''"
+      confirm-label="Sí"
+      cancel-label="No"
+      @confirm="confirmPrintVoucher"
+      @cancel="pendingVoucher = null"
+    />
   </div>
 </template>

@@ -70,7 +70,7 @@ function generateAdjustmentHtml(trip: Trip): string {
 
 export function printAdjustmentRecord(trip: Trip): void {
   const html = generateAdjustmentHtml(trip)
-  const win = openCenteredWindow(420, 650)
+  const win = openCenteredWindow(window.screen.availWidth, window.screen.availHeight)
   if (!win) return
   win.document.write(html)
   win.document.close()

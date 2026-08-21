@@ -1,5 +1,7 @@
 <script setup lang="ts">
-defineProps<{
+import { nextTick, ref, watch } from 'vue'
+
+const props = defineProps<{
   open: boolean
   title: string
   description?: string
@@ -12,6 +14,15 @@ const emit = defineEmits<{
   confirm: []
   cancel: []
 }>()
+
+const confirmBtn = ref<HTMLButtonElement | null>(null)
+
+// Al abrir, el foco va al botón de confirmar para que Enter lo active por defecto.
+watch(() => props.open, (isOpen) => {
+  if (isOpen) {
+    nextTick(() => confirmBtn.value?.focus())
+  }
+})
 </script>
 
 <template>
@@ -29,6 +40,7 @@ const emit = defineEmits<{
             {{ cancelLabel ?? 'Cancelar' }}
           </button>
           <button
+            ref="confirmBtn"
             @click="emit('confirm')"
             :disabled="loading"
             class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60"

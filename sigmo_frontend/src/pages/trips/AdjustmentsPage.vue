@@ -10,6 +10,7 @@ import {
 import PageHeader       from '@/components/shared/PageHeader.vue'
 import CurrencyInput    from '@/components/shared/CurrencyInput.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
+import ConfirmDialog    from '@/components/shared/ConfirmDialog.vue'
 
 import { tripsApi }          from '@/api/trips.api'
 import { clientsApi }        from '@/api/clients.api'
@@ -334,8 +335,15 @@ function handleExportExcel() {
   }
 }
 
+// Confirmación antes de abrir el diálogo de impresión del navegador
+const pendingPrintTrip = ref<Trip | null>(null)
 function handlePrint(trip: Trip) {
-  printAdjustmentRecord(trip)
+  pendingPrintTrip.value = trip
+}
+function confirmPrint() {
+  if (!pendingPrintTrip.value) return
+  printAdjustmentRecord(pendingPrintTrip.value)
+  pendingPrintTrip.value = null
 }
 </script>
 
@@ -779,5 +787,15 @@ function handlePrint(trip: Trip) {
         </div>
       </Transition>
     </Teleport>
+
+    <ConfirmDialog
+      :open="!!pendingPrintTrip"
+      title="Imprimir registro"
+      :description="pendingPrintTrip ? `¿Desea imprimir el comprobante del viaje #${pendingPrintTrip.voucher_num}?` : ''"
+      confirm-label="Sí"
+      cancel-label="No"
+      @confirm="confirmPrint"
+      @cancel="pendingPrintTrip = null"
+    />
   </div>
 </template>

@@ -70,7 +70,7 @@ function generateVoucherHtml(trip: Trip, pin: string, observations?: string | nu
 
 export function printVoucher(trip: Trip, pin: string, observations?: string | null): void {
   const html = generateVoucherHtml(trip, pin, observations)
-  const win = openCenteredWindow(420, 650)
+  const win = openCenteredWindow(window.screen.availWidth, window.screen.availHeight)
   if (!win) return
   win.document.write(html)
   win.document.close()
