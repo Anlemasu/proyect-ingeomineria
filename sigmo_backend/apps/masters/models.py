@@ -23,16 +23,25 @@ class VehicleType(models.Model):
 
 class PinsDumper(models.Model):
     id = models.AutoField(primary_key=True)
-    ambiental_pin = models.CharField(max_length=30)
+    # unique: es la clave de idempotencia del importador (RF-23) — la SDA
+    # reemite el listado periódicamente con la misma numeración de PIN.
+    ambiental_pin = models.CharField(max_length=30, unique=True)
     propietary = models.CharField(max_length=50)
-    address = models.CharField(max_length=20)
-    phone = models.DecimalField(max_digits=10, decimal_places=0)
-    email = models.CharField(max_length=20)
-    plaque = models.CharField(max_length=6)
-    expedition_site = models.CharField(max_length=20)
-    model = models.CharField(max_length=50)
-    capacity = models.DecimalField(max_digits=10, decimal_places=2)
-    driver = models.CharField(max_length=50)
+    # 100: el listado oficial trae direcciones de hasta ~73 caracteres,
+    # muy por encima del límite original de 20.
+    address = models.CharField(max_length=100)
+    # null/blank: el teléfono viene vacío en ~30% de las filas del listado
+    # oficial (RF-23).
+    phone = models.DecimalField(max_digits=10, decimal_places=0, null=True, blank=True)
+    # 100: igual que address, el listado trae correos de hasta ~60 caracteres.
+    email = models.CharField(max_length=100)
+    # blank: filas con ESTADO=FINALIZADO en el listado oficial no traen placa.
+    plaque = models.CharField(max_length=6, blank=True)
+    expedition_site = models.CharField(max_length=30, blank=True)
+    model = models.CharField(max_length=50, blank=True)
+    # null/blank: mismo caso que placa, ausente en filas FINALIZADO.
+    capacity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    driver = models.CharField(max_length=50, blank=True)
     date_register = models.DateField()
     state = models.BooleanField(default=True)
 

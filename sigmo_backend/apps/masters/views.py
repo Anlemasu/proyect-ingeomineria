@@ -625,6 +625,12 @@ class PinsDumperListCreateView(APIView):
         serializer = PinsDumperSerializer(data=request.data)
         if serializer.is_valid():
             obj = cast(PinsDumper, serializer.save())
+            # Si ya existía un Vehicle con esta placa (ej. creado al vuelo
+            # desde un viaje antes de que este pin existiera), lo enlaza de
+            # una vez en lugar de dejarlo con dumper null pudiendo
+            # resolverse.
+            from .services import sync_vehicle_dumper_for_plaque
+            sync_vehicle_dumper_for_plaque(obj.plaque)
             log_action(
                 request, 'create', 'PinsDumper',
                 object_id=obj.id,
@@ -671,9 +677,9 @@ class VehicleListCreateView(APIView):
 class PinsDumperImportView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(summary="Importar pines de volqueta desde un archivo Excel o CSV.")
+    @extend_schema(summary="Importar pines de volqueta desde un archivo Excel, CSV o PDF.")
     def post(self, request):
-        """Importar pines de volqueta desde un archivo Excel o CSV."""
+        """Importar pines de volqueta desde un archivo Excel, CSV o PDF."""
         if not can_manage_masters(request.user):
             log_action(request, 'access_denied', 'PinsDumper')
             return Response(
@@ -683,20 +689,24 @@ class PinsDumperImportView(APIView):
 
         if 'file' not in request.FILES:
             return Response(
-                {'error': 'Debe enviar un archivo .xlsx o .csv.'},
+                {'error': 'Debe enviar un archivo .xlsx, .csv o .pdf.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         file = request.FILES['file']
 
-        if not file.name.endswith(('.xlsx', '.csv')):
+        if not file.name.endswith(('.xlsx', '.csv', '.pdf')):
             return Response(
-                {'error': 'El archivo debe ser .xlsx o .csv.'},
+                {'error': 'El archivo debe ser .xlsx, .csv o .pdf.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        from .services import parse_pins_from_excel
-        result = parse_pins_from_excel(file)
+        if file.name.endswith('.pdf'):
+            from .services import parse_pins_from_pdf
+            result = parse_pins_from_pdf(file)
+        else:
+            from .services import parse_pins_from_excel
+            result = parse_pins_from_excel(file)
 
         if not result['success']:
             return Response(

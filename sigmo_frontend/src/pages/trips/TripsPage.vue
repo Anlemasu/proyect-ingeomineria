@@ -149,6 +149,7 @@ const { value: observations,  errorMessage: observationsError }= useField<string
 const plateInput = ref('')
 const pinDisplay = ref('')   // Fix 4: '0' cuando placa ingresada pero sin PIN registrado
 const pinFound   = ref(false)
+const pinId      = ref<number | null>(null)  // id del PinsDumper encontrado — se usa como Vehicle.dumper al crear la placa al vuelo
 const pinLoading = ref(false)
 const pinTimer   = ref<ReturnType<typeof setTimeout> | null>(null)
 
@@ -173,6 +174,7 @@ function onPlateInput(e: Event) {
   if (!raw) {
     pinDisplay.value = ''
     pinFound.value   = false
+    pinId.value      = null
     return
   }
   pinTimer.value = setTimeout(() => lookupPin(raw), 400)
@@ -182,12 +184,14 @@ async function lookupPin(plate: string) {
   pinLoading.value = true
   pinFound.value   = false
   pinDisplay.value = ''
+  pinId.value      = null
   try {
     const res   = await pinsApi.list({ plaque: plate })
     const exact = res.data.find(p => p.plaque === plate && p.state)
     if (exact) {
       pinDisplay.value = exact.ambiental_pin
       pinFound.value   = true
+      pinId.value      = exact.id
     } else {
       // Sin coincidencia: queda en "0" pero editable para digitarlo a mano
       pinDisplay.value = '0'
@@ -368,6 +372,10 @@ const onSubmit = handleSubmit(async (values) => {
       const newVehicle = await vehiclesApi.create({
         plaque:       plate,
         vehicle_type: values.vehicle_type,
+        // El PIN ya se resolvió por placa para mostrarlo en el formulario
+        // (pinId) — se guarda de una vez en el vehículo nuevo para no
+        // dejarlo con dumper null pudiendo resolverse.
+        dumper:       pinId.value,
       })
       vehicleId = newVehicle.data.id
     }
@@ -411,6 +419,7 @@ const onSubmit = handleSubmit(async (values) => {
     plateInput.value    = ''
     pinDisplay.value    = ''
     pinFound.value      = false
+    pinId.value         = null
     tariffMode.value    = null
     valueEditable.value = false
     forceSubmit.value   = false

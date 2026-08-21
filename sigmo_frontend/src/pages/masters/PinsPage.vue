@@ -5,7 +5,7 @@ import { toast } from 'vue-sonner'
 import { useForm, useField } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import { Plus, Upload, ToggleLeft, ToggleRight, X, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { Plus, Upload, ToggleLeft, ToggleRight, X, ChevronDown, ChevronUp, Loader2 } from 'lucide-vue-next'
 import type { ColumnDef } from '@tanstack/vue-table'
 import DataTable from '@/components/shared/DataTable.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
@@ -80,9 +80,9 @@ function onFileChange(e: Event) {
   importResult.value = null
   previewRows.value = []
   if (!file) return
-  if (file.size > 5 * 1024 * 1024) { fileError.value = 'El archivo no puede superar 5MB.'; return }
+  if (file.size > 25 * 1024 * 1024) { fileError.value = 'El archivo no puede superar 25MB.'; return }
   const ext = file.name.split('.').pop()?.toLowerCase()
-  if (!['xlsx', 'csv'].includes(ext ?? '')) { fileError.value = 'Solo se aceptan archivos .xlsx o .csv.'; return }
+  if (!['xlsx', 'csv', 'pdf'].includes(ext ?? '')) { fileError.value = 'Solo se aceptan archivos .xlsx, .csv o .pdf.'; return }
   importFile.value = file
 }
 
@@ -119,7 +119,7 @@ const columns: ColumnDef<PinsDumper>[] = [
       <PageHeader title="Pines ambientales" description="Registro y gestion de pines ambientales" />
       <div class="flex flex-wrap gap-2">
         <button v-if="canCreate('masters')" @click="showImport = true" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">
-          <Upload class="w-4 h-4" /> Importar Excel
+          <Upload class="w-4 h-4" /> Importar Excel/PDF
         </button>
         <button v-if="canCreate('masters')" @click="() => { resetForm(); showModal = true }" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600">
           <Plus class="w-4 h-4" /> Nuevo PIN
@@ -203,20 +203,32 @@ const columns: ColumnDef<PinsDumper>[] = [
 
       <!-- Import Modal -->
       <div v-if="showImport" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-black/50" @click="showImport = false" />
-        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-lg mx-4">
+        <div class="absolute inset-0 bg-black/50" @click="!importPending && (showImport = false)" />
+        <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold">Importar pines desde Excel</h2>
-            <button @click="showImport = false" class="text-gray-400 hover:text-gray-600"><X class="w-5 h-5" /></button>
+            <h2 class="text-lg font-semibold">Importar pines desde Excel o PDF</h2>
+            <button v-if="!importPending" @click="showImport = false" class="text-gray-400 hover:text-gray-600"><X class="w-5 h-5" /></button>
           </div>
 
-          <div v-if="!importResult" class="space-y-4">
+          <!-- Loading -->
+          <div v-if="importPending" class="flex flex-col items-center justify-center text-center py-10">
+            <Loader2 class="w-10 h-10 text-gold-500 animate-spin mb-4" />
+            <p class="text-sm font-medium text-gray-800">Importando pines...</p>
+            <p v-if="importFile" class="text-xs text-gray-500 mt-1">{{ importFile.name }}</p>
+            <p class="text-xs text-gray-500 mt-3 max-w-sm">
+              El listado oficial trae miles de filas: esto puede tardar varios minutos.
+              No cierres esta ventana ni recargues la pagina, la importacion sigue en curso.
+            </p>
+          </div>
+
+          <!-- File picker -->
+          <div v-else-if="!importResult" class="space-y-4">
             <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-              <input type="file" accept=".xlsx,.csv" class="hidden" id="import-file" @change="onFileChange" />
+              <input type="file" accept=".xlsx,.csv,.pdf" class="hidden" id="import-file" @change="onFileChange" />
               <label for="import-file" class="cursor-pointer">
                 <Upload class="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p class="text-sm text-gray-600">Haz clic para seleccionar un archivo <span class="text-[#1E40AF] font-medium">.xlsx o .csv</span></p>
-                <p class="text-xs text-gray-400 mt-1">Maximo 5MB</p>
+                <p class="text-sm text-gray-600">Haz clic para seleccionar un archivo <span class="text-[#1E40AF] font-medium">.xlsx, .csv o .pdf</span></p>
+                <p class="text-xs text-gray-400 mt-1">Maximo 25MB</p>
               </label>
               <p v-if="importFile" class="mt-2 text-sm font-medium text-gray-700">{{ importFile.name }}</p>
               <p v-if="fileError" class="mt-2 text-xs text-red-600">{{ fileError }}</p>
@@ -226,16 +238,16 @@ const columns: ColumnDef<PinsDumper>[] = [
               <button @click="showImport = false" class="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">Cancelar</button>
               <button
                 @click="confirmImport"
-                :disabled="!importFile || !!fileError || importPending"
+                :disabled="!importFile || !!fileError"
                 class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600 disabled:opacity-60"
               >
-                {{ importPending ? 'Importando...' : 'Confirmar importacion' }}
+                Confirmar importacion
               </button>
             </div>
           </div>
 
           <!-- Import Result -->
-          <div v-if="importResult" class="space-y-4">
+          <div v-else class="space-y-4">
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div class="bg-green-50 rounded-lg p-3 text-center">
                 <p class="text-2xl font-bold text-green-700">{{ importResult.created }}</p>
@@ -260,9 +272,9 @@ const columns: ColumnDef<PinsDumper>[] = [
                 <component :is="importRejectedOpen ? ChevronUp : ChevronDown" class="w-4 h-4" />
                 Ver {{ importResult.rejected_count }} registro(s) rechazado(s)
               </button>
-              <div v-if="importRejectedOpen" class="mt-2 border border-red-200 rounded-md overflow-hidden">
+              <div v-if="importRejectedOpen" class="mt-2 border border-red-200 rounded-md max-h-64 overflow-y-auto overflow-x-auto">
                 <table class="w-full text-xs">
-                  <thead class="bg-red-50">
+                  <thead class="bg-red-50 sticky top-0">
                     <tr>
                       <th class="px-3 py-2 text-left text-red-600">Fila</th>
                       <th class="px-3 py-2 text-left text-red-600">Placa</th>
@@ -271,8 +283,8 @@ const columns: ColumnDef<PinsDumper>[] = [
                   </thead>
                   <tbody>
                     <tr v-for="(r, i) in importResult.rejected" :key="i" class="border-t border-red-100">
-                      <td class="px-3 py-2">{{ r.fila }}</td>
-                      <td class="px-3 py-2">{{ r.placa ?? '-' }}</td>
+                      <td class="px-3 py-2 whitespace-nowrap">{{ r.fila }}</td>
+                      <td class="px-3 py-2 whitespace-nowrap">{{ r.placa ?? '-' }}</td>
                       <td class="px-3 py-2">{{ r.motivo }}</td>
                     </tr>
                   </tbody>
@@ -280,9 +292,9 @@ const columns: ColumnDef<PinsDumper>[] = [
               </div>
             </div>
 
-            <div class="flex justify-end">
+            <div class="flex justify-end sticky bottom-0 bg-white pt-2 -mb-6 pb-6">
               <button @click="() => { showImport = false; importResult = null; importFile = null }" class="px-4 py-2 text-sm font-medium text-stone-900 bg-gold-500 rounded-md hover:bg-gold-600">
-                Cerrar
+                Aceptar
               </button>
             </div>
           </div>

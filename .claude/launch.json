@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "sigmo_frontend", "run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "sigmo_backend",
+      "runtimeExecutable": "venv/Scripts/python.exe",
+      "runtimeArgs": ["sigmo_backend/manage.py", "runserver", "8000"],
+      "port": 8000
     }
   ]
 }
