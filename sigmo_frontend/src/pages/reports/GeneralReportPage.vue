@@ -6,10 +6,11 @@ import {
   useVueTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel, getPaginationRowModel,
   FlexRender,
   type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState, type ColumnSizingState,
+  type ColumnOrderState,
 } from '@tanstack/vue-table'
 import {
   Search, FilterX, SlidersHorizontal, FileSpreadsheet, Printer, Copy,
-  ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight,
+  ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, GripVertical,
 } from 'lucide-vue-next'
 
 import PageHeader from '@/components/shared/PageHeader.vue'
@@ -150,6 +151,82 @@ function isColVisible(key: ColumnKey): boolean {
 function toggleColumn(key: ColumnKey) {
   columnVisibility.value = sanitizeVisibility({ ...columnVisibility.value, [key]: !isColVisible(key) })
   persistVisibility(columnVisibility.value)
+}
+
+// ── Orden de columnas (reordenable desde el menú "Columnas") ────────────────
+const DEFAULT_COLUMN_ORDER: ColumnKey[] = COLUMN_CONFIG.map(c => c.key)
+const ORDER_STORAGE_KEY = 'sigmo_colorder_general'
+
+function loadColumnOrder(): ColumnKey[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(ORDER_STORAGE_KEY) ?? 'null')
+    if (!Array.isArray(stored)) return [...DEFAULT_COLUMN_ORDER]
+    const known = new Set(DEFAULT_COLUMN_ORDER)
+    const filtered = (stored as string[]).filter((k): k is ColumnKey => known.has(k as ColumnKey))
+    const missing = DEFAULT_COLUMN_ORDER.filter(k => !filtered.includes(k))
+    return [...filtered, ...missing]
+  } catch {
+    return [...DEFAULT_COLUMN_ORDER]
+  }
+}
+
+const columnOrder = ref<ColumnKey[]>(loadColumnOrder())
+
+function persistColumnOrder() {
+  localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(columnOrder.value))
+}
+
+// Configuración de columnas visibles-al-rol, en el orden actual (usado por el menú, export y footer)
+const orderedColumnConfig = computed<ColumnConfigItem[]>(() =>
+  columnOrder.value
+    .map(key => COLUMN_CONFIG.find(c => c.key === key))
+    .filter((c): c is ColumnConfigItem => !!c && allowedKeys.value.has(c.key))
+)
+
+// Arrastrar y soltar filas del menú "Columnas" para reordenar (la fila entera,
+// con su checkbox de mostrar/ocultar, se mueve como una unidad).
+const dragKey = ref<ColumnKey | null>(null)
+const dragOverKey = ref<ColumnKey | null>(null)
+
+function onDragStart(key: ColumnKey, e: DragEvent) {
+  dragKey.value = key
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', key)
+  }
+}
+function onDragOverRow(key: ColumnKey, e: DragEvent) {
+  if (!dragKey.value || dragKey.value === key) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dragOverKey.value = key
+}
+function onDragLeaveRow(key: ColumnKey) {
+  if (dragOverKey.value === key) dragOverKey.value = null
+}
+function onDrop(targetKey: ColumnKey, e: DragEvent) {
+  e.preventDefault()
+  const sourceKey = dragKey.value
+  dragKey.value = null
+  dragOverKey.value = null
+  if (!sourceKey || sourceKey === targetKey) return
+  const fullOrder = [...columnOrder.value]
+  const from = fullOrder.indexOf(sourceKey)
+  if (from === -1) return
+  fullOrder.splice(from, 1)
+  const to = fullOrder.indexOf(targetKey)
+  fullOrder.splice(to === -1 ? fullOrder.length : to, 0, sourceKey)
+  columnOrder.value = fullOrder
+  persistColumnOrder()
+}
+function onDragEnd() {
+  dragKey.value = null
+  dragOverKey.value = null
+}
+
+function resetColumnOrder() {
+  columnOrder.value = [...DEFAULT_COLUMN_ORDER]
+  persistColumnOrder()
 }
 
 const showColumnsMenu = ref(false)
@@ -382,6 +459,7 @@ const table = useVueTable({
     get columnVisibility() { return columnVisibility.value },
     get pagination() { return { pageIndex: pageIndex.value, pageSize: pageSize.value } },
     get columnSizing() { return columnSizing.value },
+    get columnOrder() { return columnOrder.value as ColumnOrderState },
   },
   onSortingChange: (updater) => {
     sorting.value = typeof updater === 'function' ? updater(sorting.value) : updater
@@ -411,14 +489,13 @@ function resetPage() { pageIndex.value = 0 }
 
 const sortedRows = computed(() => table.getSortedRowModel().rows.map(r => r.original))
 const totalFilteredCount = computed(() => sortedRows.value.length)
-const isValueColumnVisible = computed(() => isColVisible('value'))
 const footerTotalValue = computed(() => sortedRows.value.reduce((s, t) => s + Number(t.value), 0))
 
 const pageStart = computed(() => (totalFilteredCount.value === 0 ? 0 : pageIndex.value * pageSize.value + 1))
 const pageEnd = computed(() => Math.min((pageIndex.value + 1) * pageSize.value, totalFilteredCount.value))
 
 // ── Columnas visibles (misma fuente para tabla y export) ───────────────────────
-const visibleColumnConfigs = computed(() => COLUMN_CONFIG.filter(c => allowedKeys.value.has(c.key) && isColVisible(c.key)))
+const visibleColumnConfigs = computed(() => orderedColumnConfig.value.filter(c => isColVisible(c.key)))
 
 // ── Resumen de filtros activos (para PDF) ──────────────────────────────────────
 const filterSummaryText = computed(() => {
@@ -559,15 +636,40 @@ async function handleCopy() {
             enter-active-class="transition-all duration-100" enter-from-class="opacity-0 translate-y-1"
             enter-to-class="opacity-100 translate-y-0" leave-active-class="transition-all duration-75" leave-to-class="opacity-0"
           >
-            <div v-if="showColumnsMenu" class="absolute right-0 z-40 mt-1 w-64 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2">
-              <label
-                v-for="col in COLUMN_CONFIG.filter(c => allowedKeys.has(c.key))"
-                :key="col.key"
-                class="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded cursor-pointer"
+            <div v-if="showColumnsMenu" class="absolute right-0 z-40 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-2">
+              <p class="px-2 pb-1.5 text-[11px] text-gray-400">Arrastra una fila para reordenar las columnas de la tabla</p>
+              <div class="max-h-72 overflow-y-auto space-y-0.5">
+                <div
+                  v-for="col in orderedColumnConfig"
+                  :key="col.key"
+                  draggable="true"
+                  class="flex items-center gap-1 px-1 py-1 text-sm text-gray-700 rounded border-t-2 transition-colors"
+                  :class="[
+                    dragOverKey === col.key ? 'border-gold-500' : 'border-transparent',
+                    dragKey === col.key ? 'opacity-40' : 'hover:bg-gray-50',
+                  ]"
+                  @dragstart="onDragStart(col.key, $event)"
+                  @dragover="onDragOverRow(col.key, $event)"
+                  @dragleave="onDragLeaveRow(col.key)"
+                  @drop="onDrop(col.key, $event)"
+                  @dragend="onDragEnd"
+                >
+                  <span class="p-0.5 text-gray-300 cursor-grab active:cursor-grabbing shrink-0">
+                    <GripVertical class="w-3.5 h-3.5" />
+                  </span>
+                  <label class="flex items-center gap-2 flex-1 cursor-pointer px-1 py-0.5 min-w-0">
+                    <input type="checkbox" :checked="isColVisible(col.key)" @change="toggleColumn(col.key)" class="rounded border-gray-300 shrink-0" />
+                    <span class="truncate">{{ col.label }}</span>
+                  </label>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="mt-1.5 w-full text-center text-xs text-gray-500 hover:text-gold-700 py-1 border-t border-gray-100"
+                @click="resetColumnOrder"
               >
-                <input type="checkbox" :checked="isColVisible(col.key)" @change="toggleColumn(col.key)" class="rounded border-gray-300" />
-                {{ col.label }}
-              </label>
+                Restablecer orden
+              </button>
             </div>
           </Transition>
         </div>
@@ -697,12 +799,16 @@ async function handleCopy() {
             </template>
           </tbody>
           <tfoot v-if="!isLoading && table.getRowModel().rows.length > 0">
-            <tr class="bg-gray-50 border-t-2 border-gray-200">
-              <td class="px-3 py-2.5 text-xs font-semibold text-gray-600" :colspan="isValueColumnVisible ? table.getHeaderGroups()[0].headers.length - 1 : table.getHeaderGroups()[0].headers.length">
-                Total: {{ totalFilteredCount }} viaje{{ totalFilteredCount !== 1 ? 's' : '' }}
-              </td>
-              <td v-if="isValueColumnVisible" class="px-3 py-2.5 text-right text-sm font-bold text-gray-900">
-                {{ formatCurrency(footerTotalValue) }}
+            <tr class="bg-gray-50 border-t-2 border-gray-200 divide-x divide-gray-200">
+              <td
+                v-for="(header, idx) in table.getHeaderGroups()[0].headers"
+                :key="header.id"
+                :style="{ width: header.getSize() + 'px', minWidth: header.getSize() + 'px' }"
+                class="px-3 py-2.5 overflow-hidden text-ellipsis whitespace-nowrap"
+                :class="header.column.id === 'value' ? 'text-right text-sm font-bold text-gray-900' : 'text-xs font-semibold text-gray-600'"
+              >
+                <template v-if="header.column.id === 'value'">{{ formatCurrency(footerTotalValue) }}</template>
+                <template v-else-if="idx === 0">Total: {{ totalFilteredCount }} viaje{{ totalFilteredCount !== 1 ? 's' : '' }}</template>
               </td>
             </tr>
           </tfoot>
