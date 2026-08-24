@@ -1,5 +1,4 @@
 from django.db import models
-from apps.users.models import User
 from apps.common.text import uppercase_fields
 from apps.clients.models import Client
 from apps.masters.models import Vehicle, MaterialType, PaymentMethod, OriginSite

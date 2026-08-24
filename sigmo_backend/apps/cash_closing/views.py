@@ -10,7 +10,7 @@ from django.db import transaction
 from django.db.models import Sum
 from apps.audit.services import log_action
 
-from .models import DailySummary, DailySummaryPayment
+from .models import DailySummary
 from .serializers import DailySummarySerializer
 from .services import execute_close, AlreadyClosedError
 from apps.trips.models import Trip

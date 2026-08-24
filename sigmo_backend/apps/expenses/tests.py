@@ -9,7 +9,6 @@ from rest_framework.test import APIClient
 
 from apps.users.models import User
 from apps.audit.models import AuditLog
-from apps.cash_closing.models import DailySummary
 from apps.cash_closing.services import execute_close
 from .models import Expense
 

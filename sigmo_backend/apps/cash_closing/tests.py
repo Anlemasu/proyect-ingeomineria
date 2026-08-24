@@ -18,7 +18,7 @@ def _build_common_fixtures():
     Se usa tanto en TestCase (transacción única) como en TransactionTestCase
     (cada llamada debe volver a crear todo porque las tablas se truncan
     entre tests)."""
-    user = User.objects.create_user(
+    User.objects.create_user(
         username='super1', email='super1@test.com', name='Super',
         role='superuser', password='x12345',
     )

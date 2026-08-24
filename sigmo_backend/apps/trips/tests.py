@@ -16,7 +16,6 @@ from apps.audit.models import AuditLog
 from apps.cash_closing.services import execute_close
 from apps.cash_closing.models import DailySummary
 from apps.trips.models import Trip
-from apps.invoices.models import Invoice
 
 
 class TripAdvanceFixturesMixin:
@@ -483,7 +482,7 @@ class HistoricalAdjustmentResyncTests(TripAdvanceFixturesMixin, TestCase):
         debe generar un recálculo/evento de auditoría innecesario."""
         resp = self._create_trip(value='200000', payment=self.payment_cash)
         trip_id = resp.data['id']
-        summary = execute_close(self.today, source='manual')
+        execute_close(self.today, source='manual')
 
         events_before = AuditLog.objects.filter(action='recalculo_cierre').count()
         resp2 = self.api.patch(f'/api/trips/{trip_id}/', {'invoice_pos': 1}, format='json')

@@ -373,7 +373,7 @@ class AccountStatementTests(PendingDebtFixturesMixin, TestCase):
     """Caso 6: estado de cuenta (RF-33)."""
 
     def test_account_statement_reflects_balances_and_pending_debt(self):
-        resp_a = self._create_advance(200000)
+        self._create_advance(200000)
         self._create_trip(150000)  # se descuenta de A -> saldo A = 50000
         pending_resp = self._create_trip(300000, justification='Sin saldo suficiente')
 
@@ -463,7 +463,7 @@ class AnnotatedBalanceMatchesPerObjectCalculationTests(PendingDebtFixturesMixin,
         advance_a_id = resp_a.data['id']
 
         # B: ingreso + un viaje que lo descuenta parcialmente.
-        resp_b = self._create_advance(500000)
+        self._create_advance(500000)
         self._create_trip(200000)  # se descuenta del anticipo activo (B)
 
         # C: un segundo cliente para que la agregación cruce varias filas.
