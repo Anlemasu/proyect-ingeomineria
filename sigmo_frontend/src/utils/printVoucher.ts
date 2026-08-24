@@ -13,6 +13,43 @@ const SITE_LICENSES = [
   'REGISTRO PROVEEDOR IDU N°.654 -2022',
 ]
 
+// --- Presupuesto de alto fijo del vale (siempre 12.497cm x 7.011cm) ---
+// Encabezado y licencias se redujeron a lo que realmente necesitan (antes
+// dejaban espacio de sobra sin usar); todo lo que se libera pasa a la sección
+// de campos, que es la que lo necesitaba.
+const BODY_TOTAL_MM = 70.11 // 7.011cm
+const HEADER_MM = 11
+const LICENSES_MM = 6.5
+const BODY_ROW_MM = BODY_TOTAL_MM - HEADER_MM - LICENSES_MM // 52.61mm
+const BODY_PAD_TOP_MM = 1
+const BODY_PAD_BOTTOM_MM = 2
+const BODY_CONTENT_MM = BODY_ROW_MM - BODY_PAD_TOP_MM - BODY_PAD_BOTTOM_MM // 49.61mm
+
+// Alto real de una línea de texto de campo, calculado a partir de la
+// tipografía usada (antes esto NO se restaba y por eso el texto se
+// sobreponía: se repartía el espacio total entre "líneas" sin reservar nada
+// para el padding/borde propio de cada renglón).
+const FIELD_FONT_PX = 7
+const FIELD_LINE_HEIGHT_RATIO = 1.05
+const PX_TO_MM = 25.4 / 96
+const TEXT_LINE_MM = FIELD_FONT_PX * FIELD_LINE_HEIGHT_RATIO * PX_TO_MM // ≈1.94mm
+const FIELD_OVERHEAD_MM = 1.0 // padding (0.3mm x2) + borde de cada renglón
+const GAP_BEFORE_OBSERVACIONES_MM = 0.5
+
+// Orden exacto en que se renderizan los campos más abajo:
+// Fecha, Hora, Placa, PIN, Empresa Generadora, Origen Material,
+// Vale Externo, Tipo Material, Tipo Vehículo, Factura POS
+const FIELD_LINES = [1, 1, 1, 1, 4, 2, 1, 1, 1, 1]
+const OBSERVACIONES_LINES = 5
+
+const FIELD_ROW_HEIGHTS_MM = FIELD_LINES.map((n) => FIELD_OVERHEAD_MM + n * TEXT_LINE_MM)
+const FIELD_ROWS_SUM_MM = FIELD_ROW_HEIGHTS_MM.reduce((a, b) => a + b, 0)
+// La fila de observación + QR absorbe todo lo que sobre del presupuesto fijo,
+// así nunca queda espacio en blanco sin usar (y siempre es >= lo que piden
+// las 5 líneas de Observaciones).
+const OBSERVACIONES_ROW_HEIGHT_MM = BODY_CONTENT_MM - FIELD_ROWS_SUM_MM
+const FIELDS_COL_ROWS = `${FIELD_ROW_HEIGHTS_MM.map((h) => `${h.toFixed(2)}mm`).join(' ')} ${OBSERVACIONES_ROW_HEIGHT_MM.toFixed(2)}mm`
+
 function generateVoucherHtml(
   trip: Trip,
   pin: string,
@@ -48,93 +85,141 @@ function generateVoucherHtml(
 <meta charset="UTF-8">
 <title>Vale #${trip.voucher_num}</title>
 <style>
-  /* Página física: 5x7 pulgadas, márgenes de 6.35mm en todos los lados */
-  @page { size: 5in 7in; margin: 6.35mm; }
+  /* Página física: 5x7 pulgadas en orientación horizontal (ancho 7in x alto 5in),
+     márgenes de 6.35mm en todos los lados. Se usan las dimensiones ya invertidas
+     (en vez de la palabra clave "landscape") porque algunos motores de impresión
+     de Chrome ignoran esa palabra clave y muestran la vista previa en vertical. */
+  @page { size: 7in 5in; margin: 6.35mm; }
   @media print {
     body { margin: 0; }
     .no-print { display: none; }
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html, body { height: 100%; margin: 0; padding: 0; }
   body {
     font-family: Arial, Helvetica, sans-serif;
     color: #000;
     width: 12.497cm;
     height: 7.011cm;
-    margin: 0 auto;
-    padding: 0;
     font-size: 7.5px;
     line-height: 1.15;
-    overflow: hidden;
+    display: grid;
+    /* Alturas fijas en mm (no "auto"/1fr) para que el tamaño total del vale nunca
+       cambie según el contenido: encabezado ${HEADER_MM}mm + licencias ${LICENSES_MM}mm
+       + cuerpo ${BODY_ROW_MM.toFixed(2)}mm = ${BODY_TOTAL_MM}mm = 7.011cm exactos. */
+    grid-template-rows: ${HEADER_MM}mm ${LICENSES_MM}mm ${BODY_ROW_MM.toFixed(2)}mm;
   }
   .header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    padding: 2mm 2mm 1mm;
+    padding: 1mm 2mm 0.5mm;
+    overflow: hidden;
   }
-  .header-logo { width: 14mm; height: auto; object-fit: contain; }
+  /* El logo se dimensiona por alto (no por ancho) para aprovechar todo el
+     espacio vertical disponible del encabezado (11mm - padding ≈ 9.5mm),
+     sin tocar la altura fija del encabezado ni el resto de la distribución. */
+  .header-logo { height: 8.5mm; width: auto; max-width: 16mm; object-fit: contain; }
   .header-title { text-align: center; flex: 1; }
-  .header-title .site-name { font-size: 11px; font-weight: bold; margin: 0; }
+  .header-title .site-name { font-size: 9px; font-weight: bold; margin: 0; }
   .header-title .site-desc {
-    font-size: 6.5px;
+    font-size: 5.5px;
     font-weight: bold;
-    margin: 1px 0 0;
+    margin: 0.5px 0 0;
     white-space: pre-line;
   }
-  .header-comprobante { text-align: center; width: 26mm; }
-  .header-comprobante .label { font-size: 6.5px; color: #333; margin-bottom: 1mm; }
+  .header-comprobante { text-align: center; width: 22mm; }
+  .header-comprobante .label { font-size: 5.5px; color: #333; margin-bottom: 0.4mm; }
   .header-comprobante .num-box {
     border: 1px solid #888;
     color: #c00;
-    font-size: 15px;
+    font-size: 12px;
     font-weight: bold;
-    padding: 1mm 0;
+    padding: 0.4mm 0;
   }
-  .header-comprobante .caption { font-size: 6.5px; margin-top: 1mm; }
-  .licenses { padding: 0 2mm; font-size: 5.5px; color: #333; }
+  .header-comprobante .caption { font-size: 5.5px; margin-top: 0.4mm; }
+  .licenses { padding: 0.3mm 2mm; font-size: 5px; color: #333; overflow: hidden; }
   .licenses .lic-title {
     display: inline-block;
-    width: 20mm;
+    width: 18mm;
     vertical-align: top;
   }
   .licenses .lic-list { display: inline-block; }
-  .licenses .lic-list div { margin: 0.3mm 0; }
-  .body { display: flex; padding: 1mm 2mm 2mm; gap: 2mm; }
-  .fields-col { flex: 1.6; }
-  .field { display: flex; border: 1px solid #000; margin-bottom: -1px; }
+  .licenses .lic-list div { margin: 0.15mm 0; }
+  /* Grid de 2 columnas: la de campos (1fr) y la de sellos (42mm), separadas por un
+     gap fijo pequeño. Con grid, el ancho de cada columna se calcula de forma exacta
+     — no queda espacio "sobrante" sin asignar como pasaba con flex anidado. */
+  .body {
+    display: grid;
+    grid-template-columns: 1fr 42mm;
+    column-gap: 1.5mm;
+    padding: 1mm 2mm 2mm;
+    min-height: 0;
+  }
+  /* Cada renglón tiene un alto distinto según cuántas líneas de texto necesita
+     (ver FIELD_LINES / OBSERVACIONES_LINES más arriba): la mayoría 1 línea,
+     Empresa Generadora 4, Origen Material 2, y la fila de observación+QR 5. */
+  .fields-col {
+    display: grid;
+    grid-template-rows: ${FIELDS_COL_ROWS};
+    min-height: 0;
+  }
+  .field {
+    display: flex;
+    border: 1px solid #000;
+    margin-bottom: -1px;
+    min-height: 0;
+    font-size: ${FIELD_FONT_PX}px;
+    line-height: ${FIELD_LINE_HEIGHT_RATIO};
+  }
   .field-label {
-    flex: 0 0 26mm;
+    flex: 0 0 24mm;
     font-weight: bold;
     border-right: 1px solid #000;
-    padding: 0.6mm 1mm;
+    padding: 0.3mm 1mm;
   }
-  .field-value { flex: 1; padding: 0.6mm 1mm; }
+  .field-value {
+    flex: 1;
+    min-width: 0;
+    padding: 0.3mm 1mm;
+    overflow: hidden;
+    white-space: normal;
+    word-break: break-word;
+  }
+  .bottom-row { display: flex; gap: 1.5mm; margin-top: ${GAP_BEFORE_OBSERVACIONES_MM}mm; min-height: 0; }
   .obs-box {
+    flex: 1;
     border: 1px solid #000;
-    min-height: 8mm;
-    padding: 0.6mm 1mm;
-    margin-top: 1mm;
+    padding: 0.3mm 1mm;
     font-weight: bold;
-    font-size: 6.5px;
+    font-size: ${FIELD_FONT_PX}px;
+    line-height: ${FIELD_LINE_HEIGHT_RATIO};
+    overflow: hidden;
   }
-  .qr-col {
+  .qr-box {
     flex: 0 0 18mm;
+    border: 1px solid #000;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
   }
-  .qr-col img { width: 16mm; height: 16mm; margin-top: 1mm; }
-  .stamps-col { flex: 0 0 24mm; display: flex; flex-direction: column; gap: 0.8mm; }
+  .qr-box img { width: 88%; height: 88%; object-fit: contain; }
+  /* Los 3 recuadros de sello se reparten el alto completo de la columna en partes
+     iguales (1fr cada uno), así que crecen para llenar exactamente el mismo alto
+     que ocupa la columna de campos, sin huecos. */
+  .stamps-col {
+    display: grid;
+    grid-template-rows: repeat(3, 1fr);
+    gap: 0.8mm;
+    min-height: 0;
+  }
   .stamp-box {
     border: 1px solid #000;
-    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #aaa;
-    font-size: 6px;
+    font-size: 7px;
   }
 </style>
 </head>
@@ -169,10 +254,12 @@ function generateVoucherHtml(
       ${field('Tipo Material', trip.material_type_detail?.name ?? '—')}
       ${field('Tipo Vehículo', trip.vehicle_detail?.vehicle_type_detail?.name ?? '—')}
       ${field('Factura POS', posInvoiceValue)}
-      <div class="obs-box">${observations?.trim() ? observations.trim() : ''}</div>
-    </div>
-    <div class="qr-col">
-      <img src="${qrSrc}" alt="QR" />
+      <div class="bottom-row">
+        <div class="obs-box">${observations?.trim() ? observations.trim() : ''}</div>
+        <div class="qr-box">
+          <img src="${qrSrc}" alt="QR" />
+        </div>
+      </div>
     </div>
     <div class="stamps-col">
       <div class="stamp-box">CAJAS</div>

@@ -357,7 +357,8 @@ function handlePrint(trip: Trip) {
 }
 function confirmPrint() {
   if (!pendingPrintTrip.value) return
-  printAdjustmentRecord(pendingPrintTrip.value)
+  const trip = pendingPrintTrip.value
+  printAdjustmentRecord(trip, trip.vehicle_detail?.dumper_detail?.ambiental_pin ?? '0', trip.observations)
   pendingPrintTrip.value = null
 }
 </script>

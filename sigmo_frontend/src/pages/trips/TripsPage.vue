@@ -413,6 +413,9 @@ const onSubmit = handleSubmit(async (values) => {
     queryClient.invalidateQueries({ queryKey: ['advance-balance', values.client] })
     queryClient.invalidateQueries({ queryKey: ['advances', values.client] })
     queryClient.invalidateQueries({ queryKey: ['cash-closing-today'] })
+    // Si la placa era nueva, se creó un Vehicle al vuelo (arriba) — sin esto
+    // la lista de Maestros > Vehículos queda desactualizada hasta un reload.
+    queryClient.invalidateQueries({ queryKey: ['vehicles'] })
 
     resetForm()
 
