@@ -61,10 +61,18 @@ watch(highlighted, (idx) => {
   nextTick(() => itemEls.value[idx]?.scrollIntoView({ block: 'nearest' }))
 })
 
+// Índice a resaltar al abrir la lista: el de la opción ya seleccionada si existe,
+// o ninguno (-1) si no hay nada elegido todavía — así Tab/Enter en un campo vacío
+// no seleccionan por accidente el primer ítem de la lista.
+function initialHighlight(list: Option[]) {
+  const idx = list.findIndex(o => o.id === props.modelValue)
+  return idx >= 0 ? idx : -1
+}
+
 function openList() {
   if (props.disabled) return
   open.value = true
-  highlighted.value = 0
+  highlighted.value = initialHighlight(filtered.value)
 }
 
 function onFocus() {
@@ -86,7 +94,11 @@ function onInput(e: Event) {
   // Al borrar (Backspace/Delete) nunca se re-completa: si no, el usuario
   // borra el sufijo sugerido y el autocompletado lo vuelve a poner,
   // dando la sensación de que no se puede borrar nada.
-  if (!raw || isDeleting) {
+  if (!raw) {
+    highlighted.value = -1
+    return
+  }
+  if (isDeleting) {
     highlighted.value = 0
     return
   }
@@ -139,14 +151,24 @@ function onKeydown(e: KeyboardEvent) {
     query.value = selectedLabel.value
     typed.value = selectedLabel.value
     inputEl.value?.blur()
-  } else if (e.key === 'Tab' && open.value) {
-    const opt = filtered.value[highlighted.value]
-    if (opt && normalize(query.value) === normalize(opt.name)) {
-      emit('update:modelValue', opt.id)
-      query.value = opt.name
-      typed.value = opt.name
+  } else if (e.key === 'Tab') {
+    // Igual que Enter: confirma la opción resaltada (la autocompletada o la
+    // navegada con flechas) y deja que el navegador mueva el foco al siguiente
+    // campo — por eso no hacemos preventDefault en ese caso.
+    if (open.value) {
+      const opt = filtered.value[highlighted.value]
+      if (opt) {
+        select(opt)
+      } else if (typed.value.trim()) {
+        // Hay texto escrito que no corresponde a ninguna opción (typo): no
+        // dejamos avanzar con un valor inválido a medias — se queda en el
+        // campo (la lista ya muestra "Sin resultados") hasta que se corrija
+        // o se borre.
+        e.preventDefault()
+      } else {
+        open.value = false
+      }
     }
-    open.value = false
   }
 }
 
@@ -178,6 +200,10 @@ function onOutside(e: MouseEvent) {
 
 onMounted(() => document.addEventListener('mousedown', onOutside))
 onUnmounted(() => document.removeEventListener('mousedown', onOutside))
+
+defineExpose({
+  focus: () => inputEl.value?.focus(),
+})
 </script>
 
 <template>

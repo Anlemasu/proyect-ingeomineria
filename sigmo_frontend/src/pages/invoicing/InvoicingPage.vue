@@ -9,6 +9,8 @@ type ARow = Record<string, unknown>
 
 import DataTable from '@/components/shared/DataTable.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
+import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import { usePersistedRef } from '@/composables/usePersistedFilters'
 import { tripsApi } from '@/api/trips.api'
 import { invoicesApi } from '@/api/invoices.api'
 import { clientsApi } from '@/api/clients.api'
@@ -55,11 +57,11 @@ const paymentMethods = computed(() => paymentMethodsData.value ?? [])
 const invoiceOptions = computed(() => invoices.value.map(i => ({ id: i.id, name: i.number })))
 
 // ── Filtros ────────────────────────────────────────────────────────────────
-const filterClient = ref<number | null>(null)
-const filterDateFrom = ref('')
-const filterDateTo = ref('')
-const filterInvoice = ref<number | null>(null)
-const filterPayment = ref<number | null>(null)
+const filterClient = usePersistedRef<number | null>('sigmo_filters_invoicing_client', null)
+const filterDateFrom = usePersistedRef('sigmo_filters_invoicing_date_from', '')
+const filterDateTo = usePersistedRef('sigmo_filters_invoicing_date_to', '')
+const filterInvoice = usePersistedRef<number | null>('sigmo_filters_invoicing_invoice', null)
+const filterPayment = usePersistedRef<number | null>('sigmo_filters_invoicing_payment', null)
 
 // ── Pendientes (state=true, invoice=null) ──────────────────────────────────
 const pendingTrips = computed<Trip[]>(() => {
@@ -327,19 +329,11 @@ watch(activeTab, () => {
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">Fecha desde</label>
-        <input
-          v-model="filterDateFrom"
-          type="date"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-        />
+        <DatePickerInput v-model="filterDateFrom" />
       </div>
       <div>
         <label class="block text-xs text-gray-500 mb-1">Fecha hasta</label>
-        <input
-          v-model="filterDateTo"
-          type="date"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-        />
+        <DatePickerInput v-model="filterDateTo" />
       </div>
       <!-- Método de pago (ambas tabs) -->
       <div class="w-56">

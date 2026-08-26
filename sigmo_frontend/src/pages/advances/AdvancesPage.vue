@@ -13,6 +13,8 @@ type ARow = Record<string, unknown>
 import DataTable from '@/components/shared/DataTable.vue'
 import CurrencyInput from '@/components/shared/CurrencyInput.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
+import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import { usePersistedRef } from '@/composables/usePersistedFilters'
 import { advancesApi } from '@/api/advances.api'
 import { clientsApi } from '@/api/clients.api'
 import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
@@ -560,9 +562,9 @@ const estadoAdvanceColumns: ColumnDef<ARow>[] = [
 ]
 
 // ── Tab 3: Historial ───────────────────────────────────────────────────────
-const filterClientId = ref<number | null>(null)
-const filterDateFrom = ref('')
-const filterDateTo = ref('')
+const filterClientId = usePersistedRef<number | null>('sigmo_filters_advances_client', null)
+const filterDateFrom = usePersistedRef('sigmo_filters_advances_date_from', '')
+const filterDateTo = usePersistedRef('sigmo_filters_advances_date_to', '')
 
 const allMovements = computed<MovementRow[]>(() => {
   const result: MovementRow[] = []
@@ -899,19 +901,11 @@ watch(activeTab, () => {
         </div>
         <div>
           <label class="block text-xs text-gray-500 mb-1">Desde</label>
-          <input
-            v-model="filterDateFrom"
-            type="date"
-            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-          />
+          <DatePickerInput v-model="filterDateFrom" />
         </div>
         <div>
           <label class="block text-xs text-gray-500 mb-1">Hasta</label>
-          <input
-            v-model="filterDateTo"
-            type="date"
-            class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-          />
+          <DatePickerInput v-model="filterDateTo" />
         </div>
         <div class="flex items-end">
           <button
@@ -1118,12 +1112,7 @@ watch(activeTab, () => {
             <label class="block text-sm font-medium text-gray-700 mb-1">
               Fecha <span class="text-red-500">*</span>
             </label>
-            <input
-              v-model="dateVal"
-              type="date"
-              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-              :class="dateError ? 'border-red-400' : 'border-gray-300'"
-            />
+            <DatePickerInput v-model="dateVal" :error="!!dateError" />
             <p v-if="dateError" class="mt-1 text-xs text-red-500">{{ dateError }}</p>
           </div>
 

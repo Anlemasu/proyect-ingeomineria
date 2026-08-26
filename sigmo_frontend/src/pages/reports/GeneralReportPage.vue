@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, h, onBeforeUnmount } from 'vue'
+import { ref, computed, h, onBeforeUnmount } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import {
@@ -15,6 +15,8 @@ import {
 
 import PageHeader from '@/components/shared/PageHeader.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
+import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import { usePersistedFilters } from '@/composables/usePersistedFilters'
 
 import { tripsApi } from '@/api/trips.api'
 import { clientsApi } from '@/api/clients.api'
@@ -285,7 +287,7 @@ function emptyFilters(): FilterState {
   }
 }
 
-const filters = reactive<FilterState>(emptyFilters())
+const filters = usePersistedFilters<FilterState>('sigmo_filters_general_report', emptyFilters())
 
 const activeFilterCount = computed(() => {
   let n = 0
@@ -549,11 +551,11 @@ async function handleCopy() {
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha desde</label>
-          <input v-model="filters.dateFrom" type="date" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
+          <DatePickerInput v-model="filters.dateFrom" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha hasta</label>
-          <input v-model="filters.dateTo" type="date" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
+          <DatePickerInput v-model="filters.dateTo" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Cliente</label>

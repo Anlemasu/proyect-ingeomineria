@@ -9,6 +9,7 @@ import {
 
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataTable from '@/components/shared/DataTable.vue'
+import DatePickerInput from '@/components/shared/DatePickerInput.vue'
 
 import { tripsApi } from '@/api/trips.api'
 import { expensesApi } from '@/api/expenses.api'
@@ -184,11 +185,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
     <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6 flex items-end gap-4 flex-wrap">
       <div>
         <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha del reporte</label>
-        <input
-          v-model="selectedDate"
-          type="date"
-          class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-        />
+        <DatePickerInput v-model="selectedDate" />
       </div>
       <button
         type="button"

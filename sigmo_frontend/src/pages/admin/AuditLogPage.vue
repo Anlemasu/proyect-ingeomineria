@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, h } from 'vue'
+import { ref, computed, h } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { format, parseISO } from 'date-fns'
@@ -7,6 +7,8 @@ import { Eye, Download, X, FilterX } from 'lucide-vue-next'
 import type { ColumnDef } from '@tanstack/vue-table'
 import DataTable from '@/components/shared/DataTable.vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
+import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import { usePersistedFilters } from '@/composables/usePersistedFilters'
 import { auditApi } from '@/api/audit.api'
 import { getApiErrorMessage } from '@/utils/handleApiError'
 import { ACTION_CONFIG, ALL_ACTIONS, ALL_MODELS, MODEL_LABEL } from '@/constants/audit'
@@ -37,7 +39,7 @@ const FIELD_LABEL: Record<string, string> = {
 
 // ── Filters (all applied server-side) ────────────────────────────────────────
 
-const filters = reactive({
+const filters = usePersistedFilters('sigmo_filters_audit_log', {
   user: '',       // cast to number on send; '' = no filter
   action: '',
   model: '',
@@ -301,14 +303,12 @@ const columns: ColumnDef<AuditLogEntry>[] = [
 
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Fecha desde</label>
-          <input v-model="filters.date_from" type="date"
-            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
+          <DatePickerInput v-model="filters.date_from" />
         </div>
 
         <div>
           <label class="block text-xs font-medium text-gray-500 mb-1">Fecha hasta</label>
-          <input v-model="filters.date_to" type="date"
-            class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
+          <DatePickerInput v-model="filters.date_to" />
         </div>
 
         <div class="flex items-end">

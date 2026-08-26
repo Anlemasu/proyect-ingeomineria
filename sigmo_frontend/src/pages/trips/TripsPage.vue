@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useForm, useField } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
@@ -8,11 +8,12 @@ import { toast } from 'vue-sonner'
 
 import {
   Eye, RefreshCw, Printer, AlertTriangle,
-  CheckCircle, Pencil, Info,
+  CheckCircle, Info,
 } from 'lucide-vue-next'
 
 import PageHeader       from '@/components/shared/PageHeader.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
+import DatePickerInput from '@/components/shared/DatePickerInput.vue'
 import CurrencyInput    from '@/components/shared/CurrencyInput.vue'
 import ConfirmDialog    from '@/components/shared/ConfirmDialog.vue'
 
@@ -155,10 +156,20 @@ const pinTimer   = ref<ReturnType<typeof setTimeout> | null>(null)
 
 // Confirmación antes de abrir el diálogo de impresión del navegador
 const pendingVoucher = ref<{ trip: Trip; pin: string; obs: string | null } | null>(null)
+const clientSelectRef = ref<InstanceType<typeof SearchableSelect> | null>(null)
+
+// El cierre de este diálogo (confirmar o cancelar impresión) es el punto en
+// que el usuario vuelve al formulario tras guardar — ahí se devuelve el foco
+// a Cliente para encadenar el siguiente registro sin tocar el mouse.
+function closeVoucherDialog() {
+  pendingVoucher.value = null
+  nextTick(() => clientSelectRef.value?.focus())
+}
+
 function confirmPrintVoucher() {
   if (!pendingVoucher.value) return
   printVoucher(pendingVoucher.value.trip, pendingVoucher.value.pin, pendingVoucher.value.obs)
-  pendingVoucher.value = null
+  closeVoucherDialog()
 }
 
 function onPlateInput(e: Event) {
@@ -207,15 +218,15 @@ function onPinInput(e: Event) {
 }
 
 // ── Tarifa automática ─────────────────────────────────────────────────────────
+// El valor se sugiere según la tarifa (cliente o general) pero siempre queda
+// editable — un registro rápido no puede depender de destrabar el campo primero.
 type TariffMode = 'client' | 'general' | 'manual' | null
 const tariffMode    = ref<TariffMode>(null)
 const tariffLoading = ref(false)
-const valueEditable = ref(false)
 
 async function fetchTariff() {
   if (!clientId.value || !vehicleTypeId.value) return
   tariffLoading.value = true
-  valueEditable.value = false
   try {
     const clientRes = await tariffsApi.list({
       client:       clientId.value,
@@ -235,8 +246,7 @@ async function fetchTariff() {
       return
     }
     setFieldValue('value', undefined)
-    tariffMode.value    = 'manual'
-    valueEditable.value = true
+    tariffMode.value = 'manual'
   } finally {
     tariffLoading.value = false
   }
@@ -244,7 +254,7 @@ async function fetchTariff() {
 
 watch([clientId, vehicleTypeId], ([c, v]) => {
   if (c && v) fetchTariff()
-  else { tariffMode.value = null; valueEditable.value = false }
+  else { tariffMode.value = null }
 })
 
 // ── Saldo total de anticipos del cliente ──────────────────────────────────────
@@ -424,7 +434,6 @@ const onSubmit = handleSubmit(async (values) => {
     pinFound.value      = false
     pinId.value         = null
     tariffMode.value    = null
-    valueEditable.value = false
     forceSubmit.value   = false
     justification.value = ''
 
@@ -461,6 +470,7 @@ const onSubmit = handleSubmit(async (values) => {
               Cliente <span class="text-red-500">*</span>
             </label>
             <SearchableSelect
+              ref="clientSelectRef"
               :options="clientOptions"
               v-model="clientId"
               placeholder="Buscar cliente..."
@@ -500,14 +510,10 @@ const onSubmit = handleSubmit(async (values) => {
             <label class="block text-xs font-medium text-gray-700 mb-1.5">
               Fecha <span class="text-red-500">*</span>
             </label>
-            <input
+            <DatePickerInput
               v-model="tripDate"
-              type="date"
               :readonly="!canChangeDate"
-              class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-              :class="canChangeDate
-                ? 'border-gray-300 bg-white'
-                : 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'"
+              :error="!!dateError"
             />
             <p v-if="!canChangeDate" class="mt-1 text-xs text-gray-400">Solo el día actual</p>
             <p v-if="dateError" class="mt-1 text-xs text-red-500">{{ dateError }}</p>
@@ -588,22 +594,10 @@ const onSubmit = handleSubmit(async (values) => {
             <label class="block text-xs font-medium text-gray-700 mb-1.5">
               Valor del servicio <span class="text-red-500">*</span>
             </label>
-            <div class="flex items-center gap-2">
-              <CurrencyInput
-                v-model="tripValue"
-                :readonly="(tariffMode === 'client' || tariffMode === 'general') && !valueEditable"
-                :placeholder="tariffMode === 'manual' || tariffMode === null ? 'Ingrese el valor' : ''"
-              />
-              <button
-                v-if="tariffMode === 'client' || tariffMode === 'general'"
-                type="button"
-                @click="valueEditable = !valueEditable"
-                class="shrink-0 p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
-                :title="valueEditable ? 'Usar tarifa' : 'Editar manualmente'"
-              >
-                <Pencil class="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <CurrencyInput
+              v-model="tripValue"
+              :placeholder="tariffMode === 'manual' || tariffMode === null ? 'Ingrese el valor' : ''"
+            />
             <div class="mt-1.5 h-4">
               <span v-if="tariffLoading" class="text-xs text-gray-400">Buscando tarifa...</span>
               <span v-else-if="tariffMode === 'client'" class="inline-flex items-center gap-1 text-xs text-gold-700 font-medium">
@@ -964,7 +958,7 @@ const onSubmit = handleSubmit(async (values) => {
       confirm-label="Sí"
       cancel-label="No"
       @confirm="confirmPrintVoucher"
-      @cancel="pendingVoucher = null"
+      @cancel="closeVoucherDialog"
     />
   </div>
 </template>

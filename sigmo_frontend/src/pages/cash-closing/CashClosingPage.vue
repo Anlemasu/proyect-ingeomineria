@@ -13,6 +13,8 @@ import {
 
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataTable  from '@/components/shared/DataTable.vue'
+import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import { usePersistedRef } from '@/composables/usePersistedFilters'
 
 import { cashClosingApi }    from '@/api/cashClosing.api'
 import { useAuthStore }      from '@/stores/auth.store'
@@ -114,8 +116,8 @@ const detailRevenue = computed(() =>
 )
 
 // ── Histórico mensual (todos los roles) ────────────────────────────────────────
-const rangeFrom = ref('')
-const rangeTo   = ref('')
+const rangeFrom = usePersistedRef('sigmo_filters_cash_closing_from', '')
+const rangeTo   = usePersistedRef('sigmo_filters_cash_closing_to', '')
 
 const rangeFilteredHistory = computed(() => {
   return history.value.filter(s => {
@@ -448,17 +450,9 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
         </div>
         <div class="flex items-center gap-2 text-sm">
           <label class="text-xs text-gray-500">Desde</label>
-          <input
-            v-model="rangeFrom"
-            type="date"
-            class="px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-          />
+          <DatePickerInput v-model="rangeFrom" />
           <label class="text-xs text-gray-500">Hasta</label>
-          <input
-            v-model="rangeTo"
-            type="date"
-            class="px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-          />
+          <DatePickerInput v-model="rangeTo" />
           <button
             v-if="rangeFrom || rangeTo"
             type="button"

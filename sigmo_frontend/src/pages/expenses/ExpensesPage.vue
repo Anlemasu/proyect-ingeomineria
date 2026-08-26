@@ -11,6 +11,8 @@ import type { ColumnDef } from '@tanstack/vue-table'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataTable from '@/components/shared/DataTable.vue'
 import CurrencyInput from '@/components/shared/CurrencyInput.vue'
+import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import { usePersistedRef } from '@/composables/usePersistedFilters'
 import { expensesApi } from '@/api/expenses.api'
 import type { Expense } from '@/types'
 import { usePermissions } from '@/composables/usePermissions'
@@ -26,10 +28,10 @@ const todayISO = todayBogota()
 
 // ── Filter state ──────────────────────────────────────────────────────────────
 type FilterMode = 'today' | 'specific' | 'range'
-const filterMode = ref<FilterMode>('today')
-const filterDate = ref(todayISO)
-const filterFrom = ref(todayISO)
-const filterTo = ref(todayISO)
+const filterMode = usePersistedRef<FilterMode>('sigmo_filters_expenses_mode', 'today')
+const filterDate = usePersistedRef('sigmo_filters_expenses_date', todayISO)
+const filterFrom = usePersistedRef('sigmo_filters_expenses_from', todayISO)
+const filterTo = usePersistedRef('sigmo_filters_expenses_to', todayISO)
 
 const queryParams = computed(() => {
   if (filterMode.value === 'today') return { date: todayISO }
@@ -266,12 +268,7 @@ const columns: ColumnDef<Expense>[] = [
             <label class="block text-xs font-medium text-gray-700 mb-1">
               Fecha <span class="text-red-500">*</span>
             </label>
-            <input
-              v-model="date"
-              type="date"
-              class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
-              :class="dateError ? 'border-red-400 bg-red-50' : 'border-gray-300'"
-            />
+            <DatePickerInput v-model="date" :error="!!dateError" />
             <p v-if="dateError" class="mt-1 text-xs text-red-500">{{ dateError }}</p>
           </div>
         </div>
@@ -316,30 +313,18 @@ const columns: ColumnDef<Expense>[] = [
         <!-- Specific date -->
         <div v-if="filterMode === 'specific'">
           <label class="block text-xs text-gray-500 mb-1">Fecha</label>
-          <input
-            v-model="filterDate"
-            type="date"
-            class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-          />
+          <DatePickerInput v-model="filterDate" />
         </div>
 
         <!-- Date range -->
         <template v-if="filterMode === 'range'">
           <div>
             <label class="block text-xs text-gray-500 mb-1">Desde</label>
-            <input
-              v-model="filterFrom"
-              type="date"
-              class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-            />
+            <DatePickerInput v-model="filterFrom" />
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">Hasta</label>
-            <input
-              v-model="filterTo"
-              type="date"
-              class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-            />
+            <DatePickerInput v-model="filterTo" />
           </div>
         </template>
       </div>
@@ -418,12 +403,7 @@ const columns: ColumnDef<Expense>[] = [
                 <label class="block text-xs font-medium text-gray-700 mb-1">
                   Fecha <span class="text-red-500">*</span>
                 </label>
-                <input
-                  v-model="editDate"
-                  type="date"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
-                  :class="editDateError ? 'border-red-400 bg-red-50' : 'border-gray-300'"
-                />
+                <DatePickerInput v-model="editDate" :error="!!editDateError" />
                 <p v-if="editDateError" class="mt-1 text-xs text-red-500">{{ editDateError }}</p>
               </div>
 

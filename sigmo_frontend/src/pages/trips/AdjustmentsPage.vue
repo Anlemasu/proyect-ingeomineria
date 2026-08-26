@@ -11,6 +11,7 @@ import PageHeader       from '@/components/shared/PageHeader.vue'
 import CurrencyInput    from '@/components/shared/CurrencyInput.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import ConfirmDialog    from '@/components/shared/ConfirmDialog.vue'
+import DatePickerInput  from '@/components/shared/DatePickerInput.vue'
 
 import { tripsApi }          from '@/api/trips.api'
 import { clientsApi }        from '@/api/clients.api'
@@ -382,12 +383,10 @@ function confirmPrint() {
           class="pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 w-full sm:w-56"
         />
       </div>
-      <input
+      <DatePickerInput
         v-if="canViewHistorical"
         v-model="selectedDate"
-        type="date"
         :max="today"
-        class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white"
       />
       <span v-if="isHistoricalView" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
         <AlertTriangle class="w-3 h-3" />Vista histórica
@@ -620,14 +619,9 @@ function confirmPrint() {
               <!-- Fecha -->
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha</label>
-                <input
+                <DatePickerInput
                   v-model="editDate"
-                  type="date"
                   :readonly="!canChangeDate || observationsOnlyMode"
-                  class="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400"
-                  :class="canChangeDate && !observationsOnlyMode
-                    ? 'border-gray-300 bg-white'
-                    : 'border-gray-200 bg-gray-50 text-gray-600 cursor-default'"
                 />
                 <p v-if="!canChangeDate" class="mt-1 text-xs text-gray-400">Solo el día actual</p>
               </div>
