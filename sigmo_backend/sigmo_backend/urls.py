@@ -15,6 +15,7 @@ urlpatterns = [
     path('api/trips/',     include('apps.trips.urls')),
     path('api/cash-closing/', include('apps.cash_closing.urls')),
     path('api/audit/', include('apps.audit.urls')),
+    path('api/pending-entries/', include('apps.pending_entries.urls')),
 
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     # Interfaz visual de Swagger

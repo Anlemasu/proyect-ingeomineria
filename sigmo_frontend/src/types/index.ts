@@ -177,6 +177,32 @@ export interface Advance {
   movements: AdvanceMovement[]
 }
 
+export type PendingEntryType = 'advance' | 'transfer'
+export type PendingEntryStatus = 'pending' | 'executed' | 'cancelled'
+
+export interface PendingEntry {
+  id: number
+  entry_type: PendingEntryType
+  status: PendingEntryStatus
+  client: number
+  client_detail: Client
+  value: string
+  date: string
+  payment_method: number | null
+  payment_method_detail: PaymentMethod | null
+  observations: string | null
+  executed_advance: number | null
+  executed_trip: number | null
+  created_by: number
+  executed_by: number | null
+  executed_at: string | null
+  cancelled_by: number | null
+  cancelled_at: string | null
+  cancellation_justification: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface AdvanceBalanceDetail {
   id: number
   date: string

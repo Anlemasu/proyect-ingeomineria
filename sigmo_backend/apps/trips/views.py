@@ -23,6 +23,14 @@ from apps.advances.models import Advance, AdvanceMovement
 from apps.advances.services import get_active_advance, get_available_balance
 from apps.cash_closing.models import DailySummary
 from apps.cash_closing.services import resync_if_closed
+from apps.pending_entries.models import PendingEntry
+from apps.pending_entries.services import (
+    execute_pending_transfer,
+    PendingEntryNotPendingError,
+    PendingEntryTypeMismatchError,
+    PendingEntryClientMismatchError,
+    PendingEntryValueMismatchError,
+)
 
 # Campos cuyo cambio afecta los totales de un DailySummary ya cerrado
 # (valor, anulación/reactivación o medio de pago). Un PATCH que solo toca
@@ -109,6 +117,32 @@ class TripListCreateView(APIView):
         # Validar el serializer antes del atomic para retornar errores claros
         data = request.data.copy()
         data['voucher_num'] = 0  # temporal, se reemplaza dentro del atomic
+
+        # RN#5 — si el frontend indicó una "transferencia pendiente" a
+        # ejecutar, el medio de pago del viaje se autocompleta con el
+        # guardado en el pendiente (sobreescribe lo que haya mandado el
+        # caller a propósito). Se valida ANTES de construir el serializer
+        # para que el 'payment' autocompletado pase también sus propias
+        # validaciones (medio de pago activo, etc.).
+        pending_entry = None
+        pending_entry_id = request.data.get('pending_entry_id')
+        if pending_entry_id:
+            try:
+                pending_entry = PendingEntry.objects.select_related('payment_method').get(pk=pending_entry_id)
+            except PendingEntry.DoesNotExist:
+                return Response({'error': 'Transferencia pendiente no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+            if pending_entry.status != 'pending':
+                return Response(
+                    {'error': 'Este pendiente ya fue ejecutado o cancelado.'},
+                    status=status.HTTP_409_CONFLICT
+                )
+            if pending_entry.entry_type != 'transfer':
+                return Response(
+                    {'error': 'Este pendiente no corresponde a una transferencia.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            data['payment'] = pending_entry.payment_method_id
+
         serializer = TripWriteSerializer(data=data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -117,6 +151,22 @@ class TripListCreateView(APIView):
         client  = serializer.validated_data.get('client')   # type: ignore
         value   = serializer.validated_data.get('value')    # type: ignore
         trip_date = serializer.validated_data.get('date')   # type: ignore
+
+        # RN#5 — el cliente del pendiente debe coincidir con el del viaje, y
+        # el valor debe coincidir EXACTO (sin justificación de excepción,
+        # a diferencia del saldo insuficiente de anticipos más abajo).
+        if pending_entry:
+            if pending_entry.client_id != client.id:
+                return Response(
+                    {'error': 'El cliente del pendiente no coincide con el cliente del viaje.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if pending_entry.value != value:
+                return Response({
+                    'error': 'El valor del viaje no coincide con el valor de la transferencia pendiente.',
+                    'valor_transferencia_pendiente': str(pending_entry.value),
+                    'valor_viaje': str(value),
+                }, status=status.HTTP_400_BAD_REQUEST)
 
         # REQUISITO NUEVO 3.1: un día con cierre de caja vigente no admite
         # viajes nuevos, ni siquiera del superusuario — la única vía es
@@ -189,6 +239,9 @@ class TripListCreateView(APIView):
 
                 trip = cast(Trip, serializer.save(**save_kwargs))
 
+                if pending_entry:
+                    execute_pending_transfer(pending_entry, trip, request=request)
+
                 if payment and payment.is_advance and not insufficient:
                     AdvanceMovement.objects.create(
                         advance=active_advance,
@@ -223,6 +276,24 @@ class TripListCreateView(APIView):
                     status=status.HTTP_201_CREATED
                 )
 
+        except (PendingEntryNotPendingError, PendingEntryTypeMismatchError, PendingEntryClientMismatchError):
+            # Carrera rara: el pendiente se ejecutó/canceló entre la
+            # validación de arriba y este punto. El atomic ya revirtió la
+            # creación del Trip.
+            return Response(
+                {'error': 'El pendiente ya no está disponible para ejecutar (puede haber sido ejecutado por otra solicitud).'},
+                status=status.HTTP_409_CONFLICT
+            )
+        except PendingEntryValueMismatchError as e:
+            # Defensa ante la misma carrera: si el valor dejó de coincidir
+            # entre la validación de arriba y este punto (no debería pasar,
+            # el valor del pendiente no cambia una vez creado, pero cubre el
+            # caso igual).
+            return Response({
+                'error': 'El valor del viaje no coincide con el valor de la transferencia pendiente.',
+                'valor_transferencia_pendiente': str(e.pending_value),
+                'valor_viaje': str(e.actual_value),
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception:
             return Response(
                 {'error': 'Error al registrar el viaje. Intente nuevamente.'},

@@ -26,6 +26,7 @@ import { advancesApi }       from '@/api/advances.api'
 import { tariffsApi }        from '@/api/tariffs.api'
 import { pinsApi }           from '@/api/pins.api'
 import { tripsApi }          from '@/api/trips.api'
+import { pendingEntriesApi } from '@/api/pendingEntries.api'
 
 import { useAuthStore }       from '@/stores/auth.store'
 import { todayBogota, formatDate } from '@/utils/formatDate'
@@ -226,6 +227,11 @@ const tariffLoading = ref(false)
 
 async function fetchTariff() {
   if (!clientId.value || !vehicleTypeId.value) return
+  // RN#5 — el valor ya quedó fijado por la transferencia pendiente
+  // ejecutada (ver executeTransferSelection más abajo); la tarifa
+  // automática no debe pisarlo, o rompería en silencio la coincidencia
+  // exacta que exige el backend.
+  if (selectedPendingTransferId.value) return
   tariffLoading.value = true
   try {
     const clientRes = await tariffsApi.list({
@@ -313,6 +319,39 @@ watch(paymentId, () => {
   forceSubmit.value   = false
   justification.value = ''
 })
+
+// ── RN#5: transferencia pendiente ─────────────────────────────────────────────
+// Al seleccionar cliente, detectar avisos de "transferencia pendiente"
+// (apps.pending_entries) sin ejecutar. A diferencia del anticipo (que se
+// auto-asigna en silencio), acá el usuario debe pulsar "Ejecutar
+// transferencia" explícitamente — solo entonces se autocompleta valor y
+// medio de pago, y el backend exige que el valor coincida exacto.
+const { data: pendingTransfersData } = useQuery({
+  queryKey: computed(() => ['pending-entries', 'transfer-check', clientId.value]),
+  queryFn: () => clientId.value
+    ? pendingEntriesApi.list({ client: clientId.value, entry_type: 'transfer', status: 'pending' }).then(r => r.data)
+    : Promise.resolve([]),
+  enabled: computed(() => !!clientId.value),
+})
+const pendingTransfers = computed(() => pendingTransfersData.value ?? [])
+const selectedPendingTransferId = ref<number | null>(null)
+const selectedPendingTransfer = computed(() =>
+  pendingTransfers.value.find(p => p.id === selectedPendingTransferId.value) ?? null
+)
+
+function executeTransferSelection(entryId: number) {
+  const entry = pendingTransfers.value.find(p => p.id === entryId)
+  if (!entry) return
+  selectedPendingTransferId.value = entry.id
+  setFieldValue('payment', entry.payment_method!)
+  setFieldValue('value', parseFloat(entry.value))
+}
+
+function cancelTransferSelection() {
+  selectedPendingTransferId.value = null
+}
+
+watch(clientId, () => { selectedPendingTransferId.value = null })
 
 const balanceSufficient = computed(() => {
   if (!isAdvancePayment.value) return true
@@ -409,6 +448,7 @@ const onSubmit = handleSubmit(async (values) => {
       ...(forceSubmit.value && justification.value.trim()
         ? { force: true, justification: justification.value.trim() }
         : {}),
+      ...(selectedPendingTransferId.value ? { pending_entry_id: selectedPendingTransferId.value } : {}),
     }
 
     const res  = await tripsApi.create(payload)
@@ -426,6 +466,7 @@ const onSubmit = handleSubmit(async (values) => {
     // Si la placa era nueva, se creó un Vehicle al vuelo (arriba) — sin esto
     // la lista de Maestros > Vehículos queda desactualizada hasta un reload.
     queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+    queryClient.invalidateQueries({ queryKey: ['pending-entries'] })
 
     resetForm()
 
@@ -436,10 +477,17 @@ const onSubmit = handleSubmit(async (values) => {
     tariffMode.value    = null
     forceSubmit.value   = false
     justification.value = ''
+    selectedPendingTransferId.value = null
 
   } catch (err: unknown) {
     const data = (err as { response?: { data?: Record<string, unknown> } })?.response?.data
-    if (data?.saldo_disponible !== undefined) {
+    if (data?.valor_transferencia_pendiente !== undefined) {
+      toast.error(
+        typeof data.error === 'string'
+          ? data.error
+          : 'El valor del viaje no coincide con el valor de la transferencia pendiente.'
+      )
+    } else if (data?.saldo_disponible !== undefined) {
       // El panel ya resalta el detalle visualmente, pero se avisa también con
       // un toast — si el usuario hizo scroll y no ve el panel, antes no se
       // enteraba de nada.
@@ -487,6 +535,50 @@ const onSubmit = handleSubmit(async (values) => {
               <span v-if="clientPendingDebt > 0" class="block text-xs font-medium text-amber-600">
                 Deuda pendiente por liquidar: {{ formatCurrency(clientPendingDebt) }}
               </span>
+            </div>
+
+            <!-- RN#5 — aviso de transferencia(s) pendiente(s) por ejecutar
+                 para este cliente (apps.pending_entries). Ejecutar autocompleta
+                 Valor y Medio de pago, y los bloquea para no romper la
+                 coincidencia exacta que exige el backend. -->
+            <div
+              v-if="pendingTransfers.length > 0 && !selectedPendingTransferId"
+              class="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-3 space-y-2"
+            >
+              <p class="text-xs font-semibold text-sky-700 flex items-center gap-1.5">
+                <Info class="w-3.5 h-3.5 shrink-0" />
+                {{ pendingTransfers.length }} transferencia(s) pendiente(s) para este cliente
+              </p>
+              <div v-for="p in pendingTransfers" :key="p.id" class="flex items-center justify-between gap-2 text-xs text-sky-700">
+                <span>
+                  {{ formatDate(p.date) }} — {{ formatCurrency(Number(p.value)) }}
+                  <span v-if="p.observations">· {{ p.observations }}</span>
+                </span>
+                <button
+                  type="button"
+                  @click="executeTransferSelection(p.id)"
+                  class="px-2.5 py-1 rounded-md bg-sky-600 text-white text-xs font-medium hover:bg-sky-700 transition-colors shrink-0"
+                >
+                  Ejecutar transferencia
+                </button>
+              </div>
+            </div>
+
+            <div v-else-if="selectedPendingTransfer" class="mt-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
+              <p class="text-xs text-sky-700 flex items-center justify-between gap-2">
+                <span class="flex items-center gap-1.5 font-medium">
+                  <CheckCircle class="w-3.5 h-3.5 shrink-0" />
+                  Ejecutando transferencia pendiente #{{ selectedPendingTransfer.id }} —
+                  {{ formatCurrency(Number(selectedPendingTransfer.value)) }}
+                </span>
+                <button
+                  type="button"
+                  @click="cancelTransferSelection"
+                  class="text-sky-500 hover:text-sky-700 underline underline-offset-2 shrink-0"
+                >
+                  Quitar
+                </button>
+              </p>
             </div>
           </div>
 
@@ -596,10 +688,14 @@ const onSubmit = handleSubmit(async (values) => {
             </label>
             <CurrencyInput
               v-model="tripValue"
+              :disabled="!!selectedPendingTransferId"
               :placeholder="tariffMode === 'manual' || tariffMode === null ? 'Ingrese el valor' : ''"
             />
             <div class="mt-1.5 h-4">
-              <span v-if="tariffLoading" class="text-xs text-gray-400">Buscando tarifa...</span>
+              <span v-if="selectedPendingTransferId" class="inline-flex items-center gap-1 text-xs text-sky-600 font-medium">
+                <Info class="w-3 h-3" /> Fijado por transferencia pendiente
+              </span>
+              <span v-else-if="tariffLoading" class="text-xs text-gray-400">Buscando tarifa...</span>
               <span v-else-if="tariffMode === 'client'" class="inline-flex items-center gap-1 text-xs text-gold-700 font-medium">
                 <Info class="w-3 h-3" /> Tarifa del cliente
               </span>
@@ -620,6 +716,7 @@ const onSubmit = handleSubmit(async (values) => {
               :options="paymentList"
               v-model="paymentId"
               placeholder="Buscar medio de pago..."
+              :disabled="!!selectedPendingTransferId"
             />
             <p v-if="paymentError" class="mt-1 text-xs text-red-500">{{ paymentError }}</p>
           </div>

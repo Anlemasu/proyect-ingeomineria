@@ -19,6 +19,13 @@ from .services import (
     AdvanceNotActiveError,
     NoValueChangeError,
 )
+from apps.pending_entries.models import PendingEntry
+from apps.pending_entries.services import (
+    execute_pending_advance,
+    PendingEntryNotPendingError,
+    PendingEntryTypeMismatchError,
+    PendingEntryClientMismatchError,
+)
 
 
 def can_manage_advances(user):
@@ -53,6 +60,33 @@ class AdvanceListCreateView(APIView):
         serializer = AdvanceSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # RN#4 — vincular este anticipo a un aviso de "anticipo pendiente"
+        # (apps.pending_entries) ya existente para el mismo cliente, si el
+        # frontend mandó uno. Se valida ANTES del atomic para no crear el
+        # Advance si el pendiente ya no está disponible.
+        pending_entry = None
+        pending_entry_id = request.data.get('pending_entry_id')
+        if pending_entry_id:
+            try:
+                pending_entry = PendingEntry.objects.get(pk=pending_entry_id)
+            except PendingEntry.DoesNotExist:
+                return Response({'error': 'Anticipo pendiente no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+            if pending_entry.status != 'pending':
+                return Response(
+                    {'error': 'Este pendiente ya fue ejecutado o cancelado.'},
+                    status=status.HTTP_409_CONFLICT
+                )
+            if pending_entry.entry_type != 'advance':
+                return Response(
+                    {'error': 'Este pendiente no corresponde a un anticipo.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if pending_entry.client_id != serializer.validated_data['client'].id:  # type: ignore
+                return Response(
+                    {'error': 'El cliente del pendiente no coincide con el cliente del anticipo.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         try:
             trips_quantity = int(request.data.get('trips_quantity', 0))
@@ -96,8 +130,19 @@ class AdvanceListCreateView(APIView):
                 # date_register del viaje).
                 settle_pending_debts(advance, request=request)
 
+                if pending_entry:
+                    execute_pending_advance(pending_entry, advance, request=request)
+
             advance.refresh_from_db()
             return Response(AdvanceSerializer(advance).data, status=status.HTTP_201_CREATED)
+        except (PendingEntryNotPendingError, PendingEntryTypeMismatchError, PendingEntryClientMismatchError):
+            # Carrera rara: el pendiente se ejecutó/canceló entre la
+            # validación de arriba y este punto. El atomic ya revirtió la
+            # creación del Advance.
+            return Response(
+                {'error': 'El pendiente ya no está disponible para ejecutar (puede haber sido ejecutado por otra solicitud).'},
+                status=status.HTTP_409_CONFLICT
+            )
         except Exception:
             return Response(
                 {'error': 'Error al registrar el anticipo. Intente nuevamente.'},

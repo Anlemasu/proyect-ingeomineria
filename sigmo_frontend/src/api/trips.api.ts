@@ -12,6 +12,10 @@ export interface TripCreateData {
   date: string
   extern_voucher_num?: string | null
   force?: boolean
+  // RN#5 — vincula este viaje a una "transferencia pendiente" ya registrada
+  // (apps.pending_entries): el backend autocompleta `payment` con el medio
+  // de pago guardado en el pendiente y exige que `value` coincida exacto.
+  pending_entry_id?: number
 }
 
 export const tripsApi = {

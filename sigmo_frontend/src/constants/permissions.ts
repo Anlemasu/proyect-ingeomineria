@@ -39,6 +39,14 @@ export const PERMISSIONS = {
     edit: [ROLES.SUPERUSER, ROLES.CASHIER, ROLES.COMMERCIAL_ADMIN],
     delete: [],
   },
+  // Pendientes: todos ven el listado; solo auditor/superuser registran,
+  // editan o cancelan (ver can_manage_pending_entries en el backend).
+  pendingEntries: {
+    view: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.CASHIER, ROLES.ACCOUNTANT, ROLES.AUDITOR],
+    create: [ROLES.SUPERUSER, ROLES.AUDITOR],
+    edit: [ROLES.SUPERUSER, ROLES.AUDITOR],
+    delete: [],
+  },
 } as const
 
 export type PermissionModule = keyof typeof PERMISSIONS

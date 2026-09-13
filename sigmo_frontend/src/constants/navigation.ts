@@ -21,6 +21,7 @@ import {
   Users,
   ScrollText,
   ClipboardCheck,
+  Clock,
 } from 'lucide-vue-next'
 
 export interface NavLeaf {
@@ -170,6 +171,16 @@ export const navigation: NavItem[] = [
         // cashier/auditor: acceso de solo consulta (no pueden crear/editar,
         // ver AdvancesPage.vue canManage/isSuperuser) — backend ya lo permite:
         // AdvanceListCreateView.get/AdvanceBalanceView.get no restringen por rol.
+        roles: ['superuser', 'accountant', 'commercial_admin', 'cashier', 'auditor'],
+      },
+      {
+        type: 'leaf',
+        label: 'Pendientes',
+        path: '/pending-entries',
+        icon: Clock,
+        // Todos los roles ven el listado (solo lectura); crear/editar/
+        // cancelar queda restringido dentro del propio componente a
+        // superuser/auditor (ver can_manage_pending_entries en el backend).
         roles: ['superuser', 'accountant', 'commercial_admin', 'cashier', 'auditor'],
       },
       {

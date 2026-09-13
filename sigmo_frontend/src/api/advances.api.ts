@@ -13,6 +13,9 @@ export const advancesApi = {
     trips_quantity?: number
     proforma_number?: number
     observations?: string
+    // RN#4 — vincula este anticipo a un aviso de "anticipo pendiente" ya
+    // registrado (apps.pending_entries) para el mismo cliente.
+    pending_entry_id?: number
   }) => api.post<Advance>('/advances/', data),
 
   update: (id: number, data: {

@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'apps.cash_closing',
     'apps.reports',
     'apps.audit',
+    'apps.pending_entries',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',

@@ -18,6 +18,7 @@ import { usePersistedRef } from '@/composables/usePersistedFilters'
 import { advancesApi } from '@/api/advances.api'
 import { clientsApi } from '@/api/clients.api'
 import { tripsApi } from '@/api/trips.api'
+import { pendingEntriesApi } from '@/api/pendingEntries.api'
 import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatCurrency } from '@/utils/formatCurrency'
@@ -173,7 +174,28 @@ function openEdit(advance: Advance) {
 function closeModal() {
   showModal.value = false
   editingAdvance.value = null
+  selectedPendingAdvanceId.value = null
 }
+
+// RN#4 — al seleccionar cliente en el registro de un anticipo nuevo, avisar
+// si tiene anticipos pendientes sin ejecutar (siempre, sin importar si el
+// cliente ya tiene saldo activo). Si hay varios, se elige cuál relacionar;
+// si hay solo uno, se auto-selecciona. Al crear el anticipo, ese pendiente
+// queda vinculado (ver onSubmit) y desaparece de "pendientes".
+const { data: pendingAdvancesData } = useQuery({
+  queryKey: computed(() => ['pending-entries', 'advance-check', clientId.value]),
+  queryFn: () => clientId.value
+    ? pendingEntriesApi.list({ client: clientId.value, entry_type: 'advance', status: 'pending' }).then(r => r.data)
+    : Promise.resolve([]),
+  enabled: computed(() => !!clientId.value && !editingAdvance.value),
+})
+const pendingAdvances = computed(() => pendingAdvancesData.value ?? [])
+const selectedPendingAdvanceId = ref<number | null>(null)
+
+watch(pendingAdvances, (list) => {
+  selectedPendingAdvanceId.value = list.length === 1 ? list[0].id : null
+})
+watch(clientId, () => { selectedPendingAdvanceId.value = null })
 
 // ── Corrección de valor original (Superusuario/Contador/Admin Comercial) ──
 // Única forma real de cambiar `value` una vez el anticipo tiene movimientos
@@ -257,6 +279,7 @@ const createMutation = useMutation({
   onSuccess: () => {
     toast.success('Anticipo registrado correctamente.')
     qc.invalidateQueries({ queryKey: ['advances'] })
+    qc.invalidateQueries({ queryKey: ['pending-entries'] })
     closeModal()
   },
   onError: (err) => toastApiError(err),
@@ -307,6 +330,7 @@ const onSubmit = handleSubmit(async (values) => {
         trips_quantity: values.trips_quantity ?? 0,
         proforma_number: values.proforma_number,
         observations: values.observations || undefined,
+        pending_entry_id: selectedPendingAdvanceId.value ?? undefined,
       })
     }
   } catch {
@@ -1317,6 +1341,34 @@ watch(activeTab, () => {
               placeholder="Buscar cliente..."
             />
             <p v-if="clientError" class="mt-1 text-xs text-red-500">{{ clientError }}</p>
+
+            <!-- RN#4 — aviso de anticipo(s) pendiente(s) por ejecutar para
+                 este cliente (apps.pending_entries). Al crear el anticipo
+                 con uno seleccionado, queda vinculado y sale de "Pendientes". -->
+            <div v-if="pendingAdvances.length > 0" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p class="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
+                <AlertTriangle class="w-3.5 h-3.5 shrink-0" />
+                Este cliente tiene {{ pendingAdvances.length }} anticipo(s) pendiente(s) por cargar
+              </p>
+              <div v-if="pendingAdvances.length === 1" class="mt-1 text-xs text-amber-700">
+                {{ formatDate(pendingAdvances[0].date) }} — {{ formatCurrency(Number(pendingAdvances[0].value)) }}
+                <span v-if="pendingAdvances[0].observations"> · {{ pendingAdvances[0].observations }}</span>
+              </div>
+              <div v-else class="mt-2 space-y-1">
+                <label
+                  v-for="p in pendingAdvances"
+                  :key="p.id"
+                  class="flex items-center gap-2 text-xs text-amber-700 cursor-pointer"
+                >
+                  <input type="radio" :value="p.id" v-model="selectedPendingAdvanceId" class="accent-amber-600" />
+                  {{ formatDate(p.date) }} — {{ formatCurrency(Number(p.value)) }}
+                  <span v-if="p.observations">· {{ p.observations }}</span>
+                </label>
+              </div>
+              <p class="mt-1.5 text-xs text-amber-600">
+                Se relacionará con el anticipo que se registre a continuación.
+              </p>
+            </div>
           </div>
           <div v-else>
             <label class="block text-sm font-medium text-gray-700 mb-1">Cliente</label>

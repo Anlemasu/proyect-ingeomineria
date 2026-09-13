@@ -123,6 +123,12 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: 'pending-entries',
+          name: 'pending-entries',
+          component: () => import('@/pages/pending-entries/PendingEntriesPage.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'invoicing',
           name: 'invoicing',
           component: () => import('@/pages/invoicing/InvoicingPage.vue'),
