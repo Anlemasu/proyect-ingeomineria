@@ -19,6 +19,7 @@ export const advancesApi = {
     value?: number
     transfer_num?: number
     date?: string
+    trips_quantity?: number
     proforma_number?: number | null
     observations?: string | null
   }) => api.patch<Advance>(`/advances/${id}/`, data),

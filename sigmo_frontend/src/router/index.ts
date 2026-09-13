@@ -56,6 +56,12 @@ const router = createRouter({
           component: () => import('@/pages/cash-closing/CashClosingPage.vue'),
           meta: { requiresAuth: true },
         },
+        {
+          path: 'physical-report',
+          name: 'physical-report',
+          component: () => import('@/pages/physical-report/PhysicalReportPage.vue'),
+          meta: { requiresAuth: true },
+        },
 
         // ── Clientes ───────────────────────────────────────────────────────────
         {

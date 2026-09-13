@@ -17,6 +17,12 @@ class Advance(models.Model):
     date = models.DateField()
     proforma_number = models.IntegerField(null=True, blank=True)
     observations = models.TextField(null=True, blank=True)
+    # Cupo esperado de viajes/vales para el módulo "Reporte Físico"
+    # (apps.physical_reports). Se completa con `trips_quantity` al crear el
+    # anticipo (ver AdvanceListCreateView.post) si vino > 0; si quedó sin
+    # definir, physical_reports permite agregarlo después pero no editarlo
+    # una vez puesto (ver physical_reports.services.set_expected_quantity).
+    expected_trips_quantity = models.IntegerField(null=True, blank=True)
 
     class Meta:
         db_table = 'ADVANCE'

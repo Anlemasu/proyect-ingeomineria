@@ -27,7 +27,9 @@ import type { Advance, AdvanceMovement, Client, AdvanceCorrectValuePreview, Trip
 
 const qc = useQueryClient()
 const authStore = useAuthStore()
-const isSuperuser = computed(() => authStore.user?.role === 'superuser')
+// Editar un anticipo (datos generales) y corregir su valor están abiertos a
+// los mismos 3 roles que pueden registrarlos — ver can_manage_advances en el
+// backend (apps/advances/views.py).
 const canManage = computed(() =>
   ['superuser', 'accountant', 'commercial_admin'].includes(authStore.user?.role ?? '')
 )
@@ -161,7 +163,7 @@ function openEdit(advance: Advance) {
     date: advance.date,
     value: parseFloat(advance.value),
     transfer_num: advance.transfer_num,
-    trips_quantity: undefined,
+    trips_quantity: advance.trips_quantity,
     proforma_number: advance.proforma_number ?? undefined,
     observations: advance.observations ?? '',
   })
@@ -291,6 +293,7 @@ const onSubmit = handleSubmit(async (values) => {
         data: {
           transfer_num: values.transfer_num,
           date: values.date,
+          trips_quantity: values.trips_quantity ?? 0,
           proforma_number: values.proforma_number ?? null,
           observations: values.observations || null,
         },
@@ -338,6 +341,10 @@ const registroColumns: ColumnDef<ARow>[] = [
     header: 'N° Consignación',
   },
   {
+    accessorKey: 'trips_quantity',
+    header: 'N° Viajes',
+  },
+  {
     accessorKey: 'proforma_number',
     header: 'N° Proforma',
     cell: info => info.getValue() ?? '—',
@@ -376,7 +383,7 @@ const registroColumns: ColumnDef<ARow>[] = [
           title: 'Ver viajes del anticipo',
           onClick: () => openAdvanceTrips(adv),
         }, h(Truck, { class: 'w-4 h-4' })),
-        isSuperuser.value
+        canManage.value
           ? h('button', {
               class: 'p-1 text-gray-400 hover:text-amber-600 transition-colors',
               title: 'Editar',
@@ -560,6 +567,11 @@ const estadoAdvanceColumns: ColumnDef<ARow>[] = [
   {
     accessorKey: 'transfer_num',
     header: 'N° Consignación',
+    enableGlobalFilter: false,
+  },
+  {
+    accessorKey: 'trips_quantity',
+    header: 'N° Viajes',
     enableGlobalFilter: false,
   },
   {
@@ -1152,7 +1164,7 @@ watch(activeTab, () => {
           </div>
           <div class="flex items-center gap-2">
             <button
-              v-if="isSuperuser"
+              v-if="canManage"
               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-colors"
               @click="openEdit(detailAdvance); closeDetail()"
             >
@@ -1368,8 +1380,8 @@ watch(activeTab, () => {
             <p v-if="transferNumError" class="mt-1 text-xs text-red-500">{{ transferNumError }}</p>
           </div>
 
-          <!-- N° Viajes (solo en creación) -->
-          <div v-if="!editingAdvance">
+          <!-- N° Viajes -->
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">N° de Viajes</label>
             <input
               v-model.number="tripsQty"

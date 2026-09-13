@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Users,
   ScrollText,
+  ClipboardCheck,
 } from 'lucide-vue-next'
 
 export interface NavLeaf {
@@ -79,6 +80,16 @@ export const navigation: NavItem[] = [
         // Todos los roles ven el resumen del día e histórico (solo lectura);
         // ejecutar/revertir el cierre queda restringido dentro del propio
         // componente a superuser/commercial_admin (ver canManageClosing).
+        roles: ['superuser', 'cashier', 'commercial_admin', 'accountant', 'auditor'],
+      },
+      {
+        type: 'leaf',
+        label: 'Reporte Físico',
+        path: '/physical-report',
+        icon: ClipboardCheck,
+        // cashier/superuser/commercial_admin registran y cierran el conteo
+        // físico; accountant/auditor solo consultan (ver canManage en
+        // PhysicalReportPage.vue).
         roles: ['superuser', 'cashier', 'commercial_admin', 'accountant', 'auditor'],
       },
     ],

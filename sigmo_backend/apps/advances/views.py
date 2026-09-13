@@ -63,7 +63,12 @@ class AdvanceListCreateView(APIView):
 
         try:
             with transaction.atomic():
-                advance: Advance = serializer.save(user=request.user)  # type: ignore
+                # `trips_quantity` > 0 también queda como el cupo esperado del
+                # módulo "Reporte Físico" (apps.physical_reports) — mismo dato
+                # de entrada, sin agregar un campo nuevo al formulario de
+                # creación de anticipo.
+                extra = {'expected_trips_quantity': trips_quantity} if trips_quantity > 0 else {}
+                advance: Advance = serializer.save(user=request.user, **extra)  # type: ignore
 
                 # select_for_update() aunque la fila se acaba de crear (mismo
                 # patrón de Fase 1): protege contra una liquidación de deuda
@@ -120,13 +125,20 @@ class AdvanceDetailView(APIView):
             )
         return Response(AdvanceSerializer(obj).data)
 
-    @extend_schema(summary="Editar un anticipo (solo Superusuario).")
+    @extend_schema(summary="Editar un anticipo (Superusuario, Contador o Administrador Comercial).")
     def patch(self, request, pk):
-        """Editar un anticipo (solo Superusuario)."""
-        if request.user.role != 'superuser':
+        """Editar un anticipo (Superusuario, Contador o Administrador Comercial)."""
+        # Antes solo el superusuario podía editar. Se amplía a los mismos 3
+        # roles que ya pueden registrar anticipos y corregir su valor
+        # (can_manage_advances) — quien ya puede tocar el campo más sensible
+        # (`value`, vía AdvanceCorrectValueView) no tiene sentido que se le
+        # bloquee editar el resto de campos (fecha, N° consignación, N°
+        # proforma, observaciones), y quien registra un anticipo debe poder
+        # corregir sus propios datos.
+        if not can_manage_advances(request.user):
             log_action(request, 'access_denied', 'Advance', object_id=pk)
             return Response(
-                {'error': 'Solo el Superusuario puede modificar anticipos.'},
+                {'error': 'No tiene permisos para modificar anticipos.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         obj = self.get_object(pk)
@@ -136,20 +148,61 @@ class AdvanceDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # trips_quantity no es un campo de Advance (vive en el
+        # AdvanceMovement de ingreso inicial, ver
+        # AdvanceSerializer.get_trips_quantity) — el serializer lo declara
+        # read_only, así que se valida y aplica aparte, igual que en
+        # AdvanceListCreateView.post.
+        trips_quantity = None
+        if 'trips_quantity' in request.data:
+            try:
+                trips_quantity = int(request.data.get('trips_quantity'))
+                if trips_quantity < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'El número de viajes debe ser un entero no negativo.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         # Capturar datos anteriores antes de modificar (RF-32B)
         previous = dict(AdvanceSerializer(obj).data)  # type: ignore
 
         serializer = AdvanceSerializer(obj, data=request.data, partial=True)
-        if serializer.is_valid():
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
             serializer.save()
+
+            if trips_quantity is not None:
+                initial_movement = (
+                    AdvanceMovement.objects.filter(advance=obj, type_movement='ingreso')
+                    .order_by('id').first()
+                )
+                if initial_movement:
+                    initial_movement.trips_quantity = trips_quantity
+                    initial_movement.save(update_fields=['trips_quantity'])
+
+                # Mantiene sincronizado el cupo esperado que lee "Reporte
+                # Físico" (apps.physical_reports.Advance.expected_trips_quantity)
+                # con este mismo dato — son "el mismo número" desde la óptica
+                # del usuario (ver AdvanceListCreateView.post, que lo fija
+                # igual al crear). Sin este `save`, corregir aquí el N° de
+                # viajes no se reflejaba nunca en Reporte Físico.
+                obj.expected_trips_quantity = trips_quantity
+                obj.save(update_fields=['expected_trips_quantity'])
+
+            obj.refresh_from_db()
+            fresh_data = AdvanceSerializer(obj).data  # type: ignore
             log_action(
                 request, 'update', 'Advance',
                 object_id=obj.id,
                 previous_data=previous,
-                new_data=dict(serializer.data),  # type: ignore
+                new_data=dict(fresh_data),
             )
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(fresh_data)
 
 
 class AdvanceBalanceView(APIView):

@@ -170,6 +170,10 @@ export interface Advance {
   proforma_number: number | null
   observations: string | null
   available_balance: number
+  // N° de viajes asociado al ingreso inicial del anticipo — calculado por
+  // el backend desde el AdvanceMovement de ingreso inicial (ver
+  // AdvanceSerializer.get_trips_quantity). Editable vía advancesApi.update.
+  trips_quantity: number
   movements: AdvanceMovement[]
 }
 
@@ -211,6 +215,80 @@ export interface AdvanceCorrectValueResult {
   movement: AdvanceMovement
   unlinked_trips: AdvanceUnlinkedTrip[]
   settled_trips: { trip: number; amount: string }[]
+}
+
+// ── Reporte Físico ──────────────────────────────────────────────────────────
+// Conciliación de vales físicos (papel) contra lo registrado en el sistema
+// por anticipo. Ver apps.physical_reports en el backend.
+
+export interface PhysicalReportSummary {
+  advance: number
+  client_detail: Client
+  date: string
+  expected_trips_quantity: number | null
+  // Con el filtro de fecha (siempre lo manda el frontend), estos dos ya
+  // vienen calculados "a esa fecha" — no necesariamente el acumulado real
+  // de hoy. Sin filtro (no debería pasar en la UI actual), son el
+  // acumulado real completo.
+  cumulative_entered: number
+  // null cuando el anticipo todavía no tiene cupo esperado definido.
+  remaining: number | null
+  // Presentes solo cuando la request llevó `?date=` (ver physicalReportsApi.list):
+  // el conteo ya guardado exactamente para esa fecha (null si no hay), y si
+  // el campo inline de la tabla todavía puede editarse sin justificación
+  // (ventana de ajuste rápido de 30 min) — pasada la ventana, solo se
+  // ajusta individualmente desde el detalle (el "ojito"), con justificación.
+  day_count?: number | null
+  day_editable?: boolean
+}
+
+// Resultado de un renglón de POST /physical-reports/bulk-entries/ (botón
+// "Guardar todos"). Cada anticipo se procesa independiente: uno puede
+// fallar (p.ej. quedó fuera de la ventana de ajuste) sin afectar al resto.
+export interface BulkEntryResult {
+  advance: number
+  status: 'ok' | 'error'
+  entry?: PhysicalCountEntry
+  error?: string
+}
+
+export interface PhysicalCountEntry {
+  id: number
+  advance: number
+  date: string
+  count: number
+  user: number
+  user_name: string
+  created_at: string
+  justification: string | null
+}
+
+export interface PhysicalCountClosure {
+  id: number
+  advance: number
+  action: 'close' | 'undo_close' | 'reopen'
+  user: number
+  user_name: string
+  created_at: string
+  justification: string | null
+}
+
+export interface PhysicalReportDayDetail {
+  date: string
+  // null cuando todavía no se ha registrado ningún conteo físico ese día.
+  physical_count: number | null
+  system_count: number
+  difference: number | null
+  history: PhysicalCountEntry[]
+  // Dentro de la ventana de ajuste rápido (o sin ningún conteo todavía):
+  // corregir desde este mismo detalle no exige justificación.
+  editable: boolean
+}
+
+export interface PhysicalReportDetail extends PhysicalReportSummary {
+  closed: boolean
+  last_closure: PhysicalCountClosure | null
+  day_detail?: PhysicalReportDayDetail
 }
 
 // Refleja la forma real de GET /advances/balance/<client_id>/

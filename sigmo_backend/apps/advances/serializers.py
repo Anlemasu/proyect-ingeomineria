@@ -71,6 +71,10 @@ class AdvanceSerializer(serializers.ModelSerializer):
     # Campo calculado: no existe en la DB, se computa al vuelo (RF-30)
     available_balance = serializers.SerializerMethodField()
 
+    # N° de viajes asociado al ingreso inicial del anticipo — tampoco existe
+    # en Advance, ver get_trips_quantity más abajo.
+    trips_quantity = serializers.SerializerMethodField()
+
     class Meta:
         model = Advance
         fields = [
@@ -84,9 +88,30 @@ class AdvanceSerializer(serializers.ModelSerializer):
             'proforma_number',
             'observations',
             'available_balance',
+            'trips_quantity',
             'movements',
         ]
-        read_only_fields = ['id', 'user', 'available_balance', 'movements']
+        read_only_fields = ['id', 'user', 'available_balance', 'trips_quantity', 'movements']
+
+    def get_trips_quantity(self, obj):
+        """
+        N° de viajes asociado al ingreso inicial del anticipo — no es un
+        campo propio de Advance, vive en el AdvanceMovement de tipo
+        'ingreso' que se crea junto con el anticipo (ver
+        AdvanceListCreateView.post). Se identifica como el ingreso de MENOR
+        id: los ingresos posteriores (ajustes de "Corregir valor", ver
+        correct_active_advance_value) siempre llevan trips_quantity=0 y un
+        id mayor, así que el de menor id es siempre el que se creó al
+        registrar el anticipo. Editable aparte, sin pasar por este
+        serializer — ver AdvanceDetailView.patch.
+        """
+        initial = (
+            obj.advancemovement_set
+            .filter(type_movement='ingreso')
+            .order_by('id')
+            .first()
+        )
+        return initial.trips_quantity if initial else 0
 
     def validate_value(self, value):
         # RF-29: el valor del anticipo debe ser mayor a cero

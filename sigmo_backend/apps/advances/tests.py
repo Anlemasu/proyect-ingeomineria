@@ -806,3 +806,52 @@ class AdvanceValueCorrectionTests(PendingDebtFixturesMixin, TestCase):
         adjustment = next(m for m in movements if m['id'] != original_movement_id)
         self.assertEqual(Decimal(str(adjustment['amount'])), Decimal('300000'))
         self.assertEqual(adjustment['type_movement'], 'ingreso')
+
+
+class TripsQuantityEditSyncsExpectedQuantityTests(PendingDebtFixturesMixin, TestCase):
+    """
+    Bug reportado: al editar el N° de viajes de un anticipo ya creado
+    (PATCH /advances/<id>/), el valor se actualizaba en el AdvanceMovement
+    de ingreso inicial (lo que muestra AdvanceSerializer.trips_quantity)
+    pero NUNCA en Advance.expected_trips_quantity — el cupo que en verdad
+    lee "Reporte Físico" (apps.physical_reports) para calcular 'restantes'.
+    Como resultado, corregir el N° de viajes desde Anticipos no se veía
+    reflejado ahí. Ver AdvanceDetailView.patch.
+    """
+
+    def test_editing_trips_quantity_updates_expected_trips_quantity_too(self):
+        resp = self.api.post('/api/advances/', {
+            'client': self.client_obj.id, 'value': '1000000', 'transfer_num': 1,
+            'date': str(self.today), 'trips_quantity': 10,
+        }, format='json')
+        advance_id = resp.data['id']
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertEqual(advance.expected_trips_quantity, 10)
+
+        patch_resp = self.api.patch(f'/api/advances/{advance_id}/', {
+            'trips_quantity': 15,
+        }, format='json')
+        self.assertEqual(patch_resp.status_code, status.HTTP_200_OK, patch_resp.data)
+        self.assertEqual(patch_resp.data['trips_quantity'], 15)
+
+        advance.refresh_from_db()
+        self.assertEqual(advance.expected_trips_quantity, 15)
+        initial_movement = AdvanceMovement.objects.get(advance=advance, type_movement='ingreso')
+        self.assertEqual(initial_movement.trips_quantity, 15)
+
+    def test_setting_trips_quantity_on_an_advance_created_without_one(self):
+        # Al crear sin `trips_quantity` (o en 0), expected_trips_quantity
+        # queda en None — corregirlo después desde Anticipos debe poder
+        # definirlo igual, no solo "ajustar" uno que ya existía.
+        resp = self.api.post('/api/advances/', {
+            'client': self.client_obj.id, 'value': '1000000', 'transfer_num': 1,
+            'date': str(self.today),
+        }, format='json')
+        advance_id = resp.data['id']
+        advance = Advance.objects.get(pk=advance_id)
+        self.assertIsNone(advance.expected_trips_quantity)
+
+        self.api.patch(f'/api/advances/{advance_id}/', {'trips_quantity': 8}, format='json')
+
+        advance.refresh_from_db()
+        self.assertEqual(advance.expected_trips_quantity, 8)
