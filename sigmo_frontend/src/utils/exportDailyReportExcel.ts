@@ -63,6 +63,24 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
   ])
   XLSX.utils.book_append_sheet(wb, wsGastos, 'Gastos')
 
+  // ── Sheet 4: Viajes por Cliente ─────────────────────────────────────────
+  const clienteHeader = ['Cliente', 'N° Viajes', 'Total (COP)', 'Volumen m³']
+  const clienteRows = data.tripsByClient.map(r => [
+    r.client_name,
+    r.trips_count,
+    Number(r.total_value),
+    Number(r.total_volume),
+  ])
+  const totalViajesCliente = data.tripsByClient.reduce((s, r) => s + r.trips_count, 0)
+  const totalValorCliente = data.tripsByClient.reduce((s, r) => s + Number(r.total_value), 0)
+  const totalVolumenCliente = data.tripsByClient.reduce((s, r) => s + Number(r.total_volume), 0)
+  const wsCliente = XLSX.utils.aoa_to_sheet([
+    clienteHeader,
+    ...clienteRows,
+    ['Total', totalViajesCliente, totalValorCliente, totalVolumenCliente],
+  ])
+  XLSX.utils.book_append_sheet(wb, wsCliente, 'Viajes por Cliente')
+
   // ── Sheet 4: Anticipos Consumidos ────────────────────────────────────────
   const anticiposHeader = ['Cliente', 'Anticipo ID', 'Valor Descontado', 'N° Viaje asociado']
   const anticiposRows = data.advancesConsumed.map(t => [

@@ -8,12 +8,13 @@ import type { ColumnDef } from '@tanstack/vue-table'
 
 import {
   RefreshCw, Lock, Unlock, CheckCircle, AlertTriangle,
-  TrendingUp, Truck, BarChart2, Wallet,
+  TrendingUp, Truck, BarChart2, Wallet, Copy, FileSpreadsheet,
 } from 'lucide-vue-next'
 
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataTable  from '@/components/shared/DataTable.vue'
 import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import TripsByClientTable from '@/components/shared/TripsByClientTable.vue'
 import { usePersistedRef } from '@/composables/usePersistedFilters'
 
 import { cashClosingApi }    from '@/api/cashClosing.api'
@@ -21,6 +22,8 @@ import { useAuthStore }      from '@/stores/auth.store'
 import { formatCurrency }    from '@/utils/formatCurrency'
 import { formatDate }        from '@/utils/formatDate'
 import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
+import { copyCashClosingDetail } from '@/utils/copyCashClosingDetail'
+import { exportCashClosingDetailExcel } from '@/utils/exportCashClosingDetailExcel'
 import type { DailySummary } from '@/types'
 
 const authStore   = useAuthStore()
@@ -114,6 +117,27 @@ const detailSummary = ref<DailySummary | null>(null)
 const detailRevenue = computed(() =>
   (detailSummary.value?.payment_details ?? []).reduce((s, p) => s + Number(p.total), 0)
 )
+
+// Copiar / exportar el detalle del cierre (desglose por pago + viajes por cliente).
+async function copyDetailTables() {
+  if (!detailSummary.value) return
+  try {
+    await copyCashClosingDetail(detailSummary.value)
+    toast.success('Desglose por pago y viajes por cliente copiados al portapapeles')
+  } catch {
+    toast.error('No se pudo copiar el detalle del cierre')
+  }
+}
+
+function exportDetailExcel() {
+  if (!detailSummary.value) return
+  try {
+    exportCashClosingDetailExcel(detailSummary.value)
+    toast.success('Cierre exportado a Excel')
+  } catch (err) {
+    toastApiError(err)
+  }
+}
 
 // ── Histórico mensual (todos los roles) ────────────────────────────────────────
 const rangeFrom = usePersistedRef('sigmo_filters_cash_closing_from', '')
@@ -330,6 +354,16 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
         </div>
         <div v-else class="mb-6 text-sm text-gray-400 italic">
           Sin viajes registrados hoy
+        </div>
+
+        <!-- Viajes por cliente -->
+        <div class="mb-6">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            Viajes por cliente
+          </h3>
+          <div class="border border-gray-100 rounded-lg overflow-hidden">
+            <TripsByClientTable :rows="todayData.trips_by_client ?? []" />
+          </div>
         </div>
 
         <!-- Botón de cierre -->
@@ -616,24 +650,42 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
       >
         <div v-if="detailSummary" class="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/30" @click="detailSummary = null" />
-          <div class="relative bg-white w-full max-w-sm max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
-            <div class="px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40 flex items-center justify-between shrink-0">
+          <div class="relative bg-white w-full max-w-2xl max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40 flex items-center justify-between gap-3 shrink-0">
               <div>
                 <h3 class="text-sm font-semibold text-gray-800">
                   Cierre — {{ formatDate(detailSummary.date) }}
                 </h3>
                 <p class="text-xs text-gray-500 mt-0.5">{{ detailSummary.total_trips }} viajes</p>
               </div>
-              <button
-                type="button"
-                @click="detailSummary = null"
-                class="text-gray-400 hover:text-gray-600 text-lg leading-none"
-              >✕</button>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  @click="copyDetailTables"
+                  class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-white transition-colors"
+                  title="Copiar el desglose por pago y los viajes por cliente"
+                >
+                  <Copy class="w-3.5 h-3.5" /> Copiar
+                </button>
+                <button
+                  type="button"
+                  @click="exportDetailExcel"
+                  class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-white transition-colors"
+                  title="Exportar el cierre a Excel"
+                >
+                  <FileSpreadsheet class="w-3.5 h-3.5" /> Excel
+                </button>
+                <button
+                  type="button"
+                  @click="detailSummary = null"
+                  class="text-gray-400 hover:text-gray-600 text-lg leading-none pl-1"
+                >✕</button>
+              </div>
             </div>
 
             <div class="p-6 space-y-5 flex-1 overflow-y-auto">
               <!-- KPIs -->
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div class="bg-gray-50 rounded-lg p-3">
                   <p class="text-xs text-gray-500 mb-1">Volumen total</p>
                   <p class="text-base font-bold text-gray-900">
@@ -680,6 +732,19 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
                   >
                     Sin desglose disponible
                   </div>
+                </div>
+              </div>
+
+              <!-- Viajes por cliente -->
+              <div>
+                <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  Viajes por cliente
+                </h4>
+                <div class="border border-gray-100 rounded-lg overflow-hidden">
+                  <TripsByClientTable
+                    :rows="detailSummary.client_details ?? []"
+                    max-height="16rem"
+                  />
                 </div>
               </div>
             </div>

@@ -8,6 +8,7 @@ import {
 
 import PageHeader from '@/components/shared/PageHeader.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import TripsByClientTable from '@/components/shared/TripsByClientTable.vue'
 
 import { tripsApi } from '@/api/trips.api'
 import { expensesApi } from '@/api/expenses.api'
@@ -20,6 +21,7 @@ import { navigation, type NavLeaf } from '@/constants/navigation'
 import { ACTION_CONFIG, MODEL_LABEL } from '@/constants/audit'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime, todayBogota } from '@/utils/formatDate'
+import { groupTripsByClient } from '@/utils/groupTripsByClient'
 import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { useResizableColumns } from '@/composables/useResizableColumns'
 import type { Trip, Advance } from '@/types'
@@ -137,6 +139,8 @@ const paymentBreakdown = computed(() => {
 const lastTrips = computed(() =>
   [...tripsToday.value].sort((a, b) => b.voucher_num - a.voucher_num).slice(0, 5),
 )
+
+const tripsByClientToday = computed(() => groupTripsByClient(tripsToday.value))
 
 // ── Anticipos (commercial_admin: bajo saldo — accountant: finalizados — superuser: ambos) ──
 const {
@@ -425,6 +429,14 @@ async function confirmValidate() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+              <h3 class="text-sm font-semibold text-gray-800">Viajes por cliente</h3>
+              <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">{{ tripsByClientToday.length }}</span>
+            </div>
+            <TripsByClientTable :rows="tripsByClientToday" />
           </div>
 
           <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">

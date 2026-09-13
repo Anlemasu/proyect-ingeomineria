@@ -22,6 +22,7 @@ export const tripsApi = {
     date?: string
     state?: boolean
     invoice?: number
+    advance?: number
   }) => api.get<Trip[]>('/trips/', { params }),
 
   detail: (id: number) =>

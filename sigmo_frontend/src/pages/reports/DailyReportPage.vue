@@ -10,6 +10,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataTable from '@/components/shared/DataTable.vue'
 import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import TripsByClientTable from '@/components/shared/TripsByClientTable.vue'
 
 import { tripsApi } from '@/api/trips.api'
 import { expensesApi } from '@/api/expenses.api'
@@ -17,6 +18,7 @@ import { usePermissions } from '@/composables/usePermissions'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime, todayBogota } from '@/utils/formatDate'
 import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
+import { groupTripsByClient } from '@/utils/groupTripsByClient'
 import { printDailyReport } from '@/utils/printDailyReport'
 import { exportDailyReportExcel } from '@/utils/exportDailyReportExcel'
 import type { Trip, DailyReportData } from '@/types'
@@ -77,6 +79,8 @@ const byPaymentMethod = computed(() => {
   return Array.from(groups.values())
 })
 
+const tripsByClient = computed(() => groupTripsByClient(trips.value))
+
 const isEmptyDay = computed(() =>
   hasLoadedOnce.value && trips.value.length === 0 && expenses.value.length === 0 && advancesConsumed.value.length === 0,
 )
@@ -86,6 +90,7 @@ const reportData = computed<DailyReportData>(() => ({
   trips: trips.value,
   expenses: expenses.value,
   advancesConsumed: advancesConsumed.value,
+  tripsByClient: tripsByClient.value,
   summary: {
     totalTrips: activeTrips.value.length,
     totalCollected: totalCollected.value,
@@ -269,6 +274,15 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
             </tfoot>
           </table>
         </div>
+      </div>
+
+      <!-- ── Viajes por cliente ───────────────────────────────────────────── -->
+      <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+          <h2 class="text-sm font-semibold text-gray-800">Viajes por cliente</h2>
+          <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">{{ tripsByClient.length }}</span>
+        </div>
+        <TripsByClientTable :rows="tripsByClient" :is-loading="isLoading" />
       </div>
 
       <!-- ── Viajes del día ───────────────────────────────────────────────── -->

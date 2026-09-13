@@ -76,6 +76,7 @@ class TripListCreateView(APIView):
         date       = request.query_params.get('date')
         state      = request.query_params.get('state')
         invoice_id = request.query_params.get('invoice')
+        advance_id = request.query_params.get('advance')
 
         if client_id:
             trips = trips.filter(client_id=client_id)
@@ -89,6 +90,8 @@ class TripListCreateView(APIView):
             trips = trips.filter(state=state.lower() == 'true')
         if invoice_id:
             trips = trips.filter(invoice_id=invoice_id)
+        if advance_id:
+            trips = trips.filter(advance_id=advance_id)
 
         serializer = TripReadSerializer(trips, many=True)
         return Response(serializer.data)

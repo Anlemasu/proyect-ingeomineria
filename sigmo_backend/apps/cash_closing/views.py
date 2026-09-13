@@ -13,6 +13,7 @@ from apps.audit.services import log_action
 from .models import DailySummary
 from .serializers import DailySummarySerializer
 from .services import execute_close, AlreadyClosedError
+from .aggregates import build_trips_by_client, build_trips_by_client_by_summary
 from apps.trips.models import Trip
 from apps.expenses.models import Expense
 from apps.masters.models import PaymentMethod
@@ -24,8 +25,14 @@ class DailySummaryListView(APIView):
     @extend_schema(summary="Listar los cierres de caja registrados.")
     def get(self, request):
         """Listar los cierres de caja registrados."""
-        summaries = DailySummary.objects.all().order_by('-date')
-        serializer = DailySummarySerializer(summaries, many=True)
+        summaries = list(DailySummary.objects.all().order_by('-date'))
+        client_details_by_summary = build_trips_by_client_by_summary(
+            [s.id for s in summaries]
+        )
+        serializer = DailySummarySerializer(
+            summaries, many=True,
+            context={'client_details_by_summary': client_details_by_summary},
+        )
         return Response(serializer.data)
 
 
@@ -183,4 +190,5 @@ class DailySummaryTodayView(APIView):
             'avg_trip_value': avg_trip_value,
             'total_expenses': total_expenses,
             'payment_details': payment_details,
+            'trips_by_client': build_trips_by_client(trips),
         })

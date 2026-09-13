@@ -53,6 +53,35 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
       </tr></tfoot>
     </table>`
 
+  const clientRows = data.tripsByClient.map(r => `
+    <tr>
+      <td>${escapeHtml(r.client_name)}</td>
+      <td class="num">${r.trips_count}</td>
+      <td class="num">${formatCurrency(r.total_value)}</td>
+      <td class="num">${Number(r.total_volume).toLocaleString('es-CO')}</td>
+    </tr>`).join('')
+
+  const clientTotals = data.tripsByClient.reduce(
+    (acc, r) => ({
+      trips: acc.trips + r.trips_count,
+      value: acc.value + Number(r.total_value),
+      volume: acc.volume + Number(r.total_volume),
+    }),
+    { trips: 0, value: 0, volume: 0 },
+  )
+
+  const clientsTable = `
+    <table>
+      <thead><tr><th>Cliente</th><th class="num">N° Viajes</th><th class="num">Total (COP)</th><th class="num">Volumen m³</th></tr></thead>
+      <tbody>${clientRows || '<tr><td colspan="4" class="empty">Sin viajes registrados</td></tr>'}</tbody>
+      <tfoot><tr>
+        <td>Total</td>
+        <td class="num">${clientTotals.trips}</td>
+        <td class="num">${formatCurrency(clientTotals.value)}</td>
+        <td class="num">${clientTotals.volume.toLocaleString('es-CO')}</td>
+      </tr></tfoot>
+    </table>`
+
   const tripRows = data.trips.map(t => `
     <tr>
       <td>${t.voucher_num}</td>
@@ -156,6 +185,9 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
 
   <h2>Desglose por medio de pago</h2>
   ${paymentTable}
+
+  <h2>Viajes por cliente (${data.tripsByClient.length})</h2>
+  ${clientsTable}
 
   <h2>Viajes del día (${data.trips.length})</h2>
   ${tripsTable}

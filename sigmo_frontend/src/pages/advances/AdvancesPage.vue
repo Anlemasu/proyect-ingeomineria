@@ -5,7 +5,7 @@ import { toast } from 'vue-sonner'
 import { useForm, useField } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import { Plus, Pencil, Download, AlertTriangle, X, Eye, FileText, Truck, Wrench } from 'lucide-vue-next'
+import { Plus, Pencil, Download, AlertTriangle, X, Eye, FileText, Truck, Wrench, FileSpreadsheet } from 'lucide-vue-next'
 import type { ColumnDef } from '@tanstack/vue-table'
 
 type ARow = Record<string, unknown>
@@ -17,11 +17,13 @@ import DatePickerInput from '@/components/shared/DatePickerInput.vue'
 import { usePersistedRef } from '@/composables/usePersistedFilters'
 import { advancesApi } from '@/api/advances.api'
 import { clientsApi } from '@/api/clients.api'
+import { tripsApi } from '@/api/trips.api'
 import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, todayBogota } from '@/utils/formatDate'
-import type { Advance, AdvanceMovement, Client, AdvanceCorrectValuePreview } from '@/types'
+import { exportAdvanceDetailExcel } from '@/utils/exportAdvanceDetailExcel'
+import type { Advance, AdvanceMovement, Client, AdvanceCorrectValuePreview, Trip } from '@/types'
 
 const qc = useQueryClient()
 const authStore = useAuthStore()
@@ -30,12 +32,13 @@ const canManage = computed(() =>
   ['superuser', 'accountant', 'commercial_admin'].includes(authStore.user?.role ?? '')
 )
 
-type Tab = 'registro' | 'estado' | 'historial'
+type Tab = 'registro' | 'estado' | 'viajes' | 'historial'
 const activeTab = ref<Tab>('registro')
 
 const tabs = [
   { id: 'registro' as Tab, label: 'Registro de Anticipos' },
   { id: 'estado' as Tab, label: 'Estado de Cuenta' },
+  { id: 'viajes' as Tab, label: 'Viajes por Anticipo' },
   { id: 'historial' as Tab, label: 'Historial de Movimientos' },
 ]
 // cajero: sin Historial de Movimientos (solo Registro y Estado de Cuenta)
@@ -311,6 +314,11 @@ const onSubmit = handleSubmit(async (values) => {
 // ── Columnas Tab 1 ─────────────────────────────────────────────────────────
 const registroColumns: ColumnDef<ARow>[] = [
   {
+    accessorKey: 'id',
+    header: 'N° Anticipo',
+    cell: info => `#${info.getValue()}`,
+  },
+  {
     accessorKey: 'date',
     header: 'Fecha',
     cell: info => formatDate(info.getValue() as string),
@@ -363,6 +371,11 @@ const registroColumns: ColumnDef<ARow>[] = [
           title: 'Ver detalle',
           onClick: () => openDetail(adv),
         }, h(Eye, { class: 'w-4 h-4' })),
+        h('button', {
+          class: 'p-1 text-gray-400 hover:text-gold-700 transition-colors',
+          title: 'Ver viajes del anticipo',
+          onClick: () => openAdvanceTrips(adv),
+        }, h(Truck, { class: 'w-4 h-4' })),
         isSuperuser.value
           ? h('button', {
               class: 'p-1 text-gray-400 hover:text-amber-600 transition-colors',
@@ -516,26 +529,44 @@ const selectedClientMovements = computed<MovementRow[]>(() =>
   )
 )
 
-// Columnas anticipos en Tab 2 (lista compacta)
+// Columnas anticipos en Tab 2 (lista compacta). La búsqueda de la tabla
+// (DataTable) queda restringida a "N° Anticipo": enableGlobalFilter:false en
+// el resto de columnas saca su contenido de la búsqueda global, sin tocar el
+// comportamiento de DataTable.vue en ninguna otra tabla de la app.
 const estadoAdvanceColumns: ColumnDef<ARow>[] = [
+  {
+    accessorKey: 'id',
+    header: 'N° Anticipo',
+    cell: info => `#${info.getValue()}`,
+  },
+  {
+    accessorFn: row => (row.client_detail as { name?: string } | undefined)?.name ?? '—',
+    id: 'client_name',
+    header: 'Cliente',
+    enableGlobalFilter: false,
+  },
   {
     accessorKey: 'date',
     header: 'Fecha',
     cell: info => formatDate(info.getValue() as string),
+    enableGlobalFilter: false,
   },
   {
     accessorKey: 'value',
     header: 'Valor',
     cell: info => formatCurrency(parseFloat(info.getValue() as string)),
+    enableGlobalFilter: false,
   },
   {
     accessorKey: 'transfer_num',
     header: 'N° Consignación',
+    enableGlobalFilter: false,
   },
   {
     accessorKey: 'observations',
     header: 'Observaciones',
     size: 200,
+    enableGlobalFilter: false,
     cell: info => {
       const val = (info.getValue() as string | null) ?? '—'
       return h('span', { class: 'block truncate', title: val !== '—' ? val : undefined }, val)
@@ -544,6 +575,7 @@ const estadoAdvanceColumns: ColumnDef<ARow>[] = [
   {
     accessorKey: 'available_balance',
     header: 'Saldo',
+    enableGlobalFilter: false,
     cell: info => {
       const val = info.getValue() as number
       const cls = val > 0 ? 'text-green-600 font-medium' : val < 0 ? 'text-red-600 font-medium' : 'text-gray-400'
@@ -553,6 +585,7 @@ const estadoAdvanceColumns: ColumnDef<ARow>[] = [
   {
     id: 'actions',
     header: '',
+    enableGlobalFilter: false,
     cell: info => h('button', {
       class: 'p-1 text-gray-400 hover:text-gold-700 transition-colors',
       title: 'Ver detalle',
@@ -631,6 +664,107 @@ const movementColumns: ColumnDef<ARow>[] = [
 const estadoMovColumns: ColumnDef<ARow>[] = movementColumns.filter(
   c => !('accessorKey' in c && c.accessorKey === 'client_name')
 )
+
+// ── Tab 4: Viajes por Anticipo ────────────────────────────────────────────
+const selectedAdvanceId = ref<number | null>(null)
+
+const advanceOptions = computed(() =>
+  advances.value.map(a => ({
+    id: a.id,
+    name: `${a.client_detail?.name ?? '—'} — ${formatDate(a.date)} — ${formatCurrency(parseFloat(a.value))} (#${a.id})`,
+  }))
+)
+
+const selectedAdvance = computed(() =>
+  advances.value.find(a => a.id === selectedAdvanceId.value) ?? null
+)
+
+const { data: advanceTripsData, isLoading: advanceTripsLoading } = useQuery({
+  queryKey: computed(() => ['advance-trips', selectedAdvanceId.value]),
+  queryFn: () => selectedAdvanceId.value
+    ? tripsApi.list({ advance: selectedAdvanceId.value }).then(r => r.data)
+    : Promise.resolve([] as Trip[]),
+  enabled: computed(() => !!selectedAdvanceId.value),
+})
+
+// Solo viajes activos: un viaje anulado ya tuvo su egreso revertido en el
+// anticipo (ver reverse_advance_discount en el backend) y no consume saldo.
+const advanceTrips = computed(() => (advanceTripsData.value ?? []).filter(t => t.state))
+
+const advanceTripsTotal = computed(() =>
+  advanceTrips.value.reduce((s, t) => s + parseFloat(t.value), 0)
+)
+
+const viajesColumns: ColumnDef<ARow>[] = [
+  {
+    accessorKey: 'voucher_num',
+    header: 'N° Vale',
+    cell: info => `#${info.getValue()}`,
+  },
+  {
+    accessorKey: 'date',
+    header: 'Fecha',
+    cell: info => formatDate(info.getValue() as string),
+  },
+  {
+    accessorFn: row => (row as unknown as Trip).client_detail?.name ?? '—',
+    id: 'client_name',
+    header: 'Cliente',
+  },
+  {
+    accessorFn: row => (row as unknown as Trip).vehicle_detail?.plaque ?? '—',
+    id: 'plaque',
+    header: 'Placa',
+  },
+  {
+    accessorFn: row => (row as unknown as Trip).vehicle_detail?.vehicle_type_detail?.name ?? '—',
+    id: 'vehicle_type',
+    header: 'Tipo Vehículo',
+  },
+  {
+    accessorFn: row => (row as unknown as Trip).origin_site_detail?.name ?? '—',
+    id: 'origin',
+    header: 'Origen',
+  },
+  {
+    accessorFn: row => (row as unknown as Trip).material_type_detail?.name ?? '—',
+    id: 'material',
+    header: 'Tipo Material',
+  },
+  {
+    accessorKey: 'value',
+    header: 'Valor',
+    cell: info => formatCurrency(parseFloat(info.getValue() as string)),
+  },
+  {
+    accessorFn: row => (row as unknown as Trip).payment_detail?.name ?? '—',
+    id: 'payment',
+    header: 'Medio de Pago',
+  },
+  {
+    accessorKey: 'state',
+    header: 'Estado',
+    cell: info => info.getValue()
+      ? h('span', { class: 'inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700' }, 'Activo')
+      : h('span', { class: 'inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700' }, 'Anulado'),
+  },
+]
+
+const advanceTripsRows = computed(() => advanceTrips.value as unknown as ARow[])
+
+function openAdvanceTrips(advance: Advance) {
+  selectedAdvanceId.value = advance.id
+  activeTab.value = 'viajes'
+}
+
+function exportAdvanceDetail() {
+  if (!selectedAdvance.value) return
+  try {
+    exportAdvanceDetailExcel(selectedAdvance.value, advanceTrips.value)
+  } catch (err) {
+    toastApiError(err)
+  }
+}
 
 // ── CSV Export ─────────────────────────────────────────────────────────────
 function downloadCsv(rows: Record<string, unknown>[], filename: string) {
@@ -884,6 +1018,78 @@ watch(activeTab, () => {
           :columns="clientsSummaryColumns"
           :is-loading="advancesLoading"
         />
+      </div>
+    </div>
+
+    <!-- ── Tab 4: Viajes por Anticipo ──────────────────────────────────── -->
+    <div v-else-if="activeTab === 'viajes'" class="space-y-6">
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div class="w-full max-w-md">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Seleccionar anticipo</label>
+          <SearchableSelect
+            :options="advanceOptions"
+            v-model="selectedAdvanceId"
+            placeholder="Buscar por cliente, fecha o N°..."
+            clearable
+          />
+        </div>
+        <button
+          v-if="selectedAdvance"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
+          @click="exportAdvanceDetail"
+        >
+          <FileSpreadsheet class="w-4 h-4" />
+          Exportar Excel (detalle)
+        </button>
+      </div>
+
+      <template v-if="selectedAdvance">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="rounded-xl border border-gray-200 bg-white p-4">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Cliente</p>
+            <p class="mt-1 text-sm font-semibold text-gray-900">{{ selectedAdvance.client_detail?.name ?? '—' }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-white p-4">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Valor del anticipo</p>
+            <p class="mt-1 text-sm font-semibold text-gray-900">{{ formatCurrency(parseFloat(selectedAdvance.value)) }}</p>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-white p-4">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">N° de viajes activos</p>
+            <p class="mt-1 text-sm font-semibold text-gray-900">{{ advanceTrips.length }}</p>
+          </div>
+          <div
+            class="rounded-xl border p-4"
+            :class="selectedAdvance.available_balance < 0 ? 'bg-red-50 border-red-200' : 'bg-gold-50 border-gold-200'"
+          >
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Saldo disponible</p>
+            <p
+              class="mt-1 text-sm font-semibold"
+              :class="selectedAdvance.available_balance < 0 ? 'text-red-600' : 'text-gold-800'"
+            >
+              {{ formatCurrency(selectedAdvance.available_balance) }}
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <Truck class="w-4 h-4 text-gray-400" />
+            Viajes registrados con este anticipo
+            <span class="text-xs font-normal text-gray-400">
+              (total descontado: {{ formatCurrency(advanceTripsTotal) }})
+            </span>
+          </h3>
+          <DataTable
+            :data="advanceTripsRows"
+            :columns="viajesColumns"
+            :is-loading="advanceTripsLoading"
+            :export-filename="`Viajes_Anticipo_${selectedAdvance.id}`"
+          />
+        </div>
+      </template>
+
+      <div v-else class="rounded-xl border border-dashed border-gray-300 bg-white py-16 text-center text-sm text-gray-400">
+        Selecciona un anticipo para ver los viajes registrados con él.
       </div>
     </div>
 

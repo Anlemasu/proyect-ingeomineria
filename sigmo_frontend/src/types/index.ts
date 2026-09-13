@@ -232,6 +232,17 @@ export interface DailySummaryPayment {
   total: string
 }
 
+// Desglose "viajes por cliente". `total_value` / `total_volume` llegan como
+// string cuando vienen del backend (DRF serializa Decimal como string) y como
+// number cuando los calcula el frontend (groupTripsByClient) — de ahí la unión.
+export interface TripsByClientRow {
+  client: number
+  client_name: string
+  trips_count: number
+  total_value: number | string
+  total_volume: number | string
+}
+
 export interface DailySummary {
   id: number
   date: string
@@ -241,6 +252,8 @@ export interface DailySummary {
   avg_trip_value: string
   total_expenses: string
   payment_details: DailySummaryPayment[]
+  // Calculado en vivo por el backend desde los viajes activos del cierre.
+  client_details: TripsByClientRow[]
 }
 
 export interface TodaySummary {
@@ -255,6 +268,7 @@ export interface TodaySummary {
     payment_method_name: string
     total: number
   }>
+  trips_by_client: TripsByClientRow[]
 }
 
 export interface AuditLogEntry {
@@ -286,6 +300,7 @@ export interface DailyReportData {
   trips: Trip[]
   expenses: Expense[]
   advancesConsumed: Trip[]
+  tripsByClient: TripsByClientRow[]
   summary: {
     totalTrips: number
     totalCollected: number
