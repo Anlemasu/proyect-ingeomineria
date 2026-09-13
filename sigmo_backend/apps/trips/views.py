@@ -22,6 +22,7 @@ from .services import (
 )
 from apps.advances.models import Advance, AdvanceMovement
 from apps.advances.services import get_active_advance, get_available_balance
+from apps.clients.models import Client
 from apps.cash_closing.models import DailySummary
 from apps.cash_closing.services import resync_if_closed
 from apps.pending_entries.models import PendingEntry
@@ -200,6 +201,26 @@ class TripListCreateView(APIView):
                 insufficient = False
 
                 if payment and payment.is_advance:
+                    # Lock del Client ANTES de decidir si hay anticipo activo
+                    # y si alcanza — sin esto, un viaje que se registra al
+                    # mismo tiempo que se crea un anticipo NUEVO para el
+                    # mismo cliente (p. ej. cliente sin anticipo todavía)
+                    # podía leer "sin anticipo" y quedar como deuda
+                    # pendiente, mientras AdvanceListCreateView.post ya había
+                    # (o estaba por) correr settle_pending_debts — que SÍ
+                    # bloquea esta misma fila de Client — sin ver todavía
+                    # este viaje (que aún no existía/no había comprometido).
+                    # El viaje quedaba huérfano: nadie vuelve a intentar
+                    # liquidarlo hasta que se cree OTRO anticipo futuro para
+                    # ese cliente (TripDetailView.patch rechaza asignar
+                    # `advance` a mano a una deuda pendiente). Bloqueando acá
+                    # la misma fila, las dos operaciones quedan serializadas:
+                    # cualquiera de las dos que gane la carrera, la otra ve
+                    # el estado ya resuelto (el anticipo nuevo ya comprometido,
+                    # o este viaje ya guardado como pendiente y listo para
+                    # que settle_pending_debts lo recoja).
+                    Client.objects.select_for_update().get(pk=client.id)
+
                     # FASE 6.1: select_for_update() sobre el anticipo activo
                     # ANTES de leer su saldo, para que dos registros
                     # concurrentes del mismo cliente no lean el mismo saldo
