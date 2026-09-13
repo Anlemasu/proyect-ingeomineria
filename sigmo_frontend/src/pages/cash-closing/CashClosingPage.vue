@@ -32,9 +32,9 @@ const canManageClosing = computed(() =>
   authStore.user?.role === 'superuser' || authStore.user?.role === 'commercial_admin'
 )
 
-// ── Pestañas — el resumen y el histórico son de solo lectura para todos los
+// ── Pestañas — el resumen y los históricos son de solo lectura para todos los
 // roles; solo ejecutar/revertir cierre queda restringido (canManageClosing).
-const activeTab = ref<'resumen' | 'mensual'>('resumen')
+const activeTab = ref<'resumen' | 'historico' | 'mensual'>('resumen')
 
 // ── Preview del día ───────────────────────────────────────────────────────────
 // Refresco corto (8s) para que el resumen operativo del día se sienta "en
@@ -138,6 +138,19 @@ function exportDetailExcel() {
     toastApiError(err)
   }
 }
+
+// ── Histórico de cierres (diario, todos los roles) — filtro de fecha propio,
+// independiente del rango del histórico mensual ────────────────────────────
+const dailyRangeFrom = usePersistedRef('sigmo_filters_cash_closing_daily_from', '')
+const dailyRangeTo   = usePersistedRef('sigmo_filters_cash_closing_daily_to', '')
+
+const dailyFilteredHistory = computed(() => {
+  return history.value.filter(s => {
+    if (dailyRangeFrom.value && s.date < dailyRangeFrom.value) return false
+    if (dailyRangeTo.value && s.date > dailyRangeTo.value) return false
+    return true
+  })
+})
 
 // ── Histórico mensual (todos los roles) ────────────────────────────────────────
 const rangeFrom = usePersistedRef('sigmo_filters_cash_closing_from', '')
@@ -251,6 +264,16 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
           : 'border-transparent text-gray-500 hover:text-gray-700'"
       >
         Resumen del día
+      </button>
+      <button
+        type="button"
+        @click="activeTab = 'historico'"
+        class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+        :class="activeTab === 'historico'
+          ? 'border-gold-500 text-gold-700'
+          : 'border-transparent text-gray-500 hover:text-gray-700'"
+      >
+        Histórico de cierres
       </button>
       <button
         type="button"
@@ -400,11 +423,26 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
         </div>
       </div>
     </div>
+    </template>
 
-    <!-- ── Histórico de cierres ──────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-100">
+    <!-- ── Histórico de cierres (diario) ───────────────────────────────────── -->
+    <div v-else-if="activeTab === 'historico'" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-sm font-semibold text-gray-800">Histórico de cierres</h2>
+        <div class="flex items-center gap-2 text-sm">
+          <label class="text-xs text-gray-500">Desde</label>
+          <DatePickerInput v-model="dailyRangeFrom" />
+          <label class="text-xs text-gray-500">Hasta</label>
+          <DatePickerInput v-model="dailyRangeTo" />
+          <button
+            v-if="dailyRangeFrom || dailyRangeTo"
+            type="button"
+            @click="dailyRangeFrom = ''; dailyRangeTo = ''"
+            class="text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2"
+          >
+            Limpiar
+          </button>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
@@ -426,13 +464,13 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
                 <RefreshCw class="w-4 h-4 animate-spin inline-block mr-2" />Cargando...
               </td>
             </tr>
-            <tr v-else-if="history.length === 0">
+            <tr v-else-if="dailyFilteredHistory.length === 0">
               <td colspan="7" class="px-4 py-10 text-center text-xs text-gray-400">
                 Sin cierres registrados
               </td>
             </tr>
             <tr
-              v-for="s in history"
+              v-for="s in dailyFilteredHistory"
               :key="s.id"
               class="hover:bg-gray-50 transition-colors"
             >
@@ -473,7 +511,6 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
         </table>
       </div>
     </div>
-    </template>
 
     <!-- ── Histórico mensual (todos los roles) ──────────────────────────── -->
     <div v-else-if="activeTab === 'mensual'" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">

@@ -57,6 +57,10 @@ function generateAdjustmentHtml(
   const registerDate = format(registerDateObj, 'd/MM/yyyy')
   const registerTime = format(registerDateObj, 'HH:mm')
 
+  // Mismo formato que printVoucher.ts: prefijo "IGM - " + consecutivo con
+  // mínimo 3 dígitos (001, 002, ... 999, 1000, ...).
+  const voucherLabel = `IGM - ${String(trip.voucher_num).padStart(3, '0')}`
+
   const posInvoiceValue = posInvoice != null && posInvoice !== '' ? String(posInvoice) : '0'
 
   // QR con el número de vale (misma API pública que printVoucher.ts, requiere
@@ -99,10 +103,10 @@ function generateAdjustmentHtml(
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1mm 2mm 0.5mm;
+    padding: 1mm 2mm 0.5mm 4mm;
     overflow: hidden;
   }
-  .header-logo { height: 8.5mm; width: auto; max-width: 16mm; object-fit: contain; }
+  .header-logo { height: 9.3mm; width: auto; max-width: 20mm; object-fit: contain; }
   .header-title { text-align: center; flex: 1; }
   .header-title .site-name { font-size: 9px; font-weight: bold; margin: 0; }
   .header-title .site-desc {
@@ -111,23 +115,17 @@ function generateAdjustmentHtml(
     margin: 0.5px 0 0;
     white-space: pre-line;
   }
-  .header-comprobante { text-align: center; width: 22mm; }
+  .header-comprobante { text-align: center; width: 26mm; }
   .header-comprobante .label { font-size: 5.5px; color: #333; margin-bottom: 0.4mm; }
   .header-comprobante .num-box {
     border: 1px solid #888;
     color: #c00;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: bold;
-    padding: 0.4mm 0;
+    padding: 0.4mm 1mm;
+    white-space: nowrap;
   }
-  .header-comprobante .caption { font-size: 5.5px; margin-top: 0.4mm; }
-  .licenses { padding: 0.3mm 2mm; font-size: 5px; color: #333; overflow: hidden; }
-  .licenses .lic-title {
-    display: inline-block;
-    width: 18mm;
-    vertical-align: top;
-  }
-  .licenses .lic-list { display: inline-block; }
+  .licenses { padding: 0.3mm 2mm; font-size: 5px; color: #333; overflow: hidden; text-align: center; }
   .licenses .lic-list div { margin: 0.15mm 0; }
   .body {
     display: grid;
@@ -206,12 +204,10 @@ function generateAdjustmentHtml(
     </div>
     <div class="header-comprobante">
       <div class="label">Comprobante de ajuste</div>
-      <div class="num-box">${trip.voucher_num}</div>
-      <div class="caption">ajuste de vale</div>
+      <div class="num-box">${voucherLabel}</div>
     </div>
   </div>
   <div class="licenses">
-    <span class="lic-title">Licencias y registros:</span>
     <span class="lic-list">
       ${SITE_LICENSES.map((l) => `<div>${l}</div>`).join('')}
     </span>

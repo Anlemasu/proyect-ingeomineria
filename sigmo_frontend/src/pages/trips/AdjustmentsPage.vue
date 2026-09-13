@@ -60,17 +60,20 @@ const canViewHistorical = computed(() => isSuperuser.value || isCommercialAdmin.
 const today = todayBogota()
 
 // ── Queries ───────────────────────────────────────────────────────────────────
-// cashier/commercial_admin solo ajustan viajes del día en curso (SAME_DAY_ONLY_ROLES
-// en el backend). superuser puede consultar y ajustar viajes de fechas pasadas (RF-37),
-// por eso solo a ese rol se le muestra el selector de fecha.
-const selectedDate = ref(today)
+// cashier solo ajusta viajes del día en curso (SAME_DAY_ONLY_ROLES en el
+// backend), así que para ese rol el filtro arranca fijo en hoy (ni siquiera
+// ve el selector, ver canViewHistorical). commercial_admin y superuser
+// pueden ajustar viajes de cualquier fecha (RF-37) y normalmente buscan por
+// número de vale en vez de por fecha, por eso para ellos el filtro arranca
+// vacío (sin restringir por fecha) en lugar de forzar el día de hoy.
+const selectedDate = ref(canViewHistorical.value ? '' : today)
 const { data: tripsData, isLoading, refetch } = useQuery({
   queryKey: ['trips-adjustments', selectedDate],
-  queryFn:  () => tripsApi.list({ date: selectedDate.value }).then(r => r.data),
+  queryFn:  () => tripsApi.list({ date: selectedDate.value || undefined }).then(r => r.data),
   refetchInterval: 30_000,
 })
 const trips = computed(() => tripsData.value ?? [])
-const isHistoricalView = computed(() => selectedDate.value !== today)
+const isHistoricalView = computed(() => !!selectedDate.value && selectedDate.value !== today)
 // commercial_admin en vista histórica: solo puede editar Observaciones,
 // todo lo demás del drawer queda bloqueado (superuser sigue sin restricción).
 const observationsOnlyMode = computed(() =>
@@ -373,7 +376,7 @@ function confirmPrint() {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="flex flex-col min-h-[calc(100vh-88px)] lg:min-h-[calc(100vh-104px)] space-y-6">
     <PageHeader
       title="Ajustes del Día"
       subtitle="Corrección de viajes antes del cierre de caja"
@@ -391,11 +394,12 @@ function confirmPrint() {
           class="pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400 w-full sm:w-56"
         />
       </div>
-      <DatePickerInput
-        v-if="canViewHistorical"
-        v-model="selectedDate"
-        :max="today"
-      />
+      <div v-if="canViewHistorical" class="w-full sm:w-auto">
+        <DatePickerInput
+          v-model="selectedDate"
+          :max="today"
+        />
+      </div>
       <span v-if="isHistoricalView" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
         <AlertTriangle class="w-3 h-3" />Vista histórica
       </span>
@@ -407,31 +411,33 @@ function confirmPrint() {
       >
         <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-gold-600' : ''" />
       </button>
-      <button
-        type="button"
-        @click="handleCopy"
-        class="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-        title="Copiar tabla al portapapeles"
-      >
-        <Copy class="w-4 h-4" />Copiar
-      </button>
-      <button
-        type="button"
-        @click="handleExportExcel"
-        class="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-        title="Exportar tabla a Excel"
-      >
-        <FileSpreadsheet class="w-4 h-4" />Exportar Excel
-      </button>
-      <span class="text-xs text-gray-400 sm:ml-auto">
-        {{ filteredTrips.length }} viaje{{ filteredTrips.length !== 1 ? 's' : '' }} —
-        {{ filteredTrips.filter(t => t.state).length }} activo{{ filteredTrips.filter(t => t.state).length !== 1 ? 's' : '' }}
-      </span>
+      <div class="flex items-center gap-2 sm:ml-auto w-full sm:w-auto">
+        <button
+          type="button"
+          @click="handleCopy"
+          class="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          title="Copiar tabla al portapapeles"
+        >
+          <Copy class="w-4 h-4" />Copiar
+        </button>
+        <button
+          type="button"
+          @click="handleExportExcel"
+          class="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          title="Exportar tabla a Excel"
+        >
+          <FileSpreadsheet class="w-4 h-4" />Exportar Excel
+        </button>
+      </div>
     </div>
 
     <!-- Tabla de viajes -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
-      <div class="overflow-auto max-h-[65vh]">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden flex-1 min-h-0 flex flex-col">
+      <div class="px-4 py-2 border-b border-gray-100 text-xs text-gray-400 shrink-0">
+        {{ filteredTrips.length }} viaje{{ filteredTrips.length !== 1 ? 's' : '' }} —
+        {{ filteredTrips.filter(t => t.state).length }} activo{{ filteredTrips.filter(t => t.state).length !== 1 ? 's' : '' }}
+      </div>
+      <div class="overflow-auto flex-1 min-h-0">
         <table ref="tableEl" class="w-full text-sm" style="table-layout: fixed">
           <colgroup>
             <col v-for="c in ADJ_COLUMNS" :key="c.id" :style="{ width: colWidths[c.id] + 'px' }" />

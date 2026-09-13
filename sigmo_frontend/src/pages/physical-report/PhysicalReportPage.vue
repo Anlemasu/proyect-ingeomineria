@@ -166,6 +166,7 @@ const registerMutation = useMutation({
     toast.success('Conteo físico guardado correctamente.')
     invalidateLists()
     qc.invalidateQueries({ queryKey: ['physical-report-detail'] })
+    closeEntryModal()
   },
   onError: (err) => toastApiError(err),
 })
