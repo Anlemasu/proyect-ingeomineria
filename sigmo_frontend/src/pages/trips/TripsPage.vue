@@ -263,9 +263,12 @@ watch([clientId, vehicleTypeId], ([c, v]) => {
   else { tariffMode.value = null }
 })
 
-// ── Saldo total de anticipos del cliente ──────────────────────────────────────
+// ── Deuda pendiente del cliente ────────────────────────────────────────────
 // refetchInterval corto: si otro usuario/pestaña registra un viaje o anticipo
 // para este mismo cliente, el saldo se refleja aquí sin recargar la página.
+// El "saldo disponible" mostrado en el formulario NO sale de aquí (net_balance
+// es el acumulado de todos los anticipos del cliente) sino del anticipo activo
+// (ver activeAdvance/advanceBalance más abajo).
 const { data: clientBalanceData } = useQuery({
   queryKey: computed(() => ['advance-balance', clientId.value]),
   queryFn: () => clientId.value
@@ -274,12 +277,6 @@ const { data: clientBalanceData } = useQuery({
   enabled: computed(() => !!clientId.value),
   refetchInterval: 8_000,
 })
-// net_balance = saldo de anticipos - deuda pendiente (ver AdvanceBalanceView
-// en el backend) — antes esto leía `.balance`, un campo que el backend
-// nunca devolvió, así que este indicador jamás llegaba a mostrarse.
-const clientBalance = computed(() =>
-  clientBalanceData.value ? Number(clientBalanceData.value.net_balance) : null
-)
 const clientPendingDebt = computed(() =>
   clientBalanceData.value ? Number(clientBalanceData.value.total_pending_debt) : 0
 )
@@ -525,12 +522,16 @@ const onSubmit = handleSubmit(async (values) => {
               :clearable="true"
             />
             <p v-if="clientError" class="mt-1 text-xs text-red-500">{{ clientError }}</p>
-            <div v-if="clientId && clientBalance !== null" class="mt-1.5 space-y-0.5">
+            <div v-if="clientId" class="mt-1.5 space-y-0.5">
               <span
+                v-if="hasActiveAdvance"
                 class="block text-xs font-medium"
-                :class="clientBalance > 0 ? 'text-green-600' : 'text-red-500'"
+                :class="(advanceBalance ?? 0) > 0 ? 'text-green-600' : 'text-red-500'"
               >
-                Saldo disponible: {{ formatCurrency(clientBalance) }}
+                Saldo disponible: {{ formatCurrency(advanceBalance ?? 0) }}
+              </span>
+              <span v-else class="block text-xs font-medium text-gray-500">
+                Sin anticipo activo
               </span>
               <span v-if="clientPendingDebt > 0" class="block text-xs font-medium text-amber-600">
                 Deuda pendiente por liquidar: {{ formatCurrency(clientPendingDebt) }}

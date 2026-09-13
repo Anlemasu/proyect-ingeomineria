@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, h, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, h, onBeforeUnmount, nextTick } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import {
@@ -11,12 +11,12 @@ import {
 import {
   Search, FilterX, SlidersHorizontal, FileSpreadsheet, Printer, Copy,
   ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, GripVertical,
+  Plus, X,
 } from 'lucide-vue-next'
 
 import PageHeader from '@/components/shared/PageHeader.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import DatePickerInput from '@/components/shared/DatePickerInput.vue'
-import { usePersistedFilters } from '@/composables/usePersistedFilters'
 
 import { tripsApi } from '@/api/trips.api'
 import { clientsApi } from '@/api/clients.api'
@@ -287,7 +287,76 @@ function emptyFilters(): FilterState {
   }
 }
 
-const filters = usePersistedFilters<FilterState>('sigmo_filters_general_report', emptyFilters())
+// ── Pestañas de consulta (localStorage, por navegador) ──────────────────────
+// Cada pestaña es una consulta independiente (sus propios filtros y su propio
+// resultado, ver `filters`/`appliedFilters` más abajo): cambiar de pestaña no
+// toca las demás, igual que pestañas reales del navegador. Todas se llaman
+// igual ("Consulta de viajes", sin numerar ni renombrar) y una pestaña nueva
+// arranca en blanco, como si se abriera la página de cero.
+interface QueryTab {
+  id: string
+  label: string
+  filters: FilterState
+  appliedFilters: FilterState | null
+}
+
+const TABS_STORAGE_KEY = 'sigmo_query_tabs_general_report'
+const ACTIVE_TAB_STORAGE_KEY = 'sigmo_active_tab_general_report'
+
+function makeTabId(): string {
+  return `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function blankTab(): QueryTab {
+  return { id: makeTabId(), label: 'Consulta de viajes', filters: emptyFilters(), appliedFilters: null }
+}
+
+function loadTabs(): QueryTab[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(TABS_STORAGE_KEY) ?? 'null')
+    if (Array.isArray(stored) && stored.length > 0) return stored as QueryTab[]
+  } catch {
+    // cae al valor por defecto
+  }
+  return [blankTab()]
+}
+
+const tabs = ref<QueryTab[]>(loadTabs())
+function persistTabs() {
+  try {
+    localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(tabs.value))
+  } catch {
+    // localStorage no disponible — las pestañas no sobreviven a un recargo
+  }
+}
+persistTabs()
+
+function loadActiveTabId(): string {
+  let stored: string | null = null
+  try {
+    stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY)
+  } catch {
+    stored = null
+  }
+  return (stored && tabs.value.some(t => t.id === stored)) ? stored : tabs.value[0].id
+}
+
+const activeTabId = ref<string>(loadActiveTabId())
+function persistActiveTabId() {
+  try {
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTabId.value)
+  } catch {
+    // noop
+  }
+}
+persistActiveTabId()
+
+const initialActiveTab = tabs.value.find(t => t.id === activeTabId.value) ?? tabs.value[0]
+
+// `filters`/`appliedFilters` son el estado EN VIVO de la pestaña activa; los
+// watch() más abajo los reflejan de vuelta a `tabs` en cada cambio, para que
+// cambiar de pestaña (o recargar la página) no pierda nada.
+const filters = reactive<FilterState>({ ...initialActiveTab.filters })
 
 const activeFilterCount = computed(() => {
   let n = 0
@@ -305,7 +374,7 @@ const activeFilterCount = computed(() => {
 })
 
 // ── Consulta (server-side: date_from, date_to, client, state — resto client-side) ──
-const appliedFilters = ref<FilterState | null>(null)
+const appliedFilters = ref<FilterState | null>(initialActiveTab.appliedFilters)
 const hasQueried = computed(() => appliedFilters.value !== null)
 
 function buildServerParams(f: FilterState) {
@@ -325,11 +394,66 @@ const { data: rawTripsData, isLoading, isError, error } = useQuery({
 
 function runQuery() {
   appliedFilters.value = { ...filters }
+  // Sin esto, correr una consulta con la tabla en una página avanzada podía
+  // dejarla mostrando "sin resultados" hasta volver manualmente a la página 1.
+  pageIndex.value = 0
 }
 
 function clearFilters() {
   Object.assign(filters, emptyFilters())
   appliedFilters.value = null
+}
+
+watch(filters, () => {
+  const idx = tabs.value.findIndex(t => t.id === activeTabId.value)
+  if (idx === -1) return
+  tabs.value[idx] = { ...tabs.value[idx], filters: { ...filters } }
+  persistTabs()
+}, { deep: true })
+
+watch(appliedFilters, () => {
+  const idx = tabs.value.findIndex(t => t.id === activeTabId.value)
+  if (idx === -1) return
+  tabs.value[idx] = { ...tabs.value[idx], appliedFilters: appliedFilters.value }
+  persistTabs()
+})
+
+function loadTabIntoLiveState(tab: QueryTab) {
+  Object.assign(filters, tab.filters)
+  appliedFilters.value = tab.appliedFilters
+  pageIndex.value = 0
+  sorting.value = []
+  columnFilters.value = []
+}
+
+function selectTab(tab: QueryTab) {
+  if (tab.id === activeTabId.value) return
+  activeTabId.value = tab.id
+  persistActiveTabId()
+  loadTabIntoLiveState(tab)
+}
+
+function addTab() {
+  const tab = blankTab()
+  tabs.value = [...tabs.value, tab]
+  persistTabs()
+  activeTabId.value = tab.id
+  persistActiveTabId()
+  loadTabIntoLiveState(tab)
+}
+
+function removeTab(tab: QueryTab) {
+  if (tabs.value.length <= 1) return
+  const idx = tabs.value.findIndex(t => t.id === tab.id)
+  const wasActive = tab.id === activeTabId.value
+  tabs.value = tabs.value.filter(t => t.id !== tab.id)
+  persistTabs()
+  if (wasActive) {
+    const fallback = tabs.value[Math.max(0, idx - 1)] ?? tabs.value[0]
+    activeTabId.value = fallback.id
+    persistActiveTabId()
+    loadTabIntoLiveState(fallback)
+  }
 }
 
 function applyClientFilters(trips: Trip[], f: FilterState): Trip[] {
@@ -531,13 +655,28 @@ function handleExportPdf() {
 }
 
 const tableEl = ref<HTMLTableElement | null>(null)
+
+// ── Copiar: todas las filas filtradas/ordenadas, no solo la página visible ──
+// La tabla visible solo pinta table.getRowModel().rows (paginado). Excel/PDF
+// ya exportan bien porque usan sortedRows (sin el slice de paginación); Copiar
+// leía el DOM de la tabla visible y por eso solo copiaba la página actual. Se
+// monta bajo demanda una tabla oculta con getSortedRowModel().rows (mismos
+// ColumnDef/FlexRender que la visible, para que el texto copiado coincida con
+// lo que se ve en pantalla) y se lee esa en vez de la paginada.
+const exportTableEl = ref<HTMLTableElement | null>(null)
+const isPreparingCopy = ref(false)
+
 async function handleCopy() {
-  if (!tableEl.value) return
+  isPreparingCopy.value = true
+  await nextTick()
   try {
-    await copyTableToClipboard(tableEl.value)
+    if (!exportTableEl.value) return
+    await copyTableToClipboard(exportTableEl.value)
     toast.success('Tabla copiada al portapapeles')
   } catch {
     toast.error('No se pudo copiar la tabla')
+  } finally {
+    isPreparingCopy.value = false
   }
 }
 </script>
@@ -548,6 +687,42 @@ async function handleCopy() {
 
     <!-- ── Barra de filtros ───────────────────────────────────────────────── -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6">
+      <!-- ── Pestañas de consulta ───────────────────────────────────────────── -->
+      <div class="flex flex-wrap items-center gap-2 mb-5 pb-5 border-b border-gray-100">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          type="button"
+          @click="selectTab(tab)"
+          class="group flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 text-sm rounded-full border transition-colors"
+          :class="activeTabId === tab.id
+            ? 'bg-gold-500 border-gold-500 text-stone-900 font-medium'
+            : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'"
+        >
+          <span>{{ tab.label }}</span>
+          <span
+            v-if="tabs.length > 1"
+            role="button"
+            tabindex="0"
+            title="Cerrar pestaña"
+            @click.stop="removeTab(tab)"
+            @keydown.enter.stop="removeTab(tab)"
+            class="p-0.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-black/10 transition-opacity"
+          >
+            <X class="w-3 h-3" />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          @click="addTab"
+          title="Nueva pestaña de consulta"
+          class="flex items-center gap-1 px-3 py-1.5 text-sm text-gold-700 border border-dashed border-gold-300 rounded-full hover:bg-gold-50 transition-colors"
+        >
+          <Plus class="w-3.5 h-3.5" /> Nueva pestaña
+        </button>
+      </div>
+
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha desde</label>
@@ -716,7 +891,10 @@ async function handleCopy() {
 
     <!-- ── Tabla ──────────────────────────────────────────────────────────── -->
     <div v-else class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
-      <div class="overflow-auto max-h-[65vh]">
+      <!-- Altura FIJA (no max-h): mismo ajuste que en DataTable.vue — con solo
+           un tope máximo, una página corta encoge la caja y la paginación se
+           mueve con ella. -->
+      <div class="overflow-auto h-[65vh]">
         <table ref="tableEl" class="w-full text-sm" style="table-layout: fixed">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr class="sticky top-0 z-20 bg-gray-50 divide-x divide-gray-200">
@@ -816,6 +994,23 @@ async function handleCopy() {
           </tfoot>
         </table>
       </div>
+
+      <table v-if="isPreparingCopy" ref="exportTableEl" class="hidden">
+        <thead>
+          <tr>
+            <th v-for="header in table.getHeaderGroups()[0].headers" :key="header.id">
+              <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in table.getSortedRowModel().rows" :key="row.id">
+            <td v-for="cell in row.getVisibleCells()" :key="cell.id">
+              <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       <!-- ── Paginación ─────────────────────────────────────────────────────── -->
       <div v-if="totalFilteredCount > 0" class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-gray-100 text-sm text-gray-600">

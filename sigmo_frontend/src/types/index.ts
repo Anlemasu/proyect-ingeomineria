@@ -174,6 +174,9 @@ export interface Advance {
   // el backend desde el AdvanceMovement de ingreso inicial (ver
   // AdvanceSerializer.get_trips_quantity). Editable vía advancesApi.update.
   trips_quantity: number
+  // true si es el anticipo más reciente del cliente (ver get_active_advance
+  // en el backend); cualquier otro está congelado permanentemente.
+  is_active: boolean
   movements: AdvanceMovement[]
 }
 

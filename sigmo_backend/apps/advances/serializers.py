@@ -3,7 +3,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from .models import Advance, AdvanceMovement
 from apps.clients.serializers import ClientSerializer
-from .services import get_available_balance
+from .services import get_active_advance, get_available_balance
 
 
 class AdvanceMovementSerializer(serializers.ModelSerializer):
@@ -75,6 +75,10 @@ class AdvanceSerializer(serializers.ModelSerializer):
     # en Advance, ver get_trips_quantity más abajo.
     trips_quantity = serializers.SerializerMethodField()
 
+    # Anticipo activo = el más reciente del cliente (ver get_active_advance);
+    # cualquier otro queda congelado. Ver get_is_active más abajo.
+    is_active = serializers.SerializerMethodField()
+
     class Meta:
         model = Advance
         fields = [
@@ -89,9 +93,12 @@ class AdvanceSerializer(serializers.ModelSerializer):
             'observations',
             'available_balance',
             'trips_quantity',
+            'is_active',
             'movements',
         ]
-        read_only_fields = ['id', 'user', 'available_balance', 'trips_quantity', 'movements']
+        read_only_fields = [
+            'id', 'user', 'available_balance', 'trips_quantity', 'is_active', 'movements',
+        ]
 
     def get_trips_quantity(self, obj):
         """
@@ -163,6 +170,21 @@ class AdvanceSerializer(serializers.ModelSerializer):
                     for field in locked_fields
                 })
         return data
+
+    def get_is_active(self, obj):
+        """
+        True si `obj` es el anticipo activo de su cliente (el más reciente,
+        ver get_active_advance). FASE 6.2: si el queryset trajo
+        `active_advance_ids` precalculado en el context (ver
+        AdvanceListCreateView.get), lo usa directo en vez de consultar la
+        base de datos por cada anticipo de la lista (N+1) — mismo patrón que
+        get_available_balance con `_annotated_ingresos`/`_annotated_egresos`.
+        """
+        active_ids = self.context.get('active_advance_ids')
+        if active_ids is not None:
+            return obj.id in active_ids
+        active_advance = get_active_advance(obj.client)
+        return active_advance is not None and active_advance.id == obj.id
 
     def get_available_balance(self, obj):
         """

@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   useVueTable,
@@ -105,23 +105,45 @@ watch(pageSize, () => { pageIndex.value = 0 })
 watch(() => props.data, () => { pageIndex.value = 0 })
 
 const tableEl = ref<HTMLTableElement | null>(null)
+
+// ── Copiar/Exportar: todas las filas filtradas/ordenadas, no solo la página
+// visible ────────────────────────────────────────────────────────────────
+// El <table> visible solo pinta table.getRowModel().rows (paginado), así que
+// copyTableToClipboard/exportTableToExcel -que leen texto directo del DOM-
+// no pueden usarlo. En su lugar se monta bajo demanda una tabla oculta con
+// getSortedRowModel().rows (todas las filas que cumplen el filtro/búsqueda
+// actual, ordenadas, sin el slice de paginación) usando los mismos
+// ColumnDef/FlexRender que la tabla visible, para que el texto copiado
+// coincida exactamente con lo que se ve en pantalla (badges, formatos,
+// etc.) en vez de reimplementar el formateo de cada columna a mano.
+const exportTableEl = ref<HTMLTableElement | null>(null)
+const isPreparingExport = ref(false)
+
 async function handleCopy() {
-  if (!tableEl.value) return
+  isPreparingExport.value = true
+  await nextTick()
   try {
-    await copyTableToClipboard(tableEl.value)
+    if (!exportTableEl.value) return
+    await copyTableToClipboard(exportTableEl.value)
     toast.success('Tabla copiada al portapapeles')
   } catch {
     toast.error('No se pudo copiar la tabla')
+  } finally {
+    isPreparingExport.value = false
   }
 }
 
-function handleExportExcel() {
-  if (!tableEl.value) return
+async function handleExportExcel() {
+  isPreparingExport.value = true
+  await nextTick()
   try {
-    exportTableToExcel(tableEl.value, props.exportFilename ?? 'Export_SIGMO')
+    if (!exportTableEl.value) return
+    exportTableToExcel(exportTableEl.value, props.exportFilename ?? 'Export_SIGMO')
     toast.success('Tabla exportada a Excel')
   } catch {
     toast.error('No se pudo exportar la tabla')
+  } finally {
+    isPreparingExport.value = false
   }
 }
 </script>
@@ -162,7 +184,10 @@ function handleExportExcel() {
       </button>
     </div>
 
-    <div class="border border-stone-200 rounded-lg overflow-auto bg-white max-h-[65vh]">
+    <!-- Altura FIJA (no max-h): con solo un tope máximo, la caja se encoge en
+         páginas con menos filas (ej. la última) y todo lo de abajo —la
+         paginación— sube con ella, un salto molesto al cambiar de página. -->
+    <div class="border border-stone-200 rounded-lg overflow-auto bg-white h-[65vh]">
       <table ref="tableEl" class="w-full text-sm">
         <thead class="bg-gold-50 border-b-2 border-gold-200 sticky top-0 z-10">
           <tr class="divide-x divide-gold-200/70">
@@ -231,6 +256,23 @@ function handleExportExcel() {
         </tbody>
       </table>
     </div>
+
+    <table v-if="isPreparingExport" ref="exportTableEl" class="hidden">
+      <thead>
+        <tr>
+          <th v-for="header in table.getHeaderGroups()[0].headers" :key="header.id">
+            <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="row in table.getSortedRowModel().rows" :key="row.id">
+          <td v-for="cell in row.getVisibleCells()" :key="cell.id">
+            <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
+          </td>
+        </tr>
+      </tbody>
+    </table>
 
     <div class="flex flex-wrap items-center justify-between gap-2 text-sm text-stone-600">
       <span>

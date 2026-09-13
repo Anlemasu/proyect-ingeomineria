@@ -38,14 +38,33 @@ class AdvanceListCreateView(APIView):
     @extend_schema(summary="Listar anticipos registrados, con filtro opcional por cliente.")
     def get(self, request):
         """Listar anticipos registrados, con filtro opcional por cliente."""
-        advances = Advance.objects.select_related('client', 'user').all().order_by('-date')
+        advances = Advance.objects.select_related('client', 'user').all().order_by('-date', '-id')
         client_id = request.query_params.get('client')
         if client_id:
             advances = advances.filter(client_id=client_id)
         # FASE 6.2: saldo de todos los anticipos en una sola consulta
         # agregada en vez de una query por anticipo (ver AdvanceSerializer).
-        advances = annotate_available_balance(advances)
-        serializer = AdvanceSerializer(advances, many=True)
+        advances = list(annotate_available_balance(advances))
+
+        # El anticipo "activo" de un cliente es el más reciente (mismo
+        # criterio que get_active_advance: mayor date y, a igualdad, mayor
+        # id) — como el queryset ya viene ordenado así, el primero visto por
+        # cliente es el activo. Se calcula acá en vez de un SerializerMethodField
+        # sin contexto para no disparar una query por anticipo (N+1): esto es
+        # justo lo que consume el panel "Anticipos próximos a agotarse" del
+        # Dashboard, que antes no distinguía un anticipo activo de uno
+        # congelado y por eso seguía mostrando anticipos viejos con saldo
+        # residual bajo aunque el cliente ya tuviera uno nuevo sano.
+        seen_clients = set()
+        active_advance_ids = set()
+        for adv in advances:
+            if adv.client_id not in seen_clients:
+                seen_clients.add(adv.client_id)
+                active_advance_ids.add(adv.id)
+
+        serializer = AdvanceSerializer(
+            advances, many=True, context={'active_advance_ids': active_advance_ids}
+        )
         return Response(serializer.data)
 
     @extend_schema(summary="Registrar un nuevo anticipo para un cliente.")

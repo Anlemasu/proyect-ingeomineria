@@ -156,7 +156,10 @@ const {
 const advances = computed(() => advancesData.value ?? [])
 
 const lowBalanceAdvances = computed(() => advances.value
-  .filter(a => a.available_balance > 0 && a.available_balance < Number(a.value) * 0.30)
+  // Solo el anticipo ACTIVO de cada cliente (ver Advance.is_active en el
+  // backend): uno congelado (reemplazado por uno nuevo) no debe seguir
+  // apareciendo acá aunque le haya quedado un saldo residual bajo.
+  .filter(a => a.is_active && a.available_balance > 0 && a.available_balance < Number(a.value) * 0.30)
   .sort((a, b) => a.available_balance - b.available_balance)
   .slice(0, 15)
   .map(a => ({
