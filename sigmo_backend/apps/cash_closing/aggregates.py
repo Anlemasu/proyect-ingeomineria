@@ -6,8 +6,14 @@ def _row(r):
         'client': r['client'],
         'client_name': r['client__name'],
         'trips_count': r['trips_count'],
-        'total_value': r['total_value'] or 0,
-        'total_volume': r['total_volume'] or 0,
+        # str(): Sum() sobre un DecimalField devuelve Decimal, no el 'or 0'
+        # de abajo (int) — sin convertir, un Decimal crudo llegaba intacto
+        # hasta AuditLog.new_data (ver DailySummarySerializer.client_details,
+        # un SerializerMethodField que DRF no coerciona como sí hace con los
+        # DecimalField declarados) y json.dumps no sabe serializarlo. Mismo
+        # formato string que ya esperaba el frontend (ver TripsByClientRow).
+        'total_value': str(r['total_value'] or 0),
+        'total_volume': str(r['total_volume'] or 0),
     }
 
 

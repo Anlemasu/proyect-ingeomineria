@@ -939,6 +939,12 @@ class ConcurrentClientChangeReallocationRaceTests(TransactionTestCase):
         try:
             return api.patch(f'/api/trips/{trip_id}/', {
                 'client': self.target_client.id,
+                # Por si a este hilo le toca perder la carrera por el
+                # anticipo destino y queda sin saldo suficiente: sin esto
+                # el ajuste se rechazaría con 400 en vez de quedar como
+                # deuda pendiente (mismo motivo que en
+                # ConcurrentTripAdvanceBalanceCheckTests._post_trip).
+                'justification': 'Posible saldo insuficiente bajo concurrencia',
             }, format='json')
         finally:
             connection.close()

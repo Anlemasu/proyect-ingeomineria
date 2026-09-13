@@ -1,3 +1,4 @@
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from apps.users.models import User
 
@@ -37,9 +38,17 @@ class AuditLog(models.Model):
     # ID del registro afectado
     object_id = models.IntegerField(null=True, blank=True)
 
-    # Valores anteriores y nuevos en JSON (para modificaciones)
-    previous_data = models.JSONField(null=True, blank=True)
-    new_data = models.JSONField(null=True, blank=True)
+    # Valores anteriores y nuevos en JSON (para modificaciones).
+    # encoder=DjangoJSONEncoder (no el json.dumps plano que usa JSONField por
+    # defecto): los callers de log_action arman estos dicts a mano o desde
+    # serializers, y ya hubo un caso real (DailySummarySerializer.client_details,
+    # un SerializerMethodField que DRF no coerciona igual que a sus DecimalField
+    # declarados) donde un Decimal crudo se coló y tumbó el guardado del log con
+    # TypeError. DjangoJSONEncoder sabe convertir Decimal/date/datetime/UUID —
+    # cierra esa clase de bug para cualquier otro caller futuro, no solo el que
+    # ya se corrigió en la fuente.
+    previous_data = models.JSONField(null=True, blank=True, encoder=DjangoJSONEncoder)
+    new_data = models.JSONField(null=True, blank=True, encoder=DjangoJSONEncoder)
 
     # IP del cliente
     ip_address = models.CharField(max_length=45, null=True, blank=True)

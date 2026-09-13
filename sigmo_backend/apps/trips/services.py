@@ -19,6 +19,28 @@ class InsufficientBalanceError(Exception):
         super().__init__('Saldo insuficiente.')
 
 
+class InsufficientBalanceForClientChangeError(Exception):
+    """
+    Al cambiar el cliente de un viaje, el anticipo activo del cliente NUEVO
+    no alcanza a cubrir el valor y no vino justificación.
+
+    Se levanta DENTRO de reallocate_advance_on_client_change, después de
+    bloquear la fila del Client destino con select_for_update() — no antes
+    del atomic. Bloquear primero y decidir después es lo que evita la
+    carrera: dos cambios de cliente concurrentes hacia el MISMO cliente
+    destino ya no pueden leer ambos el mismo saldo "viejo" y concluir los
+    dos que alcanza (o los dos que no). El primero en tomar el lock decide
+    con el saldo real; el segundo espera, y cuando le toca, ve el saldo ya
+    actualizado por el primero.
+    """
+
+    def __init__(self, balance: Decimal, required: Decimal):
+        self.balance = balance
+        self.required = required
+        self.difference = required - balance
+        super().__init__('Saldo insuficiente para el nuevo cliente.')
+
+
 class UnsupportedAdvanceChangeError(Exception):
     """
     Cambiar el campo `advance` directamente (a otro anticipo, o a NULL) en un
@@ -256,9 +278,19 @@ def reallocate_advance_on_client_change(
         )
 
     if trip.payment.is_advance:
+        # 9.1 (extendido): el lock del Client destino ya serializaba el
+        # DESCUENTO entre cambios de cliente concurrentes hacia el mismo
+        # destino; ahora también sirve de base para decidir "hace falta
+        # justificación" contra el saldo real, no uno leído antes del
+        # atomic (que un cambio de cliente concurrente hacia este mismo
+        # destino podría haber dejado obsoleto). Ver
+        # InsufficientBalanceForClientChangeError.
         Client.objects.select_for_update().get(pk=trip.client_id)
         new_advance = get_active_advance(trip.client)
         available = get_available_balance(new_advance) if new_advance else Decimal('0')
+
+        if trip.value > available and not justification:
+            raise InsufficientBalanceForClientChangeError(available, trip.value)
 
         if trip.value <= available:
             balance_before = available

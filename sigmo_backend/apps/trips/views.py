@@ -17,6 +17,7 @@ from .services import (
     reallocate_advance_on_client_change,
     reverse_advance_discount,
     InsufficientBalanceError,
+    InsufficientBalanceForClientChangeError,
     UnsupportedAdvanceChangeError,
 )
 from apps.advances.models import Advance, AdvanceMovement
@@ -492,29 +493,19 @@ class TripDetailView(APIView):
         # diferencia — el saldo se devuelve completo al cliente anterior y
         # el viaje se reevalúa desde cero contra el anticipo activo del
         # cliente nuevo (reallocate_advance_on_client_change), con las
-        # mismas reglas que un registro nuevo. Se valida ANTES del atomic,
-        # igual que en TripListCreateView.post, para devolver un 400 claro
-        # sin haber escrito nada si el nuevo cliente no alcanza y no vino
-        # justificación.
+        # mismas reglas que un registro nuevo.
+        #
+        # 9.1 (extendido): a diferencia de TripListCreateView.post (donde el
+        # chequeo de saldo ya vive DENTRO del atomic, tras el lock), este
+        # chequeo se hacía acá ANTES del atomic, sin lock — dos cambios de
+        # cliente concurrentes hacia el MISMO cliente destino podían leer el
+        # mismo saldo "viejo" y ambos concluir que alcanzaba (o que no). Se
+        # movió a reallocate_advance_on_client_change, que ya bloqueaba la
+        # fila del Client destino para el descuento: ahora también decide
+        # ahí si hace falta justificación, contra el saldo real post-lock
+        # (ver InsufficientBalanceForClientChangeError, capturada más abajo).
         new_client = serializer.validated_data.get('client', obj.client)  # type: ignore
         client_changed = new_client.id != obj.client_id and not is_annulment
-
-        if client_changed:
-            new_payment_check = serializer.validated_data.get('payment', obj.payment)  # type: ignore
-            if new_payment_check.is_advance:
-                new_value_check = serializer.validated_data.get('value', obj.value)  # type: ignore
-                candidate_advance = get_active_advance(new_client)
-                candidate_balance = get_available_balance(candidate_advance) if candidate_advance else Decimal('0')
-                if new_value_check > candidate_balance and not justification:
-                    return Response({
-                        'error': (
-                            'Saldo del anticipo insuficiente para el nuevo cliente. '
-                            'Debe justificar el ajuste para guardarlo como deuda pendiente.'
-                        ),
-                        'saldo_disponible': str(candidate_balance),
-                        'valor_viaje': str(new_value_check),
-                        'diferencia': str(new_value_check - candidate_balance),
-                    }, status=status.HTTP_400_BAD_REQUEST)
 
         # FASE 3: un viaje en deuda pendiente (payment.is_advance=True,
         # advance=NULL) solo puede quedar liquidado a través de
@@ -631,6 +622,16 @@ class TripDetailView(APIView):
                 'error': 'Saldo insuficiente para aplicar este cambio.',
                 'saldo_disponible': str(e.balance),
                 'valor_requerido': str(e.required),
+                'diferencia': str(e.difference),
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except InsufficientBalanceForClientChangeError as e:
+            return Response({
+                'error': (
+                    'Saldo del anticipo insuficiente para el nuevo cliente. '
+                    'Debe justificar el ajuste para guardarlo como deuda pendiente.'
+                ),
+                'saldo_disponible': str(e.balance),
+                'valor_viaje': str(e.required),
                 'diferencia': str(e.difference),
             }, status=status.HTTP_400_BAD_REQUEST)
         except UnsupportedAdvanceChangeError:
