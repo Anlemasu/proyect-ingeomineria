@@ -331,6 +331,138 @@ class TripClientChangeReversalTests(TripAdvanceFixturesMixin, TestCase):
         self.assertTrue(AuditLog.objects.filter(action='update', model_name='Advance', object_id=other_advance.id).exists())
 
 
+class PaymentEnteringAdvanceTests(TestCase):
+    """
+    9.7A — antes de este fix, cambiar el medio de pago de un viaje de uno
+    NO-anticipo a uno de tipo anticipo (por primera vez, sin haber estado
+    nunca financiado ni como deuda pendiente) solo cambiaba el campo
+    `payment`: no validaba saldo, no creaba el AdvanceMovement, y no
+    vinculaba `trip.advance` al anticipo activo del cliente. El viaje
+    quedaba con la misma huella que una deuda pendiente
+    (payment.is_advance=True, advance=NULL) pero sin que nada hubiera
+    decidido eso a propósito, y el anticipo del cliente seguía mostrando su
+    saldo completo disponible.
+
+    Escenario reportado: 5 viajes registrados por transferencia (sin
+    anticipo), LUEGO se crea un anticipo para el cliente, LUEGO se ajustan
+    los 5 viajes a medio de pago 'anticipo' — deben vincularse al anticipo
+    recién creado, igual que si el cliente hubiera tenido el anticipo desde
+    el principio.
+
+    No usa TripAdvanceFixturesMixin a propósito: ese mixin ya crea un
+    anticipo en el setUp, y este escenario depende de que el cliente
+    arranque SIN ningún anticipo.
+    """
+
+    def setUp(self):
+        self.superuser = User.objects.create_user(
+            username='pea_super', email='pea_super@test.com', name='Super',
+            role='superuser', password='x12345',
+        )
+        owner = User.objects.create_user(
+            username='pea_owner', email='pea_owner@test.com', name='Owner',
+            role='commercial_admin', password='x12345',
+        )
+        self.client_obj = Client.objects.create(
+            user=owner, nit='900700099', name='Cliente 97A', abrev_name='C97A',
+            address='Calle 1', phone=3000000088,
+        )
+        vehicle_type = VehicleType.objects.create(name='Volqueta', capacity=Decimal('10.00'))
+        self.vehicle = Vehicle.objects.create(vehicle_type=vehicle_type, plaque='NEW97A')
+        self.material = MaterialType.objects.create(name='Material Test')
+        self.origin = OriginSite.objects.create(name='Origen Test')
+        self.payment_transfer = PaymentMethod.objects.create(name='Transferencia', is_advance=False)
+        self.payment_advance = PaymentMethod.objects.create(name='Anticipo', is_advance=True)
+        self.today = timezone.localdate()
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.superuser)
+
+    def _create_transfer_trip(self, value):
+        resp = self.api.post('/api/trips/', {
+            'payment': self.payment_transfer.id,
+            'origin_site': self.origin.id,
+            'material_type': self.material.id,
+            'client': self.client_obj.id,
+            'vehicle': self.vehicle.id,
+            'value': value,
+            'date': str(self.today),
+        }, format='json')
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        return resp.data['id']
+
+    def _create_advance(self, value, transfer_num):
+        resp = self.api.post('/api/advances/', {
+            'client': self.client_obj.id, 'value': value,
+            'transfer_num': transfer_num, 'date': str(self.today),
+        }, format='json')
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        return resp.data['id']
+
+    def test_five_transfer_trips_link_to_advance_created_afterward(self):
+        trip_ids = [self._create_transfer_trip('200000') for _ in range(5)]
+        advance_id = self._create_advance('1000000', 1)
+
+        for tid in trip_ids:
+            resp = self.api.patch(f'/api/trips/{tid}/', {'payment': self.payment_advance.id}, format='json')
+            self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+            self.assertEqual(resp.data['advance'], advance_id)
+            self.assertFalse(resp.data['is_pending_debt'])
+
+        self.assertEqual(
+            get_available_balance(Advance.objects.get(pk=advance_id)), Decimal('0'),
+            'los 5 viajes de 200000 deben haber descontado el anticipo de 1000000 por completo',
+        )
+        self.assertEqual(
+            AdvanceMovement.objects.filter(advance_id=advance_id, type_movement='egreso').count(), 5,
+        )
+        self.assertEqual(
+            Trip.objects.filter(id__in=trip_ids, advance_id=advance_id).count(), 5,
+        )
+
+    def test_insufficient_balance_without_justification_is_rejected_and_nothing_changes(self):
+        trip_id = self._create_transfer_trip('900000')
+        advance_id = self._create_advance('500000', 1)
+
+        resp = self.api.patch(f'/api/trips/{trip_id}/', {'payment': self.payment_advance.id}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(resp.data['saldo_disponible'], '500000.00')
+        self.assertEqual(resp.data['valor_viaje'], '900000.00')
+
+        trip = Trip.objects.get(pk=trip_id)
+        self.assertEqual(trip.payment_id, self.payment_transfer.id, 'no debe aplicarse ningún cambio si se rechaza')
+        self.assertEqual(get_available_balance(Advance.objects.get(pk=advance_id)), Decimal('500000'))
+
+    def test_insufficient_balance_with_justification_becomes_pending_debt_then_settles_on_next_advance(self):
+        trip_id = self._create_transfer_trip('900000')
+        advance_id = self._create_advance('500000', 1)
+
+        resp = self.api.patch(
+            f'/api/trips/{trip_id}/',
+            {'payment': self.payment_advance.id, 'justification': 'Saldo insuficiente, ajuste manual'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertTrue(resp.data['is_pending_debt'])
+        self.assertIsNone(resp.data['advance'])
+
+        trip = Trip.objects.get(pk=trip_id)
+        self.assertEqual(trip.payment_id, self.payment_advance.id)
+        self.assertIsNone(trip.advance_id)
+        self.assertEqual(trip.pending_debt_justification, 'Saldo insuficiente, ajuste manual')
+        self.assertEqual(
+            get_available_balance(Advance.objects.get(pk=advance_id)), Decimal('500000'),
+            'el anticipo existente no debe tocarse si el viaje quedó pendiente',
+        )
+
+        # FIFO: un anticipo nuevo para el mismo cliente debe recoger la deuda.
+        advance2_id = self._create_advance('2000000', 2)
+        trip.refresh_from_db()
+        self.assertEqual(trip.advance_id, advance2_id)
+        self.assertEqual(
+            get_available_balance(Advance.objects.get(pk=advance2_id)), Decimal('1100000'),
+        )
+
+
 class InvoicedTripLockAndUnlinkTests(TripAdvanceFixturesMixin, TestCase):
     """8B.4 (diagnóstico de solo lectura): un viaje ya facturado se podía
     seguir editando (valor, cliente, medio de pago) sin ninguna

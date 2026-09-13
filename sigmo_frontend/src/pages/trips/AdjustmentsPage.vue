@@ -185,17 +185,22 @@ const editClientChanged = computed(() =>
 const editWasAdvanceFunded = computed(() =>
   !!editTrip.value && editTrip.value.payment_detail?.is_advance === true && editTrip.value.advance != null
 )
+// 9.7A — el medio de pago pasa a ser de tipo anticipo por primera vez (no
+// estaba financiado antes, ni siquiera como deuda pendiente). El backend
+// ya lo resuelve igual que un cambio de cliente (fund_trip_entering_advance_payment,
+// reutiliza el mismo mecanismo que reallocate_advance_on_client_change): si
+// el anticipo activo alcanza se descuenta, si no exige justificación y el
+// viaje queda como deuda pendiente — nunca en saldo negativo.
+const editPaymentEnteringAdvance = computed(() =>
+  !!editTrip.value && editTrip.value.payment_detail?.is_advance !== true && editIsAdvancePayment.value
+)
 const editRequiredAmount = computed(() => {
   const value = editValue.value ?? 0
-  if (editClientChanged.value) return value
+  if (editClientChanged.value || editPaymentEnteringAdvance.value) return value
   if (editWasAdvanceFunded.value) {
     const originalValue = parseFloat(editTrip.value?.value ?? '0')
     return Math.max(value - originalValue, 0)
   }
-  // Medio de pago recién cambiado a uno de anticipo (no estaba financiado
-  // antes): el backend todavía no valida este caso puntual (ver hallazgo
-  // reportado para 9.7A) — se trata igual que un registro nuevo, comparando
-  // el valor completo, para no dejar el aviso sin cubrir este camino.
   return value
 })
 const editHasActiveAdvance = computed(() => editActiveAdvance.value !== null)
@@ -210,10 +215,13 @@ const editNeedsJustification = computed(() =>
 // El PATCH necesita `force: true` además de la justificación cuando el
 // saldo insuficiente es del MISMO cliente/anticipo (sync_advance_movement_on_trip_change
 // lo exige explícitamente para permitir que el anticipo quede en negativo).
-// El camino de cambio de cliente NO lo exige: ahí un saldo insuficiente
-// simplemente deja el viaje como deuda pendiente del cliente nuevo, sin
-// rechazar la operación.
-const editNeedsForce = computed(() => editNeedsJustification.value && !editClientChanged.value)
+// Ni el cambio de cliente ni el medio de pago pasando a ser anticipo por
+// primera vez lo exigen: en ambos casos un saldo insuficiente simplemente
+// deja el viaje como deuda pendiente (del cliente nuevo, o del mismo
+// cliente), sin rechazar la operación ni dejar nada en negativo.
+const editNeedsForce = computed(() =>
+  editNeedsJustification.value && !editClientChanged.value && !editPaymentEnteringAdvance.value
+)
 const editCanSubmit = computed(() => {
   if (!editNeedsJustification.value) return true
   return isSuperuser.value && editJustification.value.trim().length > 0
@@ -224,8 +232,8 @@ async function saveEdit() {
   if (!editTrip.value) return
   if (!editCanSubmit.value) {
     toast.error(
-      editClientChanged.value
-        ? 'El nuevo cliente no tiene saldo de anticipo suficiente. Justifique el ajuste para guardarlo como deuda pendiente.'
+      (editClientChanged.value || editPaymentEnteringAdvance.value)
+        ? 'El anticipo no tiene saldo suficiente. Justifique el ajuste para guardarlo como deuda pendiente.'
         : 'El anticipo de este cliente no tiene saldo suficiente para este cambio. Justifique el ajuste para autorizarlo.'
     )
     return
@@ -655,18 +663,24 @@ function confirmPrint() {
                 </p>
               </div>
 
-              <!-- Saldo insuficiente: cambio de cliente, o valor/medio de pago
-                   por encima del saldo del mismo cliente/anticipo (9.7A) -->
+              <!-- Saldo insuficiente: tres caminos posibles, ver
+                   editRequiredAmount/editNeedsForce arriba —
+                   1) cambio de cliente, 2) medio de pago que pasa a ser
+                   anticipo por primera vez (9.7A): ambos dejan el viaje
+                   como deuda pendiente, nunca en negativo;
+                   3) mismo anticipo ya financiando el viaje, valor subido
+                   por encima del saldo: ahí sí puede quedar en negativo
+                   (sync_advance_movement_on_trip_change) -->
               <div v-if="editNeedsJustification" class="lg:col-span-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
                 <div class="flex items-start gap-2 text-red-700 text-xs">
                   <AlertTriangle class="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <div class="space-y-0.5">
                     <p class="font-semibold">
-                      {{ editClientChanged ? 'Saldo insuficiente para el nuevo cliente' : 'Saldo insuficiente del anticipo' }}
+                      {{ (editClientChanged || editPaymentEnteringAdvance) ? 'Saldo insuficiente del anticipo' : 'Saldo insuficiente del anticipo actual' }}
                     </p>
                     <p>Saldo disponible: <strong>{{ formatCurrency(editActiveAdvance?.available_balance ?? 0) }}</strong></p>
                     <p>
-                      {{ editClientChanged ? 'Valor del viaje' : 'Monto adicional requerido' }}:
+                      {{ (editClientChanged || editPaymentEnteringAdvance) ? 'Valor del viaje' : 'Monto adicional requerido' }}:
                       <strong>{{ formatCurrency(editRequiredAmount) }}</strong>
                     </p>
                   </div>
@@ -678,14 +692,14 @@ function confirmPrint() {
                   <textarea
                     v-model="editJustification"
                     rows="2"
-                    :placeholder="editClientChanged
-                      ? 'Motivo — el viaje quedará como deuda pendiente del nuevo cliente...'
+                    :placeholder="(editClientChanged || editPaymentEnteringAdvance)
+                      ? 'Motivo — el viaje quedará como deuda pendiente...'
                       : 'Motivo — el anticipo quedará en saldo negativo...'"
                     class="w-full px-3 py-2 text-sm border border-red-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
                   />
                 </div>
                 <p v-else class="mt-2 text-xs text-red-600">
-                  {{ editClientChanged
+                  {{ (editClientChanged || editPaymentEnteringAdvance)
                     ? 'Solo el superusuario puede guardar este ajuste como deuda pendiente.'
                     : 'Solo el superusuario puede autorizar que el anticipo quede en saldo negativo.' }}
                 </p>

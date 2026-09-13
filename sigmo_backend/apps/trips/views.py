@@ -16,8 +16,9 @@ from .services import (
     sync_advance_movement_on_trip_change,
     reallocate_advance_on_client_change,
     reverse_advance_discount,
+    fund_trip_entering_advance_payment,
     InsufficientBalanceError,
-    InsufficientBalanceForClientChangeError,
+    InsufficientBalanceForAdvanceFundingError,
     UnsupportedAdvanceChangeError,
 )
 from apps.advances.models import Advance, AdvanceMovement
@@ -524,7 +525,7 @@ class TripDetailView(APIView):
         # movió a reallocate_advance_on_client_change, que ya bloqueaba la
         # fila del Client destino para el descuento: ahora también decide
         # ahí si hace falta justificación, contra el saldo real post-lock
-        # (ver InsufficientBalanceForClientChangeError, capturada más abajo).
+        # (ver InsufficientBalanceForAdvanceFundingError, capturada más abajo).
         new_client = serializer.validated_data.get('client', obj.client)  # type: ignore
         client_changed = new_client.id != obj.client_id and not is_annulment
 
@@ -578,6 +579,21 @@ class TripDetailView(APIView):
                     # rama client_changed) y el backend decide el resultado.
                     new_payment = serializer.validated_data.get('payment', obj.payment)  # type: ignore
                     payment_leaving_advance = was_advance_funded and not new_payment.is_advance
+                    # 9.7A: el viaje NO estaba financiado por anticipo (ni
+                    # siquiera como deuda pendiente — was_pending_debt exige
+                    # old_payment.is_advance=True, así que es mutuamente
+                    # excluyente con esto) y su medio de pago pasa a ser de
+                    # tipo anticipo por primera vez. Antes esto caía en el
+                    # `else` de abajo sin hacer nada más que cambiar
+                    # `payment`: el viaje quedaba con la misma huella que
+                    # una deuda pendiente (payment.is_advance=True,
+                    # advance=NULL) pero sin pasar por ninguna validación de
+                    # saldo ni crear el AdvanceMovement correspondiente — el
+                    # anticipo del cliente seguía mostrando su saldo
+                    # completo, aunque el viaje ya "debía" cubrirse contra
+                    # él. Se resuelve con las mismas reglas que un cambio de
+                    # cliente (ver fund_trip_entering_advance_payment).
+                    payment_entering_advance = not old_payment.is_advance and new_payment.is_advance
 
                     if payment_leaving_advance:
                         trip = cast(Trip, serializer.save(advance=None, pending_debt_justification=None))
@@ -587,6 +603,12 @@ class TripDetailView(APIView):
                             amount=old_value,
                             reason=f'Reversión por cambio de medio de pago del viaje #{trip.voucher_num}',
                             request=request,
+                        )
+                    elif payment_entering_advance:
+                        save_kwargs = {'invoice_pos': None} if is_unlink_request else {}
+                        trip = cast(Trip, serializer.save(**save_kwargs))
+                        fund_trip_entering_advance_payment(
+                            trip, justification=justification, request=request,
                         )
                     else:
                         # 8B.4: al desvincular (invoice=None), limpiar
@@ -645,10 +667,13 @@ class TripDetailView(APIView):
                 'valor_requerido': str(e.required),
                 'diferencia': str(e.difference),
             }, status=status.HTTP_400_BAD_REQUEST)
-        except InsufficientBalanceForClientChangeError as e:
+        except InsufficientBalanceForAdvanceFundingError as e:
+            # Compartido por dos transiciones (cambio de cliente, y medio de
+            # pago que pasa a ser de tipo anticipo por primera vez): el
+            # mensaje es genérico a propósito, no menciona "nuevo cliente".
             return Response({
                 'error': (
-                    'Saldo del anticipo insuficiente para el nuevo cliente. '
+                    'Saldo del anticipo insuficiente para financiar este viaje. '
                     'Debe justificar el ajuste para guardarlo como deuda pendiente.'
                 ),
                 'saldo_disponible': str(e.balance),

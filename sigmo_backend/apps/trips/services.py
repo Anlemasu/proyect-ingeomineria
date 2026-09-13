@@ -19,26 +19,30 @@ class InsufficientBalanceError(Exception):
         super().__init__('Saldo insuficiente.')
 
 
-class InsufficientBalanceForClientChangeError(Exception):
+class InsufficientBalanceForAdvanceFundingError(Exception):
     """
-    Al cambiar el cliente de un viaje, el anticipo activo del cliente NUEVO
-    no alcanza a cubrir el valor y no vino justificación.
+    Un viaje necesita resolver desde cero contra qué anticipo activo del
+    cliente se financia (porque cambió de cliente, o porque su medio de
+    pago pasó a ser de tipo anticipo por primera vez) y el anticipo activo
+    no alcanza a cubrir el valor sin que haya venido justificación.
 
-    Se levanta DENTRO de reallocate_advance_on_client_change, después de
-    bloquear la fila del Client destino con select_for_update() — no antes
-    del atomic. Bloquear primero y decidir después es lo que evita la
-    carrera: dos cambios de cliente concurrentes hacia el MISMO cliente
-    destino ya no pueden leer ambos el mismo saldo "viejo" y concluir los
-    dos que alcanza (o los dos que no). El primero en tomar el lock decide
-    con el saldo real; el segundo espera, y cuando le toca, ve el saldo ya
-    actualizado por el primero.
+    Se levanta DENTRO de _fund_or_pend_trip_against_active_advance, después
+    de bloquear la fila del Client con select_for_update() — no antes del
+    atomic. Bloquear primero y decidir después es lo que evita la carrera:
+    dos operaciones concurrentes que dependen del mismo anticipo activo de
+    este cliente (dos cambios de cliente hacia el mismo destino, o un
+    cambio de cliente y un cambio de medio de pago casi al mismo tiempo) ya
+    no pueden leer ambas el mismo saldo "viejo" y concluir las dos que
+    alcanza (o las dos que no). La primera en tomar el lock decide con el
+    saldo real; la segunda espera, y cuando le toca, ve el saldo ya
+    actualizado por la primera.
     """
 
     def __init__(self, balance: Decimal, required: Decimal):
         self.balance = balance
         self.required = required
         self.difference = required - balance
-        super().__init__('Saldo insuficiente para el nuevo cliente.')
+        super().__init__('Saldo insuficiente para financiar el viaje contra el anticipo activo.')
 
 
 class UnsupportedAdvanceChangeError(Exception):
@@ -278,44 +282,105 @@ def reallocate_advance_on_client_change(
         )
 
     if trip.payment.is_advance:
-        # 9.1 (extendido): el lock del Client destino ya serializaba el
-        # DESCUENTO entre cambios de cliente concurrentes hacia el mismo
-        # destino; ahora también sirve de base para decidir "hace falta
-        # justificación" contra el saldo real, no uno leído antes del
-        # atomic (que un cambio de cliente concurrente hacia este mismo
-        # destino podría haber dejado obsoleto). Ver
-        # InsufficientBalanceForClientChangeError.
-        Client.objects.select_for_update().get(pk=trip.client_id)
-        new_advance = get_active_advance(trip.client)
-        available = get_available_balance(new_advance) if new_advance else Decimal('0')
-
-        if trip.value > available and not justification:
-            raise InsufficientBalanceForClientChangeError(available, trip.value)
-
-        if trip.value <= available:
-            balance_before = available
-            AdvanceMovement.objects.create(
-                advance=new_advance,
-                trip=trip,
-                type_movement='egreso',
-                amount=trip.value,
-                trips_quantity=1,
-                date=trip.date,
-                description=f'Descuento por cambio de cliente del viaje #{trip.voucher_num}',
-            )
-            trip.advance = new_advance
-            trip.pending_debt_justification = None
-            log_action(
-                request, 'update', 'Advance',
-                object_id=new_advance.id,  # type: ignore[union-attr]
-                previous_data={'available_balance': str(balance_before)},
-                new_data={'available_balance': str(get_available_balance(new_advance))},
-            )
-        else:
-            trip.advance = None
-            trip.pending_debt_justification = justification
+        _fund_or_pend_trip_against_active_advance(
+            trip,
+            justification=justification,
+            request=request,
+            description=f'Descuento por cambio de cliente del viaje #{trip.voucher_num}',
+        )
     else:
         trip.advance = None
         trip.pending_debt_justification = None
+        trip.save(update_fields=['advance', 'pending_debt_justification'])
+
+
+def _fund_or_pend_trip_against_active_advance(
+    trip: Trip, *, justification: str | None, request=None, description: str,
+) -> None:
+    """
+    Núcleo compartido: dado un `trip` cuyo `payment` YA quedó guardado como
+    un medio de tipo anticipo, resuelve desde cero contra qué anticipo
+    activo del `trip.client` se financia — exactamente las mismas reglas
+    que un registro nuevo (TripListCreateView.post): si el saldo alcanza,
+    se descuenta; si no, exige justificación (o, si ya vino una, queda como
+    deuda pendiente).
+
+    Usado por reallocate_advance_on_client_change (cambio de cliente) y por
+    fund_trip_entering_advance_payment (el medio de pago pasa a ser de tipo
+    anticipo por primera vez) — en ambos casos "quién financia este viaje"
+    se recalcula desde cero, no se ajusta por diferencia contra un anticipo
+    anterior (a diferencia de sync_advance_movement_on_trip_change, que sí
+    asume que sigue siendo el MISMO anticipo de antes).
+
+    9.1 (extendido): bloquea la fila del Client ANTES de leer el saldo del
+    anticipo activo — ver InsufficientBalanceForAdvanceFundingError para el
+    porqué (evita que dos operaciones concurrentes que dependen del mismo
+    anticipo activo de este cliente lean el mismo saldo "viejo").
+
+    Muta y guarda `trip.advance` / `trip.pending_debt_justification` — el
+    caller no necesita volver a guardar esos dos campos.
+    """
+    Client.objects.select_for_update().get(pk=trip.client_id)
+    new_advance = get_active_advance(trip.client)
+    available = get_available_balance(new_advance) if new_advance else Decimal('0')
+
+    if trip.value > available and not justification:
+        raise InsufficientBalanceForAdvanceFundingError(available, trip.value)
+
+    if trip.value <= available:
+        balance_before = available
+        AdvanceMovement.objects.create(
+            advance=new_advance,
+            trip=trip,
+            type_movement='egreso',
+            amount=trip.value,
+            trips_quantity=1,
+            date=trip.date,
+            description=description,
+        )
+        trip.advance = new_advance
+        trip.pending_debt_justification = None
+        log_action(
+            request, 'update', 'Advance',
+            object_id=new_advance.id,  # type: ignore[union-attr]
+            previous_data={'available_balance': str(balance_before)},
+            new_data={'available_balance': str(get_available_balance(new_advance))},
+        )
+    else:
+        trip.advance = None
+        trip.pending_debt_justification = justification
 
     trip.save(update_fields=['advance', 'pending_debt_justification'])
+
+
+def fund_trip_entering_advance_payment(
+    trip: Trip, *, justification: str | None, request=None,
+) -> None:
+    """
+    9.7A — un viaje que NO estaba financiado por anticipo (medio de pago de
+    otro tipo, ni siquiera como deuda pendiente) cambia su medio de pago a
+    uno de tipo anticipo por primera vez.
+
+    Antes de este fix, TripDetailView.patch no hacía nada más que guardar
+    el nuevo `payment`: el viaje quedaba con `payment.is_advance=True` y
+    `advance=NULL` (la misma huella que "deuda pendiente"), pero sin haber
+    pasado por ninguna validación de saldo ni haber creado el
+    AdvanceMovement correspondiente — el anticipo del cliente seguía
+    mostrando su saldo completo disponible aunque, en la práctica, ya
+    "debía" cubrir este viaje. Nada volvía a intentar liquidarlo salvo que
+    se registrara OTRO anticipo nuevo para el cliente en el futuro
+    (settle_pending_debts), o se corrigiera al alza el valor de uno ya
+    existente (correct_active_advance_value).
+
+    Se resuelve con las mismas reglas que un cambio de cliente o un
+    registro nuevo — ver _fund_or_pend_trip_against_active_advance.
+
+    Debe llamarse DENTRO del transaction.atomic() de TripDetailView.patch,
+    con `trip.payment` ya guardado como el medio de pago nuevo.
+    """
+    _fund_or_pend_trip_against_active_advance(
+        trip,
+        justification=justification,
+        request=request,
+        description=f'Descuento por cambio de medio de pago a anticipo del viaje #{trip.voucher_num}',
+    )
