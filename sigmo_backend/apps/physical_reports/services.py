@@ -5,6 +5,7 @@ from django.db.models import Max, OuterRef, Exists, Q
 from django.utils import timezone
 
 from apps.advances.models import Advance
+from apps.advances.services import get_active_advance
 from apps.audit.services import log_action
 from .models import PhysicalCountEntry, PhysicalCountClosure
 
@@ -86,6 +87,28 @@ def is_entry_editable(entry: PhysicalCountEntry | None) -> bool:
     return timezone.now() - entry.created_at <= timedelta(minutes=ENTRY_ADJUSTMENT_WINDOW_MINUTES)
 
 
+def get_trips_on_other_advances(advance: Advance, date) -> list:
+    """
+    Viajes del MISMO cliente y la MISMA fecha, pero vinculados a OTRO
+    anticipo (no a `advance`) — la señal concreta de que se podría estar
+    mirando/registrando el conteo físico del anticipo equivocado.
+
+    Caso real que motivó esto: un cliente con dos anticipos visibles en
+    Reporte Físico (el activo + uno congelado que seguía abierto); los 3
+    viajes del día se habían descontado contra el activo, pero el conteo
+    físico se cargó en el congelado — ese anticipo mostraba "0 viajes en el
+    sistema" (correcto para ÉL) sin ninguna pista de que los viajes SÍ
+    existían, solo que en el otro anticipo del mismo cliente.
+    """
+    from apps.trips.models import Trip
+    return list(
+        Trip.objects.filter(client=advance.client, date=date, state=True)
+        .exclude(advance=advance)
+        .exclude(advance__isnull=True)
+        .select_related('advance')
+    )
+
+
 def get_last_closure_action(advance: Advance) -> PhysicalCountClosure | None:
     return (
         PhysicalCountClosure.objects.filter(advance=advance)
@@ -132,11 +155,21 @@ def _summarize(advance: Advance, *, as_of_date=None) -> dict:
     cumulative = get_cumulative_entered(advance, as_of_date=as_of_date)
     expected = advance.expected_trips_quantity
     remaining = (expected - cumulative) if expected is not None else None
+    active = get_active_advance(advance.client)
     row = {
         'advance': advance,
         'expected_trips_quantity': expected,
         'cumulative_entered': cumulative,
         'remaining': remaining,
+        # Si el cliente tiene más de un anticipo visible en Reporte Físico
+        # (el activo + uno congelado que todavía se está terminando de
+        # contar), esto le permite al frontend distinguirlos con una
+        # etiqueta — evita registrar por error contra el que ya no
+        # descuenta viajes nuevos (ver bug reportado: un conteo físico
+        # cargado en el anticipo equivocado mostraba "0 viajes" aunque sí
+        # se habían registrado, porque esos viajes en realidad se
+        # descontaron contra el otro anticipo del cliente).
+        'is_active': active is not None and active.id == advance.id,
     }
     if as_of_date is not None:
         # Dato puntual de la fecha seleccionada (no acumulado): lo que ya

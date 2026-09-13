@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 
 from apps.advances.models import Advance
+from apps.advances.services import get_active_advance
 from apps.clients.serializers import ClientSerializer
 from apps.trips.models import Trip
 from .serializers import (
@@ -22,6 +23,7 @@ from .services import (
     get_closed_physical_reports,
     get_latest_entries_by_date,
     get_cumulative_entered,
+    get_trips_on_other_advances,
     is_closed,
     is_entry_editable,
     get_last_closure_action,
@@ -69,6 +71,12 @@ def _serialize_summary(row: dict) -> dict:
         'expected_trips_quantity': row['expected_trips_quantity'],
         'cumulative_entered': row['cumulative_entered'],
         'remaining': row['remaining'],
+        # El anticipo ACTIVO actual del cliente vs uno ya congelado que
+        # sigue visible por historial — mismo cliente, misma pinta, pero
+        # los viajes nuevos solo se descuentan contra el activo. El
+        # frontend lo usa para poner una etiqueta y no dejar que se
+        # confundan (ver bug reportado).
+        'is_active': row['is_active'],
     }
     if 'day_count' in row:
         data['day_count'] = row['day_count']
@@ -103,12 +111,12 @@ class PhysicalReportDetailView(APIView):
         if not advance:
             return Response({'error': 'Anticipo no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
 
-        entries_by_date = get_latest_entries_by_date(advance)
         cumulative = get_cumulative_entered(advance)
         expected = advance.expected_trips_quantity
         remaining = (expected - cumulative) if expected is not None else None
         closed = is_closed(advance)
         last_closure = get_last_closure_action(advance)
+        active_advance = get_active_advance(advance.client)
 
         data = {
             'advance': advance.id,
@@ -119,6 +127,7 @@ class PhysicalReportDetailView(APIView):
             'remaining': remaining,
             'closed': closed,
             'last_closure': PhysicalCountClosureSerializer(last_closure).data if last_closure else None,
+            'is_active': active_advance is not None and active_advance.id == advance.id,
         }
 
         selected_date = request.query_params.get('date')
@@ -130,6 +139,14 @@ class PhysicalReportDetailView(APIView):
             system_count = Trip.objects.filter(
                 advance=advance, date=selected_date, state=True,
             ).count()
+
+            # Validación pedida: viajes del MISMO cliente y la MISMA fecha
+            # pero vinculados a OTRO anticipo — si hay alguno, es la señal
+            # concreta de que se está mirando/registrando el conteo físico
+            # equivocado (ver get_trips_on_other_advances).
+            other_trips = get_trips_on_other_advances(advance, selected_date)
+            other_advance_ids = sorted({t.advance_id for t in other_trips})
+
             data['day_detail'] = {
                 'date': selected_date,
                 'physical_count': current_entry.count if current_entry else None,
@@ -142,6 +159,8 @@ class PhysicalReportDetailView(APIView):
                 # conteo todavía): corregirlo aquí mismo no exige
                 # justificación. Ver ENTRY_ADJUSTMENT_WINDOW_MINUTES.
                 'editable': is_entry_editable(current_entry),
+                'other_advance_trips_count': len(other_trips),
+                'other_advance_ids': other_advance_ids,
             }
 
         return Response(data)

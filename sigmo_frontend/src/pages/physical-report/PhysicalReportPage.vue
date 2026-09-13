@@ -229,7 +229,18 @@ const columns = computed<ColumnDef<PhysicalReportSummary>[]>(() => [
   {
     accessorKey: 'advance',
     header: 'N° Anticipo',
-    cell: info => `#${info.getValue()}`,
+    cell: info => {
+      const row = info.row.original
+      return h('div', { class: 'flex items-center gap-2' }, [
+        h('span', {}, `#${row.advance}`),
+        row.is_active
+          ? h('span', { class: 'inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium bg-green-100 text-green-700' }, 'Activo')
+          : h('span', {
+              class: 'inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-500',
+              title: 'Este anticipo ya no es el activo del cliente: los viajes nuevos se descuentan contra otro. Sigue visible aquí porque su conteo físico no se ha cerrado.',
+            }, 'Congelado'),
+      ])
+    },
   },
   {
     accessorKey: 'date',
@@ -459,6 +470,19 @@ const columns = computed<ColumnDef<PhysicalReportSummary>[]>(() => [
 
             <p v-if="detailLoading" class="text-xs text-gray-400">Consultando...</p>
             <template v-else-if="detailData?.day_detail">
+              <div
+                v-if="detailData.day_detail.other_advance_trips_count > 0"
+                class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2"
+              >
+                <AlertTriangle class="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Este cliente tiene <strong>{{ detailData.day_detail.other_advance_trips_count }}</strong>
+                  viaje(s) ese día registrados en
+                  {{ detailData.day_detail.other_advance_ids.length > 1 ? 'otros anticipos' : 'otro anticipo' }}
+                  (#{{ detailData.day_detail.other_advance_ids.join(', #') }})
+                </span>
+              </div>
+
               <div class="rounded-lg border border-gray-200 p-4 space-y-2 text-sm">
                 <div class="flex items-center justify-between">
                   <span class="text-gray-500">Viajes registrados en el sistema ese día</span>

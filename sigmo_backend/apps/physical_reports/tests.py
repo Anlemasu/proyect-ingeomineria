@@ -7,12 +7,15 @@ from rest_framework.test import APIClient
 
 from apps.users.models import User
 from apps.clients.models import Client
+from apps.masters.models import VehicleType, Vehicle, MaterialType, PaymentMethod, OriginSite
+from apps.trips.models import Trip
 from apps.advances.models import Advance
 from .models import PhysicalCountEntry, PhysicalCountClosure
 from .services import (
     register_entry,
     get_cumulative_entered,
     get_open_physical_reports,
+    get_trips_on_other_advances,
     close_advance,
     undo_close_advance,
     reopen_advance,
@@ -268,3 +271,86 @@ class BulkEntryEndpointTests(PhysicalReportsFixturesMixin, TestCase):
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class CrossAdvanceValidationTests(PhysicalReportsFixturesMixin, TestCase):
+    """
+    Bug reportado: un cliente con dos anticipos visibles en Reporte Físico
+    (el activo + uno congelado que seguía abierto) — los viajes del día se
+    descontaron contra UNO, pero el conteo físico se cargó en el OTRO. Ese
+    anticipo mostraba "0 viajes en el sistema" sin ninguna pista de que en
+    realidad sí existían, solo que en el otro anticipo del mismo cliente.
+    get_trips_on_other_advances / PhysicalReportDetailView.day_detail
+    ahora detectan y avisan este caso.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.vehicle_type = VehicleType.objects.create(name='Volqueta', capacity=Decimal('10.00'))
+        self.vehicle = Vehicle.objects.create(vehicle_type=self.vehicle_type, plaque='XYZ999')
+        self.material = MaterialType.objects.create(name='Material Test')
+        self.origin = OriginSite.objects.create(name='Origen Test')
+        self.payment_advance = PaymentMethod.objects.create(name='Anticipo', is_advance=True)
+
+    def _create_trip(self, *, advance, voucher_num):
+        return Trip.objects.create(
+            payment=self.payment_advance, origin_site=self.origin, material_type=self.material,
+            client=self.client_obj, vehicle=self.vehicle, advance=advance,
+            voucher_num=voucher_num, value=Decimal('100000'),
+            date_register=timezone.now(), date=self.today,
+        )
+
+    def test_detects_trips_linked_to_a_different_advance_of_the_same_client(self):
+        # self.advance queda CONGELADO en cuanto se crea el segundo anticipo
+        # (get_active_advance del cliente pasa a ser `newer`).
+        newer = Advance.objects.create(
+            client=self.client_obj, user=self.superuser, value=Decimal('500000'),
+            transfer_num=2, date=self.today,
+        )
+        self._create_trip(advance=newer, voucher_num=501)
+        self._create_trip(advance=newer, voucher_num=502)
+
+        other_trips = get_trips_on_other_advances(self.advance, self.today)
+        self.assertEqual(len(other_trips), 2)
+        self.assertEqual({t.advance_id for t in other_trips}, {newer.id})
+
+    def test_no_warning_when_all_trips_belong_to_this_advance(self):
+        self._create_trip(advance=self.advance, voucher_num=601)
+        other_trips = get_trips_on_other_advances(self.advance, self.today)
+        self.assertEqual(other_trips, [])
+
+    def test_detail_endpoint_surfaces_the_cross_advance_warning(self):
+        newer = Advance.objects.create(
+            client=self.client_obj, user=self.superuser, value=Decimal('500000'),
+            transfer_num=2, date=self.today,
+        )
+        self._create_trip(advance=newer, voucher_num=701)
+        self._create_trip(advance=newer, voucher_num=702)
+        self._create_trip(advance=newer, voucher_num=703)
+
+        response = self.cashier_api.get(
+            f'/api/physical-reports/{self.advance.id}/', {'date': str(self.today)},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        day_detail = response.data['day_detail']
+        self.assertEqual(day_detail['system_count'], 0)  # correcto PARA ESTE anticipo
+        self.assertEqual(day_detail['other_advance_trips_count'], 3)
+        self.assertEqual(day_detail['other_advance_ids'], [newer.id])
+        # self.advance ya no es el activo del cliente: `newer` lo reemplazó.
+        self.assertFalse(response.data['is_active'])
+
+
+class ActiveAdvanceFlagTests(PhysicalReportsFixturesMixin, TestCase):
+    def test_single_advance_is_flagged_active(self):
+        rows = get_open_physical_reports()
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]['is_active'])
+
+    def test_frozen_advance_is_flagged_inactive_once_a_newer_one_exists(self):
+        newer = Advance.objects.create(
+            client=self.client_obj, user=self.superuser, value=Decimal('500000'),
+            transfer_num=2, date=self.today, expected_trips_quantity=5,
+        )
+        rows = {r['advance'].id: r for r in get_open_physical_reports()}
+        self.assertFalse(rows[self.advance.id]['is_active'])
+        self.assertTrue(rows[newer.id]['is_active'])

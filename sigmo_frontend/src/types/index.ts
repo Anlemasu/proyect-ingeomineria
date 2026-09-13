@@ -266,6 +266,11 @@ export interface PhysicalReportSummary {
   // ajusta individualmente desde el detalle (el "ojito"), con justificación.
   day_count?: number | null
   day_editable?: boolean
+  // true si este es el anticipo ACTIVO actual del cliente (el que
+  // descuenta los viajes nuevos) — false si es uno congelado (reemplazado
+  // por uno más nuevo) que sigue visible aquí por historial. Un cliente
+  // puede tener ambos tipos de fila a la vez en la tabla.
+  is_active: boolean
 }
 
 // Resultado de un renglón de POST /physical-reports/bulk-entries/ (botón
@@ -309,6 +314,13 @@ export interface PhysicalReportDayDetail {
   // Dentro de la ventana de ajuste rápido (o sin ningún conteo todavía):
   // corregir desde este mismo detalle no exige justificación.
   editable: boolean
+  // Viajes del MISMO cliente y la MISMA fecha pero vinculados a OTRO
+  // anticipo — señal de que se podría estar mirando/registrando el conteo
+  // físico equivocado (ver bug reportado: un anticipo mostraba "0 viajes"
+  // aunque el cliente sí tenía viajes ese día, solo que en su OTRO
+  // anticipo). `other_advance_ids` trae el/los anticipo(s) donde sí están.
+  other_advance_trips_count: number
+  other_advance_ids: number[]
 }
 
 export interface PhysicalReportDetail extends PhysicalReportSummary {
