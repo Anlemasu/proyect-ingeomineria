@@ -385,7 +385,7 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
             Viajes por cliente
           </h3>
           <div class="border border-gray-100 rounded-lg overflow-hidden">
-            <TripsByClientTable :rows="todayData.trips_by_client ?? []" />
+            <TripsByClientTable :rows="todayData.trips_by_client ?? []" max-height="24rem" />
           </div>
         </div>
 
@@ -445,9 +445,13 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
         </div>
       </div>
 
-      <div class="overflow-x-auto">
+      <!-- max-h (no altura fija): esta tabla no pagina — muestra todas las
+           filas filtradas con scroll — así que no hay paginación que se
+           mueva y conviene que la caja se ajuste al contenido (pocos cierres
+           filtrados no dejan una caja vacía enorme), con tope de 65vh. -->
+      <div class="overflow-auto max-h-[65vh]">
         <table class="w-full text-sm">
-          <thead>
+          <thead class="sticky top-0 z-10 bg-gray-50">
             <tr class="bg-gray-50 border-b border-gray-100">
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha</th>
               <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Viajes</th>
@@ -541,6 +545,7 @@ const monthlyColumns = computed<ColumnDef<MonthlyRow>[]>(() => [
           :data="monthlyRows"
           :is-loading="historyLoading"
           export-filename="Historico_Mensual_Cierres_SIGMO"
+          :fixed-height="false"
         />
       </div>
     </div>

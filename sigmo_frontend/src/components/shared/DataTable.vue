@@ -17,12 +17,20 @@ import { toast } from 'vue-sonner'
 import { copyTableToClipboard } from '@/utils/copyTableToClipboard'
 import { exportTableToExcel } from '@/utils/exportTableToExcel'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   columns: ColumnDef<T>[]
   data: T[]
   isLoading?: boolean
   exportFilename?: string
-}>()
+  // true (default): altura fija (h-[65vh]) — evita que la paginación salte
+  // verticalmente cuando la última página tiene menos filas. false: la caja
+  // se ajusta al contenido hasta un tope de 65vh (max-h) — para tablas sin
+  // paginación real (pocas filas, ej. históricos mensuales) donde la altura
+  // fija solo deja una caja vacía enorme y no hay paginación que proteger.
+  fixedHeight?: boolean
+}>(), {
+  fixedHeight: true,
+})
 
 const globalFilter = ref('')
 const sorting = ref<SortingState>([])
@@ -184,10 +192,15 @@ async function handleExportExcel() {
       </button>
     </div>
 
-    <!-- Altura FIJA (no max-h): con solo un tope máximo, la caja se encoge en
-         páginas con menos filas (ej. la última) y todo lo de abajo —la
-         paginación— sube con ella, un salto molesto al cambiar de página. -->
-    <div class="border border-stone-200 rounded-lg overflow-auto bg-white h-[65vh]">
+    <!-- fixedHeight=true (default): altura FIJA — con solo un tope máximo, la
+         caja se encoge en páginas con menos filas (ej. la última) y todo lo
+         de abajo —la paginación— sube con ella, un salto molesto al cambiar
+         de página. fixedHeight=false: la caja se ajusta al contenido (tablas
+         sin paginación real, donde no hay nada que proteger de ese salto). -->
+    <div
+      class="border border-stone-200 rounded-lg overflow-auto bg-white"
+      :class="fixedHeight ? 'h-[65vh]' : 'max-h-[65vh]'"
+    >
       <table ref="tableEl" class="w-full text-sm">
         <thead class="bg-gold-50 border-b-2 border-gold-200 sticky top-0 z-10">
           <tr class="divide-x divide-gold-200/70">
