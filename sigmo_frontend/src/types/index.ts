@@ -414,12 +414,32 @@ export interface Expense {
   state: boolean
 }
 
-export interface DailyReportData {
+// 'daily' cubre un solo día (dateFrom === dateTo). 'biweekly'/'monthly' son
+// períodos fijos calculados a partir de un mes elegido (ver
+// utils/reportPeriodRanges.ts) — no fechas libres. 'custom' es el único con
+// selector de fecha inicio/fin libre, para casos que no calzan en un
+// período fijo.
+export type ReportPeriodType = 'daily' | 'biweekly' | 'monthly' | 'custom'
+
+// Subtotal de un día dentro del rango del reporte (solo tiene sentido
+// mostrarlo cuando periodType !== 'daily', ver DailyReportPage).
+export interface DailyReportBreakdownRow {
   date: string
+  tripsCount: number
+  totalCollected: number
+  totalExpenses: number
+  netBalance: number
+}
+
+export interface DailyReportData {
+  periodType: ReportPeriodType
+  dateFrom: string
+  dateTo: string
   trips: Trip[]
   expenses: Expense[]
   advancesConsumed: Trip[]
   tripsByClient: TripsByClientRow[]
+  dailyBreakdown: DailyReportBreakdownRow[]
   summary: {
     totalTrips: number
     totalCollected: number

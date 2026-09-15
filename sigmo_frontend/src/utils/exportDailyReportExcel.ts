@@ -1,14 +1,32 @@
 import * as XLSX from 'xlsx'
-import type { DailyReportData } from '@/types'
+import type { DailyReportData, ReportPeriodType } from '@/types'
 import { formatDate, formatTime } from '@/utils/formatDate'
 
-export function exportDailyReportExcel(date: string, data: DailyReportData): void {
+const PERIOD_TITLES: Record<ReportPeriodType, string> = {
+  daily: 'Reporte Diario de Operaciones',
+  biweekly: 'Reporte Quincenal de Operaciones',
+  monthly: 'Reporte Mensual de Operaciones',
+  custom: 'Reporte Personalizado de Operaciones',
+}
+
+const PERIOD_FILE_LABELS: Record<ReportPeriodType, string> = {
+  daily: 'Diario',
+  biweekly: 'Quincenal',
+  monthly: 'Mensual',
+  custom: 'Personalizado',
+}
+
+export function exportDailyReportExcel(data: DailyReportData): void {
   const wb = XLSX.utils.book_new()
+  const isRange = data.periodType !== 'daily'
+  const periodLabel = isRange
+    ? `${formatDate(data.dateFrom)} al ${formatDate(data.dateTo)}`
+    : formatDate(data.dateFrom)
 
   // ── Sheet 1: Resumen ─────────────────────────────────────────────────────
   const resumenRows: (string | number)[][] = [
-    ['Reporte Diario de Operaciones — SIGMO'],
-    ['Fecha', formatDate(date)],
+    [`${PERIOD_TITLES[data.periodType]} — SIGMO`],
+    [isRange ? 'Período' : 'Fecha', periodLabel],
     [],
     ['Total Viajes', data.summary.totalTrips],
     ['Total Recaudado', data.summary.totalCollected],
@@ -22,14 +40,33 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
   const wsResumen = XLSX.utils.aoa_to_sheet(resumenRows)
   XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
 
-  // ── Sheet 2: Viajes ──────────────────────────────────────────────────────
+  // ── Sheet 2: Resumen por Día (solo quincenal/mensual) ───────────────────
+  if (isRange) {
+    const breakdownHeader = ['Fecha', 'N° Viajes', 'Recaudado', 'Gastos', 'Saldo Neto']
+    const breakdownRows = data.dailyBreakdown.map(r => [
+      formatDate(r.date),
+      r.tripsCount,
+      r.totalCollected,
+      r.totalExpenses,
+      r.netBalance,
+    ])
+    const wsBreakdown = XLSX.utils.aoa_to_sheet([
+      breakdownHeader,
+      ...breakdownRows,
+      ['Total', data.summary.totalTrips, data.summary.totalCollected, data.summary.totalExpenses, data.summary.netBalance],
+    ])
+    XLSX.utils.book_append_sheet(wb, wsBreakdown, 'Resumen por Día')
+  }
+
+  // ── Sheet 3: Viajes ──────────────────────────────────────────────────────
   const viajesHeader = [
-    'N° Vale', 'Hora registro', 'Cliente', 'Placa', 'PIN Ambiental', 'Origen',
+    'N° Vale', 'Fecha', 'Hora registro', 'Cliente', 'Placa', 'PIN Ambiental', 'Origen',
     'Tipo Material', 'Tipo Vehículo', 'Valor', 'Medio de Pago',
     'N° Vale Externo', 'N° Factura', 'Observaciones', 'Estado',
   ]
   const viajesRows = data.trips.map(t => [
     t.voucher_num,
+    formatDate(t.date),
     formatTime(t.date_register),
     t.client_detail?.name ?? '—',
     t.vehicle_detail?.plaque ?? '—',
@@ -47,7 +84,7 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
   const wsViajes = XLSX.utils.aoa_to_sheet([viajesHeader, ...viajesRows])
   XLSX.utils.book_append_sheet(wb, wsViajes, 'Viajes')
 
-  // ── Sheet 3: Gastos ──────────────────────────────────────────────────────
+  // ── Sheet 4: Gastos ──────────────────────────────────────────────────────
   const gastosHeader = ['Fecha', 'Descripción', 'Valor', 'Usuario']
   const gastosRows = data.expenses.map(e => [
     formatDate(e.date),
@@ -63,7 +100,7 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
   ])
   XLSX.utils.book_append_sheet(wb, wsGastos, 'Gastos')
 
-  // ── Sheet 4: Viajes por Cliente ─────────────────────────────────────────
+  // ── Sheet 5: Viajes por Cliente ─────────────────────────────────────────
   const clienteHeader = ['Cliente', 'N° Viajes', 'Total (COP)', 'Volumen m³']
   const clienteRows = data.tripsByClient.map(r => [
     r.client_name,
@@ -81,7 +118,7 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
   ])
   XLSX.utils.book_append_sheet(wb, wsCliente, 'Viajes por Cliente')
 
-  // ── Sheet 4: Anticipos Consumidos ────────────────────────────────────────
+  // ── Sheet 6: Anticipos Consumidos ────────────────────────────────────────
   const anticiposHeader = ['Cliente', 'Anticipo ID', 'Valor Descontado', 'N° Viaje asociado']
   const anticiposRows = data.advancesConsumed.map(t => [
     t.client_detail?.name ?? '—',
@@ -97,5 +134,6 @@ export function exportDailyReportExcel(date: string, data: DailyReportData): voi
   ])
   XLSX.utils.book_append_sheet(wb, wsAnticipos, 'Anticipos Consumidos')
 
-  XLSX.writeFile(wb, `Reporte_Diario_SIGMO_${date}.xlsx`)
+  const rangeSuffix = isRange ? `${data.dateFrom}_a_${data.dateTo}` : data.dateFrom
+  XLSX.writeFile(wb, `Reporte_${PERIOD_FILE_LABELS[data.periodType]}_SIGMO_${rangeSuffix}.xlsx`)
 }

@@ -1,8 +1,15 @@
-import type { DailyReportData } from '@/types'
+import type { DailyReportData, ReportPeriodType } from '@/types'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime } from '@/utils/formatDate'
 import { format } from 'date-fns'
 import { openCenteredWindow } from '@/utils/openCenteredWindow'
+
+const PERIOD_TITLES: Record<ReportPeriodType, string> = {
+  daily: 'Reporte Diario de Operaciones',
+  biweekly: 'Reporte Quincenal de Operaciones',
+  monthly: 'Reporte Mensual de Operaciones',
+  custom: 'Reporte Personalizado de Operaciones',
+}
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '—')
@@ -11,9 +18,13 @@ function escapeHtml(value: unknown): string {
     .replace(/>/g, '&gt;')
 }
 
-function generateDailyReportHtml(date: string, data: DailyReportData): string {
+function generateDailyReportHtml(data: DailyReportData): string {
   const now = new Date()
   const generatedAt = format(now, 'dd/MM/yyyy HH:mm')
+  const isRange = data.periodType !== 'daily'
+  const periodLabel = isRange
+    ? `${formatDate(data.dateFrom)} al ${formatDate(data.dateTo)}`
+    : formatDate(data.dateFrom)
 
   const summaryBoxes = `
     <div class="summary-row">
@@ -82,9 +93,32 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
       </tr></tfoot>
     </table>`
 
+  const breakdownRows = data.dailyBreakdown.map(r => `
+    <tr>
+      <td>${formatDate(r.date)}</td>
+      <td class="num">${r.tripsCount}</td>
+      <td class="num">${formatCurrency(r.totalCollected)}</td>
+      <td class="num">${formatCurrency(r.totalExpenses)}</td>
+      <td class="num">${formatCurrency(r.netBalance)}</td>
+    </tr>`).join('')
+
+  const breakdownTable = `
+    <table>
+      <thead><tr><th>Fecha</th><th class="num">N° Viajes</th><th class="num">Recaudado</th><th class="num">Gastos</th><th class="num">Saldo Neto</th></tr></thead>
+      <tbody>${breakdownRows || '<tr><td colspan="5" class="empty">Sin actividad registrada en el período</td></tr>'}</tbody>
+      <tfoot><tr>
+        <td>Total</td>
+        <td class="num">${data.summary.totalTrips}</td>
+        <td class="num">${formatCurrency(data.summary.totalCollected)}</td>
+        <td class="num">${formatCurrency(data.summary.totalExpenses)}</td>
+        <td class="num">${formatCurrency(data.summary.netBalance)}</td>
+      </tr></tfoot>
+    </table>`
+
   const tripRows = data.trips.map(t => `
     <tr>
       <td>${t.voucher_num}</td>
+      <td>${formatDate(t.date)}</td>
       <td>${formatTime(t.date_register)}</td>
       <td>${escapeHtml(t.client_detail?.name)}</td>
       <td>${escapeHtml(t.vehicle_detail?.plaque)}</td>
@@ -103,11 +137,11 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
   const tripsTable = `
     <table>
       <thead><tr>
-        <th>N° Vale</th><th>Hora registro</th><th>Cliente</th><th>Placa</th><th>PIN Ambiental</th>
+        <th>N° Vale</th><th>Fecha</th><th>Hora registro</th><th>Cliente</th><th>Placa</th><th>PIN Ambiental</th>
         <th>Origen</th><th>Tipo Material</th><th>Tipo Vehículo</th><th class="num">Valor</th>
         <th>Medio de Pago</th><th>N° Vale Externo</th><th>N° Factura</th><th>Observaciones</th><th>Estado</th>
       </tr></thead>
-      <tbody>${tripRows || '<tr><td colspan="14" class="empty">No se registraron viajes para esta fecha.</td></tr>'}</tbody>
+      <tbody>${tripRows || '<tr><td colspan="15" class="empty">No se registraron viajes para este período.</td></tr>'}</tbody>
     </table>`
 
   const expenseRows = data.expenses.map(e => `
@@ -123,7 +157,7 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
   const expensesTable = `
     <table>
       <thead><tr><th>Fecha</th><th>Descripción</th><th class="num">Valor</th><th>Usuario</th></tr></thead>
-      <tbody>${expenseRows || '<tr><td colspan="4" class="empty">No se registraron gastos para esta fecha.</td></tr>'}</tbody>
+      <tbody>${expenseRows || '<tr><td colspan="4" class="empty">No se registraron gastos para este período.</td></tr>'}</tbody>
       <tfoot><tr><td colspan="2">Total</td><td class="num">${formatCurrency(totalExpenses)}</td><td></td></tr></tfoot>
     </table>`
 
@@ -140,15 +174,17 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
   const advancesTable = `
     <table>
       <thead><tr><th>Cliente</th><th>Anticipo ID</th><th class="num">Valor Descontado</th><th>N° Viaje asociado</th></tr></thead>
-      <tbody>${advanceRows || '<tr><td colspan="4" class="empty">No se consumieron anticipos en esta fecha.</td></tr>'}</tbody>
+      <tbody>${advanceRows || '<tr><td colspan="4" class="empty">No se consumieron anticipos en este período.</td></tr>'}</tbody>
       <tfoot><tr><td colspan="2">Total</td><td class="num">${formatCurrency(totalAdvances)}</td><td></td></tr></tfoot>
     </table>`
+
+  const title = PERIOD_TITLES[data.periodType]
 
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Reporte Diario ${date}</title>
+<title>${title} ${data.dateFrom}${isRange ? `_${data.dateTo}` : ''}</title>
 <style>
   @media print {
     @page { size: A4 landscape; margin: 1cm; }
@@ -177,11 +213,13 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
 <body>
   <div class="header">
     <h1>IGMO S.A.S.</h1>
-    <p>Reporte Diario de Operaciones</p>
-    <p>Fecha: ${formatDate(date)}</p>
+    <p>${title}</p>
+    <p>${isRange ? 'Período' : 'Fecha'}: ${periodLabel}</p>
   </div>
 
   ${summaryBoxes}
+
+  ${isRange ? `<h2>Resumen por día (${data.dailyBreakdown.length})</h2>${breakdownTable}` : ''}
 
   <h2>Desglose por medio de pago</h2>
   ${paymentTable}
@@ -189,10 +227,10 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
   <h2>Viajes por cliente (${data.tripsByClient.length})</h2>
   ${clientsTable}
 
-  <h2>Viajes del día (${data.trips.length})</h2>
+  <h2>Viajes del período (${data.trips.length})</h2>
   ${tripsTable}
 
-  <h2>Gastos del día (${data.expenses.length})</h2>
+  <h2>Gastos del período (${data.expenses.length})</h2>
   ${expensesTable}
 
   <h2>Anticipos consumidos (${data.advancesConsumed.length})</h2>
@@ -203,8 +241,8 @@ function generateDailyReportHtml(date: string, data: DailyReportData): string {
 </html>`
 }
 
-export function printDailyReport(date: string, data: DailyReportData): void {
-  const html = generateDailyReportHtml(date, data)
+export function printDailyReport(data: DailyReportData): void {
+  const html = generateDailyReportHtml(data)
   const win = openCenteredWindow(1100, 750)
   if (!win) return
   win.document.write(html)

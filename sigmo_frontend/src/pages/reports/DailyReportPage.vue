@@ -10,6 +10,7 @@ import {
 import PageHeader from '@/components/shared/PageHeader.vue'
 import DataTable from '@/components/shared/DataTable.vue'
 import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import MonthPickerInput from '@/components/shared/MonthPickerInput.vue'
 import TripsByClientTable from '@/components/shared/TripsByClientTable.vue'
 
 import { tripsApi } from '@/api/trips.api'
@@ -17,34 +18,110 @@ import { expensesApi } from '@/api/expenses.api'
 import { usePermissions } from '@/composables/usePermissions'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime, todayBogota } from '@/utils/formatDate'
-import { getApiErrorMessage, toastApiError } from '@/utils/handleApiError'
+import { toastApiError } from '@/utils/handleApiError'
 import { groupTripsByClient } from '@/utils/groupTripsByClient'
+import { groupByDay } from '@/utils/groupByDay'
+import { monthRange, biweeklyRange, currentHalf } from '@/utils/reportPeriodRanges'
 import { printDailyReport } from '@/utils/printDailyReport'
 import { exportDailyReportExcel } from '@/utils/exportDailyReportExcel'
-import type { Trip, DailyReportData } from '@/types'
+import type { Trip, DailyReportData, ReportPeriodType } from '@/types'
 
 const { hasRole } = usePermissions()
 const canSeeValue = computed(() => !hasRole('cashier'))
 const canSeeAdvances = computed(() => !hasRole('cashier'))
 
-// ── Fecha del reporte ──────────────────────────────────────────────────────
+// ── Selector de período ────────────────────────────────────────────────────
+// 'daily' usa una fecha puntual. 'biweekly'/'monthly' son períodos FIJOS
+// (calculados a partir de un mes elegido, ver reportPeriodRanges.ts) — no
+// fechas libres, para que conserven su significado real de quincena/mes.
+// 'custom' es el único con fecha inicio/fin libre. Todos comparten el mismo
+// query de datos (date_from/date_to) y toda la lógica de agregación.
+const PERIOD_OPTIONS: { value: ReportPeriodType; label: string }[] = [
+  { value: 'daily', label: 'Diario' },
+  { value: 'biweekly', label: 'Quincenal' },
+  { value: 'monthly', label: 'Mensual' },
+  { value: 'custom', label: 'Personalizado' },
+]
+
+const PAGE_TITLES: Record<ReportPeriodType, string> = {
+  daily: 'Reporte Diario de Operaciones',
+  biweekly: 'Reporte Quincenal de Operaciones',
+  monthly: 'Reporte Mensual de Operaciones',
+  custom: 'Reporte Personalizado de Operaciones',
+}
+
+const PAGE_DESCRIPTIONS: Record<ReportPeriodType, string> = {
+  daily: 'Vista consolidada de la operación de un día: viajes, gastos y anticipos consumidos',
+  biweekly: 'Vista consolidada de la operación de una quincena: viajes, gastos y anticipos consumidos',
+  monthly: 'Vista consolidada de la operación de un mes: viajes, gastos y anticipos consumidos',
+  custom: 'Vista consolidada de la operación en un rango de fechas personalizado: viajes, gastos y anticipos consumidos',
+}
+
+const periodType = ref<ReportPeriodType>('daily')
+
+// ── Selección de fecha(s) por tipo de período ─────────────────────────────
 const today = todayBogota()
 const selectedDate = ref(today)
-const reportDate = ref(today)
+const selectedDateFrom = ref(today)
+const selectedDateTo = ref(today)
+// 'yyyy-MM', compartido por Quincenal y Mensual (mismo MonthPickerInput).
+const selectedMonth = ref(today.slice(0, 7))
+const selectedHalf = ref<1 | 2>(currentHalf(Number(today.slice(8, 10))))
+
+const reportPeriodType = ref<ReportPeriodType>('daily')
+const reportDateFrom = ref(today)
+const reportDateTo = ref(today)
 
 function generateReport() {
-  reportDate.value = selectedDate.value
+  if (periodType.value === 'daily') {
+    if (!selectedDate.value) {
+      toast.error('Selecciona la fecha del reporte')
+      return
+    }
+    reportDateFrom.value = selectedDate.value
+    reportDateTo.value = selectedDate.value
+  } else if (periodType.value === 'monthly') {
+    if (!selectedMonth.value) {
+      toast.error('Selecciona el mes del reporte')
+      return
+    }
+    const { from, to } = monthRange(selectedMonth.value)
+    reportDateFrom.value = from
+    reportDateTo.value = to
+  } else if (periodType.value === 'biweekly') {
+    if (!selectedMonth.value) {
+      toast.error('Selecciona el mes del reporte')
+      return
+    }
+    const { from, to } = biweeklyRange(selectedMonth.value, selectedHalf.value)
+    reportDateFrom.value = from
+    reportDateTo.value = to
+  } else {
+    if (!selectedDateFrom.value || !selectedDateTo.value) {
+      toast.error('Selecciona la fecha de inicio y la fecha fin')
+      return
+    }
+    if (selectedDateFrom.value > selectedDateTo.value) {
+      toast.error('La fecha de inicio no puede ser posterior a la fecha fin')
+      return
+    }
+    reportDateFrom.value = selectedDateFrom.value
+    reportDateTo.value = selectedDateTo.value
+  }
+  reportPeriodType.value = periodType.value
 }
 
 // ── Datos en paralelo ──────────────────────────────────────────────────────
+// date_from/date_to cubren tanto un solo día (from === to) como un rango
+// libre — el backend ya filtra ambos endpoints con __gte/__lte.
 const { data: tripsData, isLoading: tripsLoading, refetch: refetchTrips } = useQuery({
-  queryKey: computed(() => ['reports-daily', 'trips', reportDate.value]),
-  queryFn: () => tripsApi.list({ date: reportDate.value }).then(r => r.data),
+  queryKey: computed(() => ['reports-daily', 'trips', reportDateFrom.value, reportDateTo.value]),
+  queryFn: () => tripsApi.list({ date_from: reportDateFrom.value, date_to: reportDateTo.value }).then(r => r.data),
 })
 
 const { data: expensesData, isLoading: expensesLoading, refetch: refetchExpenses } = useQuery({
-  queryKey: computed(() => ['reports-daily', 'expenses', reportDate.value]),
-  queryFn: () => expensesApi.list({ date: reportDate.value }).then(r => r.data),
+  queryKey: computed(() => ['reports-daily', 'expenses', reportDateFrom.value, reportDateTo.value]),
+  queryFn: () => expensesApi.list({ date_from: reportDateFrom.value, date_to: reportDateTo.value }).then(r => r.data),
 })
 
 const isLoading = computed(() => tripsLoading.value || expensesLoading.value)
@@ -56,10 +133,13 @@ function refreshAll() {
 }
 
 // ── Datos derivados ────────────────────────────────────────────────────────
+const isRange = computed(() => reportPeriodType.value !== 'daily')
+const periodNoun = computed(() => (isRange.value ? 'período' : 'día'))
+
 const trips = computed(() => tripsData.value ?? [])
 const expenses = computed(() => expensesData.value ?? [])
 const activeTrips = computed(() => trips.value.filter(t => t.state))
-// Anticipos consumidos: derivados de los viajes del día con anticipo asociado (ver análisis Parte 7)
+// Anticipos consumidos: derivados de los viajes del rango con anticipo asociado (ver análisis Parte 7)
 const advancesConsumed = computed(() => trips.value.filter(t => t.advance !== null))
 
 const totalCollected = computed(() => activeTrips.value.reduce((sum, t) => sum + Number(t.value), 0))
@@ -81,16 +161,23 @@ const byPaymentMethod = computed(() => {
 
 const tripsByClient = computed(() => groupTripsByClient(trips.value))
 
-const isEmptyDay = computed(() =>
+// Subtotales por día: solo tienen valor informativo cuando el reporte cubre
+// más de un día (quincenal/mensual) — ver sección "Resumen por día" abajo.
+const dailyBreakdown = computed(() => groupByDay(trips.value, expenses.value))
+
+const isEmptyPeriod = computed(() =>
   hasLoadedOnce.value && trips.value.length === 0 && expenses.value.length === 0 && advancesConsumed.value.length === 0,
 )
 
 const reportData = computed<DailyReportData>(() => ({
-  date: reportDate.value,
+  periodType: reportPeriodType.value,
+  dateFrom: reportDateFrom.value,
+  dateTo: reportDateTo.value,
   trips: trips.value,
   expenses: expenses.value,
   advancesConsumed: advancesConsumed.value,
   tripsByClient: tripsByClient.value,
+  dailyBreakdown: dailyBreakdown.value,
   summary: {
     totalTrips: activeTrips.value.length,
     totalCollected: totalCollected.value,
@@ -103,20 +190,27 @@ const reportData = computed<DailyReportData>(() => ({
 // ── Exportación ────────────────────────────────────────────────────────────
 function handleExportExcel() {
   try {
-    exportDailyReportExcel(reportDate.value, reportData.value)
+    exportDailyReportExcel(reportData.value)
   } catch (err) {
     toastApiError(err)
   }
 }
 
 function handleExportPdf() {
-  printDailyReport(reportDate.value, reportData.value)
+  printDailyReport(reportData.value)
 }
 
 // ── Columnas tabla de viajes ───────────────────────────────────────────────
 const tripColumns = computed<ColumnDef<Trip>[]>(() => {
   const cols: ColumnDef<Trip>[] = [
     { id: 'voucher_num', header: 'N° Vale', cell: ({ row }) => h('span', { class: 'font-mono font-bold text-gold-800' }, `#${row.original.voucher_num}`) },
+  ]
+
+  if (isRange.value) {
+    cols.push({ id: 'date', header: 'Fecha', cell: ({ row }) => formatDate(row.original.date) })
+  }
+
+  cols.push(
     { id: 'date_register', header: 'Hora registro', cell: ({ row }) => formatTime(row.original.date_register) },
     { id: 'client', header: 'Cliente', cell: ({ row }) => row.original.client_detail?.name ?? '—' },
     { id: 'plaque', header: 'Placa', cell: ({ row }) => row.original.vehicle_detail?.plaque ?? '—' },
@@ -124,7 +218,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
     { id: 'origin', header: 'Origen', cell: ({ row }) => row.original.origin_site_detail?.name ?? '—' },
     { id: 'material', header: 'Tipo Material', cell: ({ row }) => row.original.material_type_detail?.name ?? '—' },
     { id: 'vehicle_type', header: 'Tipo Vehículo', cell: ({ row }) => row.original.vehicle_detail?.vehicle_type_detail?.name ?? '—' },
-  ]
+  )
 
   if (canSeeValue.value) {
     cols.push({
@@ -166,7 +260,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
 <template>
   <div class="space-y-6">
     <div class="flex items-start justify-between flex-wrap gap-4">
-      <PageHeader title="Reporte Diario de Operaciones" description="Vista consolidada de la operación de un día: viajes, gastos y anticipos consumidos" />
+      <PageHeader :title="PAGE_TITLES[reportPeriodType]" :description="PAGE_DESCRIPTIONS[reportPeriodType]" />
 
       <div v-if="hasLoadedOnce" class="flex items-center gap-2">
         <button
@@ -186,35 +280,110 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
       </div>
     </div>
 
-    <!-- ── Selector de fecha ──────────────────────────────────────────────── -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6 flex items-end gap-4 flex-wrap">
-      <div>
-        <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha del reporte</label>
-        <DatePickerInput v-model="selectedDate" />
+    <!-- ── Selector de período y fecha(s) ───────────────────────────────────── -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6 space-y-4">
+      <div class="flex items-center gap-2">
+        <button
+          v-for="opt in PERIOD_OPTIONS"
+          :key="opt.value"
+          type="button"
+          @click="periodType = opt.value"
+          :class="[
+            'px-4 py-1.5 rounded-lg text-sm font-medium transition-colors',
+            periodType === opt.value
+              ? 'bg-gold-500 text-stone-900 shadow-sm'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+          ]"
+        >
+          {{ opt.label }}
+        </button>
       </div>
-      <button
-        type="button"
-        @click="generateReport"
-        class="flex items-center gap-2 px-5 py-2.5 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 disabled:opacity-50 transition-colors shadow-sm"
-        :disabled="isLoading"
-      >
-        <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin' : ''" />
-        {{ isLoading ? 'Generando...' : 'Generar Reporte' }}
-      </button>
-      <button
-        type="button"
-        @click="refreshAll"
-        class="p-2.5 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
-        title="Actualizar"
-      >
-        <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-gold-600' : ''" />
-      </button>
+
+      <div class="flex items-end gap-4 flex-wrap">
+        <template v-if="periodType === 'daily'">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha del reporte</label>
+            <DatePickerInput v-model="selectedDate" />
+          </div>
+        </template>
+        <template v-else-if="periodType === 'monthly'">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1.5">Mes del reporte</label>
+            <MonthPickerInput v-model="selectedMonth" />
+          </div>
+        </template>
+        <template v-else-if="periodType === 'biweekly'">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1.5">Mes</label>
+            <MonthPickerInput v-model="selectedMonth" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1.5">Quincena</label>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                @click="selectedHalf = 1"
+                :class="[
+                  'px-3 py-2 rounded-md text-sm font-medium transition-colors border',
+                  selectedHalf === 1
+                    ? 'bg-gold-500 border-gold-500 text-stone-900'
+                    : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50',
+                ]"
+              >
+                Días 1–15
+              </button>
+              <button
+                type="button"
+                @click="selectedHalf = 2"
+                :class="[
+                  'px-3 py-2 rounded-md text-sm font-medium transition-colors border',
+                  selectedHalf === 2
+                    ? 'bg-gold-500 border-gold-500 text-stone-900'
+                    : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50',
+                ]"
+              >
+                Días 16–fin
+              </button>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha inicio</label>
+            <DatePickerInput v-model="selectedDateFrom" :max="selectedDateTo || undefined" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1.5">Fecha fin</label>
+            <DatePickerInput v-model="selectedDateTo" :min="selectedDateFrom || undefined" />
+          </div>
+        </template>
+        <button
+          type="button"
+          @click="generateReport"
+          class="flex items-center gap-2 px-5 py-2.5 bg-gold-500 text-stone-900 text-sm font-semibold rounded-lg hover:bg-gold-600 disabled:opacity-50 transition-colors shadow-sm"
+          :disabled="isLoading"
+        >
+          <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin' : ''" />
+          {{ isLoading ? 'Generando...' : 'Generar Reporte' }}
+        </button>
+        <button
+          type="button"
+          @click="refreshAll"
+          class="p-2.5 rounded-lg text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors"
+          title="Actualizar"
+        >
+          <RefreshCw class="w-4 h-4" :class="isLoading ? 'animate-spin text-gold-600' : ''" />
+        </button>
+      </div>
     </div>
 
-    <!-- ── Día vacío ──────────────────────────────────────────────────────── -->
-    <div v-if="isEmptyDay" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 py-16 flex flex-col items-center justify-center text-center">
+    <!-- ── Período vacío ─────────────────────────────────────────────────── -->
+    <div v-if="isEmptyPeriod" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 py-16 flex flex-col items-center justify-center text-center">
       <CalendarX2 class="w-12 h-12 text-gray-300 mb-3" />
-      <p class="text-sm font-medium text-gray-500">Sin actividad registrada para el {{ formatDate(reportDate) }}</p>
+      <p v-if="isRange" class="text-sm font-medium text-gray-500">
+        Sin actividad registrada entre el {{ formatDate(reportDateFrom) }} y el {{ formatDate(reportDateTo) }}
+      </p>
+      <p v-else class="text-sm font-medium text-gray-500">Sin actividad registrada para el {{ formatDate(reportDateFrom) }}</p>
     </div>
 
     <template v-else>
@@ -238,6 +407,50 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
         </div>
       </div>
 
+      <!-- ── Resumen por día (solo quincenal/mensual) ──────────────────────── -->
+      <div v-if="isRange" class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h2 class="text-sm font-semibold text-gray-800">Resumen por día</h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-gray-50 border-b border-gray-100">
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">N° Viajes</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Recaudado</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Gastos</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Saldo Neto</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+              <tr v-if="isLoading">
+                <td colspan="5" class="px-4 py-4"><div class="h-4 bg-gray-200 rounded animate-pulse" /></td>
+              </tr>
+              <tr v-else-if="dailyBreakdown.length === 0">
+                <td colspan="5" class="px-4 py-6 text-center text-xs text-gray-400">Sin actividad registrada en el período.</td>
+              </tr>
+              <tr v-for="d in dailyBreakdown" :key="d.date" class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-gray-700">{{ formatDate(d.date) }}</td>
+                <td class="px-4 py-3 text-right text-gray-700">{{ d.tripsCount }}</td>
+                <td class="px-4 py-3 text-right text-emerald-700 font-medium">{{ formatCurrency(d.totalCollected) }}</td>
+                <td class="px-4 py-3 text-right text-red-600 font-medium">{{ formatCurrency(d.totalExpenses) }}</td>
+                <td class="px-4 py-3 text-right font-semibold" :class="d.netBalance >= 0 ? 'text-gray-900' : 'text-red-600'">{{ formatCurrency(d.netBalance) }}</td>
+              </tr>
+            </tbody>
+            <tfoot v-if="dailyBreakdown.length > 0">
+              <tr class="bg-gray-50 border-t-2 border-gray-200">
+                <td class="px-4 py-3 text-xs font-semibold text-gray-600">Total</td>
+                <td class="px-4 py-3 text-right text-xs font-semibold text-gray-600">{{ reportData.summary.totalTrips }}</td>
+                <td class="px-4 py-3 text-right text-sm font-bold text-emerald-700">{{ formatCurrency(reportData.summary.totalCollected) }}</td>
+                <td class="px-4 py-3 text-right text-sm font-bold text-red-600">{{ formatCurrency(reportData.summary.totalExpenses) }}</td>
+                <td class="px-4 py-3 text-right text-sm font-bold text-gray-900">{{ formatCurrency(reportData.summary.netBalance) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
       <!-- ── Desglose por medio de pago ───────────────────────────────────── -->
       <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-100">
@@ -257,7 +470,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
                 <td colspan="3" class="px-4 py-4"><div class="h-4 bg-gray-200 rounded animate-pulse" /></td>
               </tr>
               <tr v-else-if="reportData.summary.byPaymentMethod.length === 0">
-                <td colspan="3" class="px-4 py-6 text-center text-xs text-gray-400">Sin viajes registrados para esta fecha.</td>
+                <td colspan="3" class="px-4 py-6 text-center text-xs text-gray-400">Sin viajes registrados para este período.</td>
               </tr>
               <tr v-for="p in reportData.summary.byPaymentMethod" :key="p.name" class="hover:bg-gray-50">
                 <td class="px-4 py-3 text-gray-700">{{ p.name }}</td>
@@ -285,19 +498,19 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
         <TripsByClientTable :rows="tripsByClient" :is-loading="isLoading" />
       </div>
 
-      <!-- ── Viajes del día ───────────────────────────────────────────────── -->
+      <!-- ── Viajes del período ───────────────────────────────────────────── -->
       <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-6">
         <div class="flex items-center gap-2 mb-4">
-          <h2 class="text-sm font-semibold text-gray-800">Viajes del día</h2>
+          <h2 class="text-sm font-semibold text-gray-800">Viajes del {{ periodNoun }}</h2>
           <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">{{ trips.length }}</span>
         </div>
         <DataTable :columns="(tripColumns as any)" :data="(trips as any)" :is-loading="isLoading" />
       </div>
 
-      <!-- ── Gastos del día ───────────────────────────────────────────────── -->
+      <!-- ── Gastos del período ───────────────────────────────────────────── -->
       <div class="bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-          <h2 class="text-sm font-semibold text-gray-800">Gastos del día</h2>
+          <h2 class="text-sm font-semibold text-gray-800">Gastos del {{ periodNoun }}</h2>
           <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">{{ expenses.length }}</span>
         </div>
         <div class="overflow-x-auto">
@@ -317,7 +530,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
                 </tr>
               </template>
               <tr v-else-if="expenses.length === 0">
-                <td colspan="4" class="px-4 py-10 text-center text-xs text-gray-400">No se registraron gastos para esta fecha.</td>
+                <td colspan="4" class="px-4 py-10 text-center text-xs text-gray-400">No se registraron gastos para este período.</td>
               </tr>
               <tr v-for="e in expenses" :key="e.id" class="hover:bg-gray-50">
                 <td class="px-4 py-3 text-gray-600 text-xs">{{ formatDate(e.date) }}</td>
@@ -360,7 +573,7 @@ const tripColumns = computed<ColumnDef<Trip>[]>(() => {
                 </tr>
               </template>
               <tr v-else-if="advancesConsumed.length === 0">
-                <td colspan="4" class="px-4 py-10 text-center text-xs text-gray-400">No se consumieron anticipos en esta fecha.</td>
+                <td colspan="4" class="px-4 py-10 text-center text-xs text-gray-400">No se consumieron anticipos en este período.</td>
               </tr>
               <tr v-for="t in advancesConsumed" :key="t.id" class="hover:bg-gray-50">
                 <td class="px-4 py-3 font-medium text-gray-900">{{ t.client_detail?.name ?? '—' }}</td>

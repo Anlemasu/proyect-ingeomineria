@@ -216,7 +216,9 @@ export const navigation: NavItem[] = [
       },
       {
         type: 'leaf',
-        label: 'Reporte Diario',
+        // Cubre Diario/Quincenal/Mensual: el selector de período vive dentro
+        // de la página (DailyReportPage.vue), no como rutas/ítems separados.
+        label: 'Reporte Diario / Quincenal / Mensual',
         path: '/reports/daily',
         icon: CalendarRange,
         roles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier'],
