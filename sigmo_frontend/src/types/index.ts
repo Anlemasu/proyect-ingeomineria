@@ -1,4 +1,4 @@
-export type UserRole = 'superuser' | 'commercial_admin' | 'cashier' | 'accountant' | 'auditor'
+export type UserRole = 'superuser' | 'commercial_admin' | 'cashier' | 'accountant' | 'auditor' | 'certifier' | 'viewer'
 
 export interface User {
   id: number
@@ -126,6 +126,16 @@ export interface Invoice {
   number: string
 }
 
+// Certificado de disposición final entregado al cliente por uno o varios
+// viajes (ver apps/certificates en el backend). No tiene relación con
+// Client.validate_certification (eso es si el cliente certifica
+// retenciones, un concepto distinto).
+export interface Certificate {
+  id: number
+  user: number
+  number: string
+}
+
 export interface Trip {
   id: number
   voucher_num: number
@@ -134,8 +144,8 @@ export interface Trip {
   value: string
   extern_voucher_num: string | null
   invoice_pos: number | null
-  certification_state: boolean | null
-  certification_num: string | null
+  certificate: number | null
+  certificate_pos: number | null
   state: boolean
   client_detail: Client
   payment_detail: PaymentMethod

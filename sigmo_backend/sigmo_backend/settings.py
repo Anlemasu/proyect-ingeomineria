@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'apps.physical_reports',
     'apps.expenses',
     'apps.invoices',
+    'apps.certificates',
     'apps.cash_closing',
     'apps.reports',
     'apps.audit',

@@ -43,6 +43,14 @@ const showFinishedAdvances = computed(() => ['accountant', 'superuser'].includes
 const showUnfacturedTrips = computed(() => ['accountant', 'superuser'].includes(role.value ?? ''))
 const canValidate = computed(() => ['accountant', 'superuser'].includes(role.value ?? ''))
 
+// 'auditor', 'viewer' y 'certifier' comparten el mismo landing de
+// "bienvenida + accesos rápidos" en vez del dashboard con widgets operativos
+// de abajo (ninguno de esos widgets aplica a roles sin operación de caja/
+// facturación/anticipos). La actividad reciente del log de auditoría queda
+// exclusiva de 'auditor' (los otros dos no tienen acceso a
+// /admin/audit-log, ver navigation.ts y AuditLogView.get en el backend).
+const isReadOnlyLanding = computed(() => ['auditor', 'viewer', 'certifier'].includes(role.value ?? ''))
+
 const dailySummaryLinkTarget = '/trips'
 
 // ── Ancho de columnas ajustable (arrastrar borde, como Excel) ───────────────
@@ -197,15 +205,19 @@ const tripsUnfactured = computed(() => (tripsUnfacturedData.value ?? [])
   .slice(0, 15),
 )
 
-// ── AUDITOR: accesos rápidos (derivados de navigation.ts, no hardcodeados) ────
-const auditorQuickLinks = computed<NavLeaf[]>(() => {
+// ── AUDITOR/VIEWER: accesos rápidos (derivados de navigation.ts, no hardcodeados) ────
+// Generalizado desde el rol auditor original para reusar el mismo landing con
+// 'viewer' — cada uno ve solo las rutas que su propio rol tiene en navigation.ts.
+const readOnlyQuickLinks = computed<NavLeaf[]>(() => {
   const leaves: NavLeaf[] = []
+  const currentRole = role.value
+  if (!currentRole) return leaves
   for (const item of navigation) {
     if (item.type === 'leaf') {
-      if (item.path !== '/' && item.enabled !== false && item.roles.includes('auditor')) leaves.push(item)
+      if (item.path !== '/' && item.enabled !== false && item.roles.includes(currentRole)) leaves.push(item)
     } else {
       for (const child of item.children) {
-        if (child.enabled !== false && child.roles.includes('auditor')) leaves.push(child)
+        if (child.enabled !== false && child.roles.includes(currentRole)) leaves.push(child)
       }
     }
   }
@@ -261,8 +273,8 @@ async function confirmValidate() {
 </script>
 
 <template>
-  <!-- ── AUDITOR: bienvenida + accesos rápidos + actividad reciente ──────────── -->
-  <div v-if="role === 'auditor'" class="space-y-6">
+  <!-- ── AUDITOR/VIEWER: bienvenida + accesos rápidos (+ actividad reciente solo auditor) ──── -->
+  <div v-if="isReadOnlyLanding" class="space-y-6">
     <!-- Banner de bienvenida -->
     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col sm:flex-row items-center gap-6">
       <img src="/logo_amarillo.jpeg" alt="Ingeominería" class="w-40 rounded-xl shadow-sm shrink-0" />
@@ -284,7 +296,7 @@ async function confirmValidate() {
       <h2 class="text-sm font-semibold text-gray-800">Accesos rápidos de consulta</h2>
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         <router-link
-          v-for="link in auditorQuickLinks"
+          v-for="link in readOnlyQuickLinks"
           :key="link.path"
           :to="link.path"
           class="flex items-center gap-3 bg-white rounded-xl border border-gray-200 shadow-md shadow-stone-300/50 p-4 hover:border-gold-300 hover:shadow-lg transition-all"
@@ -297,8 +309,9 @@ async function confirmValidate() {
       </div>
     </section>
 
-    <!-- Actividad reciente del sistema -->
-    <section class="space-y-3">
+    <!-- Actividad reciente del sistema — exclusiva de auditor (viewer no
+         tiene acceso a /admin/audit-log, ver isReadOnlyLanding arriba) -->
+    <section v-if="role === 'auditor'" class="space-y-3">
       <div class="flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-800">Actividad reciente del sistema</h2>
         <router-link to="/admin/audit-log" class="text-xs text-gold-700 hover:text-gold-800 font-medium">

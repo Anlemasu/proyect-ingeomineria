@@ -12,6 +12,7 @@ urlpatterns = [
     path('api/physical-reports/', include('apps.physical_reports.urls')),
     path('api/expenses/',  include('apps.expenses.urls')),
     path('api/invoices/',  include('apps.invoices.urls')),
+    path('api/certificates/', include('apps.certificates.urls')),
     path('api/trips/',     include('apps.trips.urls')),
     path('api/cash-closing/', include('apps.cash_closing.urls')),
     path('api/audit/', include('apps.audit.urls')),

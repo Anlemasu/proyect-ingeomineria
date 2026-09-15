@@ -2,7 +2,9 @@ import { ROLES } from './roles'
 
 export const PERMISSIONS = {
   clients: {
-    view: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.ACCOUNTANT, ROLES.CASHIER, ROLES.AUDITOR],
+    // certifier: solo lectura (ver navigation.ts) — necesita consultar los
+    // datos del cliente al que le certifica los viajes, no editarlos.
+    view: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.ACCOUNTANT, ROLES.CASHIER, ROLES.AUDITOR, ROLES.CERTIFIER],
     create: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.ACCOUNTANT],
     edit: [ROLES.SUPERUSER, ROLES.COMMERCIAL_ADMIN, ROLES.ACCOUNTANT],
     delete: [],

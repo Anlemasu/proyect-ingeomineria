@@ -14,6 +14,7 @@ import {
   Map,
   Wallet,
   FileText,
+  BadgeCheck,
   Receipt,
   BarChart2,
   CalendarRange,
@@ -52,7 +53,7 @@ export const navigation: NavItem[] = [
     label: 'Dashboard',
     path: '/',
     icon: LayoutDashboard,
-    roles: ['superuser', 'commercial_admin', 'cashier', 'accountant', 'auditor'],
+    roles: ['superuser', 'commercial_admin', 'cashier', 'accountant', 'auditor', 'certifier', 'viewer'],
   },
   {
     type: 'group',
@@ -100,7 +101,20 @@ export const navigation: NavItem[] = [
     label: 'Clientes',
     path: '/masters/clients',
     icon: Building2,
-    roles: ['superuser', 'commercial_admin', 'accountant', 'auditor'],
+    // certifier: acceso de solo consulta (no puede crear/editar, ver
+    // PERMISSIONS.clients en constants/permissions.ts) — necesita ver los
+    // datos del cliente al que le certifica los viajes.
+    roles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'certifier'],
+  },
+  {
+    type: 'leaf',
+    label: 'Certificación',
+    path: '/certification',
+    icon: BadgeCheck,
+    // Certificados de disposición final por viaje (rol 'certifier') — botón
+    // independiente, no un módulo financiero (por eso no vive en el grupo
+    // Finanzas junto a Facturación, aunque comparta el mismo patrón técnico).
+    roles: ['superuser', 'certifier'],
   },
   {
     type: 'group',
@@ -212,7 +226,7 @@ export const navigation: NavItem[] = [
         label: 'Consulta de Viajes',
         path: '/reports/general',
         icon: TrendingUp,
-        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier'],
+        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier', 'certifier', 'viewer'],
       },
       {
         type: 'leaf',
@@ -221,14 +235,14 @@ export const navigation: NavItem[] = [
         label: 'Reporte Diario / Quincenal / Mensual',
         path: '/reports/daily',
         icon: CalendarRange,
-        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier'],
+        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'cashier', 'certifier', 'viewer'],
       },
       {
         type: 'leaf',
         label: 'Reporte por Rango',
         path: '/reports/range',
         icon: BarChart2,
-        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor'],
+        roles: ['superuser', 'commercial_admin', 'accountant', 'auditor', 'certifier', 'viewer'],
         // FASE 6.3: placeholder sin funcionalidad real (UnderConstruction en
         // el router) — se retoma cuando apps/reports (hoy vacía) se
         // complete. Reactivar quitando esta línea o poniéndola en `true`.

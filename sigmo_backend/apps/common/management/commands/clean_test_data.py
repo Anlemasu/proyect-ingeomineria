@@ -8,6 +8,7 @@ from apps.cash_closing.models import DailySummary, DailySummaryPayment
 from apps.clients.models import Client
 from apps.expenses.models import Expense
 from apps.invoices.models import Invoice
+from apps.certificates.models import Certificate
 from apps.masters.models import (
     City, MaterialType, OriginSite, PaymentMethod, PinsDumper, Tariff, Vehicle, VehicleType,
 )
@@ -21,6 +22,7 @@ TARGET_MODELS = [
     AdvanceMovement,
     Advance,
     Invoice,
+    Certificate,
     DailySummaryPayment,
     DailySummary,
     Expense,
@@ -45,7 +47,7 @@ CATALOG_MODELS = [
 class Command(BaseCommand):
     help = (
         'Vacía las tablas transaccionales de prueba (viajes, anticipos, '
-        'cierres de caja, facturas, gastos, auditoría) y reinicia sus '
+        'cierres de caja, facturas, certificados, gastos, auditoría) y reinicia sus '
         'contadores de id/voucher_num a 1. Con --full también borra clientes '
         'y todos los catálogos de masters (vehículos, tipos, tarifas, etc.). '
         'En ningún caso toca la tabla de usuarios.'

@@ -4,7 +4,7 @@ from rest_framework import serializers
 from .models import User
 
 
-def _run_django_password_validators(value, *, user=None, field='password'):
+def _run_django_password_validators(value, *, user=None, field=None):
     """
     8A.2 — AUTH_PASSWORD_VALIDATORS (settings.py) estaba configurado pero
     nunca se invocaba: ningún flujo de creación/cambio de contraseña
@@ -17,11 +17,23 @@ def _run_django_password_validators(value, *, user=None, field='password'):
     serializers.ValidationError para que DRF lo agregue automáticamente a
     serializer.errors, igual que cualquier otro error de validate_*, sin
     tener que tocar ninguna vista.
+
+    `field` solo debe pasarse cuando se llama desde `validate()` (a nivel de
+    serializer completo): ahí DRF no sabe a qué campo asociar el error, así
+    que hay que envolverlo en {field: [...]} explícitamente. Cuando se llama
+    desde un `validate_<campo>` (a nivel de campo, como abajo en
+    ChangePasswordSerializer/ResetPasswordByAdminSerializer), DRF ya asocia
+    cualquier ValidationError de ese método con ese campo automáticamente —
+    envolverlo ahí también duplicaba el nombre del campo y producía un JSON
+    anidado como {"new_password": {"new_password": [...]}} en vez de
+    {"new_password": [...]}.
     """
     try:
         password_validation.validate_password(value, user=user)
     except DjangoValidationError as e:
-        raise serializers.ValidationError({field: list(e.messages)})
+        if field:
+            raise serializers.ValidationError({field: list(e.messages)})
+        raise serializers.ValidationError(list(e.messages))
 
 
 # ── Lectura ──────────────────────────────────────────────────────────────────
@@ -136,7 +148,7 @@ class ChangePasswordSerializer(serializers.Serializer):
         # UserAttributeSimilarityValidator compare contra el username/email
         # reales, no solo las reglas manuales de arriba.
         user = self.context['request'].user
-        _run_django_password_validators(value, user=user, field='new_password')
+        _run_django_password_validators(value, user=user)
         return value
 
     def validate(self, data):
@@ -174,5 +186,5 @@ class ResetPasswordByAdminSerializer(serializers.Serializer):
         # que efectivamente va a recibir esta contraseña, no el del
         # superusuario que hace el reset.
         target_user = self.context.get('target_user')
-        _run_django_password_validators(value, user=target_user, field='new_password')
+        _run_django_password_validators(value, user=target_user)
         return value

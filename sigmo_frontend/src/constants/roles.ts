@@ -4,6 +4,8 @@ export const ROLES = {
   CASHIER: 'cashier',
   ACCOUNTANT: 'accountant',
   AUDITOR: 'auditor',
+  CERTIFIER: 'certifier',
+  VIEWER: 'viewer',
 } as const
 
 export type RoleKey = keyof typeof ROLES
@@ -15,6 +17,8 @@ export const ROLE_LABELS: Record<string, string> = {
   cashier: 'Operador de Caja',
   accountant: 'Contador',
   auditor: 'Auditor',
+  certifier: 'Certificador',
+  viewer: 'Consulta',
 }
 
 export const ROLE_COLORS: Record<string, string> = {
@@ -23,4 +27,6 @@ export const ROLE_COLORS: Record<string, string> = {
   cashier: 'bg-green-100 text-green-800',
   accountant: 'bg-amber-100 text-amber-800',
   auditor: 'bg-gray-100 text-gray-800',
+  certifier: 'bg-teal-100 text-teal-800',
+  viewer: 'bg-sky-100 text-sky-800',
 }

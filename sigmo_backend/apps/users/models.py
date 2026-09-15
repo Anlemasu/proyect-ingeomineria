@@ -38,6 +38,8 @@ class User(AbstractBaseUser):
         ('cashier', 'Operador de Caja'),
         ('accountant', 'Contador'),
         ('auditor', 'Auditor'),
+        ('certifier', 'Certificador'),
+        ('viewer', 'Consulta'),
     ]
 
     id = models.AutoField(primary_key=True)

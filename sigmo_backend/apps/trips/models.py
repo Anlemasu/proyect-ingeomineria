@@ -3,6 +3,7 @@ from apps.common.text import uppercase_fields
 from apps.clients.models import Client
 from apps.masters.models import Vehicle, MaterialType, PaymentMethod, OriginSite
 from apps.invoices.models import Invoice
+from apps.certificates.models import Certificate
 from apps.cash_closing.models import DailySummary
 from apps.advances.models import Advance
 
@@ -23,8 +24,13 @@ class Trip(models.Model):
     invoice_pos = models.IntegerField(null=True, blank=True)
     date_register = models.DateTimeField()
     date = models.DateField()
-    certification_state = models.BooleanField(null=True, blank=True)
-    certification_num = models.CharField(max_length=30, null=True, blank=True)
+    # Certificado de disposición final que se le entrega al cliente por este
+    # viaje. Un mismo certificado puede agrupar varios viajes (igual que
+    # Invoice/invoice_pos arriba) — no tiene relación con
+    # Client.validate_certification (eso es si el cliente certifica
+    # retenciones, un concepto distinto).
+    certificate = models.ForeignKey(Certificate, on_delete=models.RESTRICT, null=True, blank=True)
+    certificate_pos = models.IntegerField(null=True, blank=True)
     state = models.BooleanField(default=True)
     # FASE 3 — decisión de modelo de datos para "deuda pendiente":
     # se reutiliza `advance IS NULL` en un viaje pagado con medio "anticipo"
@@ -46,7 +52,7 @@ class Trip(models.Model):
         db_table = 'TRIP'
 
     def save(self, *args, **kwargs):
-        uppercase_fields(self, 'extern_voucher_num', 'certification_num')
+        uppercase_fields(self, 'extern_voucher_num')
         super().save(*args, **kwargs)
 
     def __str__(self):

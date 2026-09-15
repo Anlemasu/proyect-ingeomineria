@@ -27,6 +27,7 @@ export const ALL_MODELS = [
   { value: 'Advance',       label: 'Anticipo' },
   { value: 'Expense',       label: 'Gasto' },
   { value: 'Invoice',       label: 'Factura' },
+  { value: 'Certificate',   label: 'Certificado' },
   { value: 'DailySummary',  label: 'Cierre de Caja' },
   { value: 'VehicleType',   label: 'Tipo de Vehículo' },
   { value: 'MaterialType',  label: 'Tipo de Material' },

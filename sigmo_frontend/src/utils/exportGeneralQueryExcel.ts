@@ -7,7 +7,9 @@ interface ColumnLite {
   label: string
 }
 
-function resolveExportValue(t: Trip, key: string, invoiceNumberMap: Record<number, string>): string | number {
+function resolveExportValue(
+  t: Trip, key: string, invoiceNumberMap: Record<number, string>, certificateNumberMap: Record<number, string>,
+): string | number {
   switch (key) {
     case 'voucher_num': return t.voucher_num
     case 'date': return formatDate(t.date)
@@ -25,17 +27,18 @@ function resolveExportValue(t: Trip, key: string, invoiceNumberMap: Record<numbe
     case 'observations': return t.observations ?? '—'
     case 'state': return t.state ? 'Activo' : 'Anulado'
     case 'invoice_number': return t.invoice != null ? (invoiceNumberMap[t.invoice] ?? `#${t.invoice}`) : '—'
-    case 'certification_state': return t.certification_state === true ? 'Sí' : t.certification_state === false ? 'No' : '—'
-    case 'certification_num': return t.certification_num ?? '—'
+    case 'certificate_number': return t.certificate != null ? (certificateNumberMap[t.certificate] ?? `#${t.certificate}`) : '—'
     case 'advance': return t.advance != null ? `#${t.advance}` : '—'
     case 'summary': return t.summary != null ? `#${t.summary}` : '—'
     default: return '—'
   }
 }
 
-export function exportGeneralQueryExcel(rows: Trip[], columns: ColumnLite[], invoiceNumberMap: Record<number, string>): void {
+export function exportGeneralQueryExcel(
+  rows: Trip[], columns: ColumnLite[], invoiceNumberMap: Record<number, string>, certificateNumberMap: Record<number, string>,
+): void {
   const header = columns.map(c => c.label)
-  const dataRows = rows.map(t => columns.map(c => resolveExportValue(t, c.key, invoiceNumberMap)))
+  const dataRows = rows.map(t => columns.map(c => resolveExportValue(t, c.key, invoiceNumberMap, certificateNumberMap)))
 
   const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows])
   const wb = XLSX.utils.book_new()

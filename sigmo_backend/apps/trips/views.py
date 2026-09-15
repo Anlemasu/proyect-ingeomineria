@@ -63,6 +63,13 @@ def can_unlink_invoice(user):
     return user.role in ['superuser', 'accountant']
 
 
+# Certificados de disposición final (apps/certificates) — mismo patrón que
+# facturación arriba, con su propio rol ('certifier') en vez de 'accountant'.
+# No tiene relación con Client.validate_certification (retenciones).
+def can_unlink_certificate(user):
+    return user.role in ['superuser', 'certifier']
+
+
 # RF-36: estos dos roles están al mismo nivel en la matriz (CRU, no D) —
 # solo pueden tocar viajes registrados el día en curso. Fuera de esa
 # ventana, el ajuste es exclusivo de superuser (RF-37, más abajo, mismo
@@ -343,9 +350,9 @@ class TripDetailView(APIView):
             )
         return Response(TripReadSerializer(obj).data)
 
-    @extend_schema(summary="Editar, anular o desvincular la factura de un viaje.")
+    @extend_schema(summary="Editar, anular o desvincular la factura/certificado de un viaje.")
     def patch(self, request, pk):
-        """Editar, anular o desvincular la factura de un viaje."""
+        """Editar, anular o desvincular la factura/certificado de un viaje."""
         # 8B.4: desvincular una factura (`invoice` explícito en null) es una
         # operación separada, reservada a superuser/contabilidad — se
         # detecta ANTES del gate normal de can_update_trips() para que
@@ -353,6 +360,9 @@ class TripDetailView(APIView):
         # test_accountant_cannot_patch_trip) pueda hacer específicamente
         # esta operación sin abrirle el resto del PATCH.
         is_unlink_request = 'invoice' in request.data and request.data.get('invoice') is None
+        # Mismo patrón que is_unlink_request, para certificados de
+        # disposición final (ver can_unlink_certificate arriba).
+        is_unlink_certificate_request = 'certificate' in request.data and request.data.get('certificate') is None
 
         # BUG 1/2 (Fase 2): solo estos tres roles pueden ejecutar este PATCH.
         # Antes no había ningún chequeo de rol aquí — cualquier autenticado
@@ -365,6 +375,13 @@ class TripDetailView(APIView):
                 log_action(request, 'access_denied', 'Trip', object_id=pk)
                 return Response(
                     {'error': 'No tiene permisos para desvincular una factura de un viaje.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        elif is_unlink_certificate_request:
+            if not can_unlink_certificate(request.user):
+                log_action(request, 'access_denied', 'Trip', object_id=pk)
+                return Response(
+                    {'error': 'No tiene permisos para desvincular un certificado de un viaje.'},
                     status=status.HTTP_403_FORBIDDEN
                 )
         elif not can_update_trips(request.user):
@@ -465,8 +482,10 @@ class TripDetailView(APIView):
         action = 'annul' if is_annulment else 'update'
         justification = request.data.get('justification', None)
         INVOICE_ONLY_FIELDS = {'invoice', 'invoice_pos'}
+        CERTIFICATE_ONLY_FIELDS = {'certificate', 'certificate_pos'}
         incoming_fields = set(request.data.keys()) - {'justification'}
         is_invoice_only_patch = incoming_fields.issubset(INVOICE_ONLY_FIELDS)
+        is_certificate_only_patch = incoming_fields.issubset(CERTIFICATE_ONLY_FIELDS)
 
         # Decisión: anular un viaje exige justificación siempre, sin importar
         # el rol — incluido superuser. Antes solo se le exigía a cashier/
@@ -488,12 +507,16 @@ class TripDetailView(APIView):
         # No se separó en un endpoint nuevo (ver decisión registrada en el
         # resumen de esta fase) — sigue siendo este mismo PATCH, distinguido
         # por esta condición. Los patches que solo tocan invoice/invoice_pos
-        # quedan exentos, igual que la regla de justificación de abajo,
-        # porque no afectan los totales que protege el cierre.
+        # (o certificate/certificate_pos) quedan exentos, igual que la regla
+        # de justificación de abajo, porque no afectan los totales que
+        # protege el cierre.
         day_closed = DailySummary.objects.filter(
             date=obj.date, state=DailySummary.STATE_CLOSED
         ).exists()
-        if day_closed and request.user.role != 'superuser' and not is_invoice_only_patch:
+        if (
+            day_closed and request.user.role != 'superuser'
+            and not is_invoice_only_patch and not is_certificate_only_patch
+        ):
             log_action(request, 'access_denied', 'Trip', object_id=obj.id)
             return Response({
                 'error': (
@@ -605,19 +628,29 @@ class TripDetailView(APIView):
                             request=request,
                         )
                     elif payment_entering_advance:
-                        save_kwargs = {'invoice_pos': None} if is_unlink_request else {}
+                        save_kwargs = {}
+                        if is_unlink_request:
+                            save_kwargs['invoice_pos'] = None
+                        if is_unlink_certificate_request:
+                            save_kwargs['certificate_pos'] = None
                         trip = cast(Trip, serializer.save(**save_kwargs))
                         fund_trip_entering_advance_payment(
                             trip, justification=justification, request=request,
                         )
                     else:
-                        # 8B.4: al desvincular (invoice=None), limpiar
-                        # también invoice_pos — no tendría sentido dejar un
-                        # número de posición de factura colgado sin ninguna
-                        # factura a la que pertenezca. El caller solo manda
-                        # `invoice: null`, no invoice_pos, así que se fuerza
-                        # acá igual que otros campos derivados en este PATCH.
-                        save_kwargs = {'invoice_pos': None} if is_unlink_request else {}
+                        # 8B.4: al desvincular (invoice=None o
+                        # certificate=None), limpiar también invoice_pos/
+                        # certificate_pos — no tendría sentido dejar un
+                        # número de posición colgado sin la factura/
+                        # certificado al que pertenecía. El caller solo manda
+                        # `invoice: null`/`certificate: null`, no el _pos,
+                        # así que se fuerza acá igual que otros campos
+                        # derivados en este PATCH.
+                        save_kwargs = {}
+                        if is_unlink_request:
+                            save_kwargs['invoice_pos'] = None
+                        if is_unlink_certificate_request:
+                            save_kwargs['certificate_pos'] = None
                         trip = cast(Trip, serializer.save(**save_kwargs))
                         if was_advance_funded:
                             sync_advance_movement_on_trip_change(

@@ -42,6 +42,8 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'cashier', label: 'Operador de Caja' },
   { value: 'accountant', label: 'Contador' },
   { value: 'auditor', label: 'Auditor' },
+  { value: 'certifier', label: 'Certificador' },
+  { value: 'viewer', label: 'Consulta' },
 ]
 
 const ROLE_BADGE: Record<UserRole, string> = {
@@ -50,6 +52,8 @@ const ROLE_BADGE: Record<UserRole, string> = {
   cashier: 'bg-green-100 text-green-700',
   accountant: 'bg-amber-100 text-amber-700',
   auditor: 'bg-gray-100 text-gray-700',
+  certifier: 'bg-teal-100 text-teal-700',
+  viewer: 'bg-sky-100 text-sky-700',
 }
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -58,6 +62,8 @@ const ROLE_LABEL: Record<UserRole, string> = {
   cashier: 'Cajero',
   accountant: 'Contador',
   auditor: 'Auditor',
+  certifier: 'Certificador',
+  viewer: 'Consulta',
 }
 
 // ── Password validation (mirrors backend: min 8, uppercase, digit) ────────────
@@ -75,7 +81,7 @@ const createSchema = toTypedSchema(z.object({
     .transform(s => s.trim()),
   password: passwordRules,
   password_confirm: z.string(),
-  role: z.enum(['superuser', 'commercial_admin', 'cashier', 'accountant', 'auditor'], {
+  role: z.enum(['superuser', 'commercial_admin', 'cashier', 'accountant', 'auditor', 'certifier', 'viewer'], {
     error: 'El rol es requerido',
   }),
 }).refine(data => data.password === data.password_confirm, {
@@ -134,6 +140,7 @@ const {
   handleSubmit: handleResetSubmit,
   isSubmitting: isResetting,
   resetForm: resetResetForm,
+  setFieldError: setResetFieldError,
 } = useForm({ validationSchema: resetSchema })
 
 const { value: resetPassword, errorMessage: resetPasswordError } = useField<string>('password')
@@ -238,6 +245,7 @@ const onCreateSubmit = handleCreateSubmit(async (values) => {
     const fieldErrors = getFieldErrors(err)
     if (fieldErrors.email) setCreateFieldError('email', fieldErrors.email)
     else if (fieldErrors.username) setCreateFieldError('username', fieldErrors.username)
+    else if (fieldErrors.password) setCreateFieldError('password', fieldErrors.password)
     else toastApiError(err)
   }
 })
@@ -261,7 +269,9 @@ const onResetSubmit = handleResetSubmit(async (values) => {
     await resetUserPassword({ id: resetTargetUser.value.id, data: { new_password: values.password } })
     showResetModal.value = false
   } catch (err) {
-    toastApiError(err)
+    const fieldErrors = getFieldErrors(err)
+    if (fieldErrors.new_password) setResetFieldError('password', fieldErrors.new_password)
+    else toastApiError(err)
   }
 })
 
@@ -365,7 +375,7 @@ const columns: ColumnDef<User>[] = [
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña temporal *</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
               <div class="relative">
                 <input v-model="createPassword"
                   :type="showPassword ? 'text' : 'password'"
@@ -489,13 +499,13 @@ const columns: ColumnDef<User>[] = [
         <div class="relative bg-white rounded-lg shadow-xl border-t-4 border-gold-500 p-6 w-full max-w-md mx-4">
           <h2 class="text-lg font-semibold mb-1">Restablecer contraseña</h2>
           <p class="text-sm text-gray-500 mb-5">
-            Establecer nueva contraseña temporal para
+            Establecer nueva contraseña para
             <span class="font-medium text-gray-700">{{ resetTargetUser.username }}</span>
           </p>
           <form @submit.prevent="onResetSubmit" class="space-y-4" novalidate>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña temporal *</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña *</label>
               <div class="relative">
                 <input v-model="resetPassword"
                   :type="showResetPassword ? 'text' : 'password'"

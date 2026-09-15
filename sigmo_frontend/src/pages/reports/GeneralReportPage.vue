@@ -24,6 +24,7 @@ import { materialsApi } from '@/api/materials.api'
 import { vehicleTypesApi } from '@/api/vehicles.api'
 import { paymentMethodsApi } from '@/api/paymentMethods.api'
 import { invoicesApi } from '@/api/invoices.api'
+import { certificatesApi } from '@/api/certificates.api'
 import { useAuthStore } from '@/stores/auth.store'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate, formatTime } from '@/utils/formatDate'
@@ -39,7 +40,7 @@ type ColumnKey =
   | 'vehicle_detail.plaque' | 'vehicle_detail.dumper_detail.ambiental_pin' | 'material_type_detail.name'
   | 'vehicle_detail.vehicle_type_detail.name' | 'vehicle_detail.vehicle_type_detail.capacity'
   | 'payment_detail.name' | 'value' | 'extern_voucher_num' | 'observations'
-  | 'state' | 'invoice_number' | 'certification_state' | 'certification_num' | 'advance' | 'summary'
+  | 'state' | 'invoice_number' | 'certificate_number' | 'advance' | 'summary'
 
 interface ColumnConfigItem {
   key: ColumnKey
@@ -66,8 +67,7 @@ const COLUMN_CONFIG: ColumnConfigItem[] = [
   { key: 'observations', label: 'Observaciones', roles: 'all' },
   { key: 'state', label: 'Estado', roles: RESTRICTED_ROLES },
   { key: 'invoice_number', label: 'N° Factura', roles: RESTRICTED_ROLES },
-  { key: 'certification_state', label: 'Estado certificación', roles: RESTRICTED_ROLES },
-  { key: 'certification_num', label: 'N° Certificado', roles: RESTRICTED_ROLES },
+  { key: 'certificate_number', label: 'N° Certificado', roles: RESTRICTED_ROLES },
   { key: 'advance', label: 'Anticipo asociado (ID)', roles: RESTRICTED_ROLES },
   { key: 'summary', label: 'Cierre de caja (ID)', roles: RESTRICTED_ROLES },
 ]
@@ -93,8 +93,7 @@ const COLUMN_MIN_WIDTH: Partial<Record<ColumnKey, number>> = {
   observations: 220,
   state: 100,
   invoice_number: 110,
-  certification_state: 140,
-  certification_num: 130,
+  certificate_number: 130,
   advance: 140,
   summary: 140,
 }
@@ -255,6 +254,11 @@ const { data: invoicesData } = useQuery({
   queryFn: () => invoicesApi.list().then(r => r.data),
   enabled: computed(() => allowedKeys.value.has('invoice_number')),
 })
+const { data: certificatesData } = useQuery({
+  queryKey: ['certificates'],
+  queryFn: () => certificatesApi.list().then(r => r.data),
+  enabled: computed(() => allowedKeys.value.has('certificate_number')),
+})
 
 const clientOptions = computed(() => (clientsData.value ?? []).filter(c => c.state).map(c => ({ id: c.id, name: c.name })))
 const materialOptions = computed(() => (materialsData.value ?? []).filter(m => m.state))
@@ -263,6 +267,9 @@ const paymentOptions = computed(() => (paymentsData.value ?? []).filter(p => p.s
 
 const invoiceNumberMap = computed<Record<number, string>>(() =>
   Object.fromEntries((invoicesData.value ?? []).map(i => [i.id, i.number])),
+)
+const certificateNumberMap = computed<Record<number, string>>(() =>
+  Object.fromEntries((certificatesData.value ?? []).map(c => [c.id, c.number])),
 )
 
 // ── Filtros ─────────────────────────────────────────────────────────────────────
@@ -532,12 +539,11 @@ const baseColumns = computed<ColumnDef<Trip>[]>(() => [
     cell: ({ getValue }) => (getValue() as string | null) ?? '—',
   },
   {
-    id: 'certification_state',
-    accessorFn: row => (row.certification_state === true ? 'Sí' : row.certification_state === false ? 'No' : null),
-    header: 'Estado certificación',
+    id: 'certificate_number',
+    accessorFn: row => (row.certificate != null ? (certificateNumberMap.value[row.certificate] ?? `#${row.certificate}`) : null),
+    header: 'N° Certificado',
     cell: ({ getValue }) => (getValue() as string | null) ?? '—',
   },
-  { id: 'certification_num', accessorFn: row => row.certification_num ?? null, header: 'N° Certificado', cell: ({ getValue }) => (getValue() as string | null) ?? '—' },
   { id: 'advance', accessorFn: row => row.advance, header: 'Anticipo asociado (ID)', cell: ({ getValue }) => (getValue() != null ? `#${getValue()}` : '—') },
   { id: 'summary', accessorFn: row => row.summary, header: 'Cierre de caja (ID)', cell: ({ getValue }) => (getValue() != null ? `#${getValue()}` : '—') },
 ])
@@ -644,14 +650,14 @@ const filterSummaryText = computed(() => {
 // ── Exportación ────────────────────────────────────────────────────────────────
 function handleExportExcel() {
   try {
-    exportGeneralQueryExcel(sortedRows.value, visibleColumnConfigs.value, invoiceNumberMap.value)
+    exportGeneralQueryExcel(sortedRows.value, visibleColumnConfigs.value, invoiceNumberMap.value, certificateNumberMap.value)
   } catch (err) {
     toastApiError(err)
   }
 }
 
 function handleExportPdf() {
-  printGeneralQuery(sortedRows.value, visibleColumnConfigs.value, filterSummaryText.value, invoiceNumberMap.value)
+  printGeneralQuery(sortedRows.value, visibleColumnConfigs.value, filterSummaryText.value, invoiceNumberMap.value, certificateNumberMap.value)
 }
 
 const tableEl = ref<HTMLTableElement | null>(null)

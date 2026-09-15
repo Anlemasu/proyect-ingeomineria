@@ -38,6 +38,8 @@ export const tripsApi = {
   patch: (id: number, data: {
     invoice?: number | null
     invoice_pos?: number | null
+    certificate?: number | null
+    certificate_pos?: number | null
     state?: boolean
     justification?: string
     payment?: number
