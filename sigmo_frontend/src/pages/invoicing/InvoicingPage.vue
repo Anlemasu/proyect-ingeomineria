@@ -2,7 +2,7 @@
 import { ref, computed, watch, h } from 'vue'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
-import { FileText, X, CheckSquare, Square, Search, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { FileText, X, CheckSquare, Square, Search, ChevronDown, ChevronUp, Unlink, Replace } from 'lucide-vue-next'
 import type { ColumnDef } from '@tanstack/vue-table'
 
 type ARow = Record<string, unknown>
@@ -10,6 +10,7 @@ type ARow = Record<string, unknown>
 import DataTable from '@/components/shared/DataTable.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import { usePersistedRef } from '@/composables/usePersistedFilters'
 import { tripsApi } from '@/api/trips.api'
 import { invoicesApi } from '@/api/invoices.api'
@@ -189,6 +190,101 @@ const assignMutation = useMutation({
   },
 })
 
+// ── Desvincular factura ─────────────────────────────────────────────────────
+// Backend: PATCH /trips/<id>/ con invoice=null (can_unlink_invoice:
+// superuser/accountant) — ya soportado desde 8B.4, pero hasta ahora no
+// existía ninguna acción en la UI para dispararlo.
+const unlinkTarget = ref<Trip | null>(null)
+const isUnlinking = ref(false)
+
+function openUnlinkInvoice(trip: Trip) {
+  unlinkTarget.value = trip
+}
+
+async function confirmUnlinkInvoice() {
+  if (!unlinkTarget.value) return
+  isUnlinking.value = true
+  try {
+    await tripsApi.patch(unlinkTarget.value.id, { invoice: null })
+    toast.success(`Viaje #${unlinkTarget.value.voucher_num} desvinculado de su factura.`)
+    unlinkTarget.value = null
+    qc.invalidateQueries({ queryKey: ['trips'] })
+    qc.invalidateQueries({ queryKey: ['invoices'] })
+  } catch (err) {
+    toastApiError(err)
+  } finally {
+    isUnlinking.value = false
+  }
+}
+
+// ── Modal: cambiar factura de un viaje ya facturado ───────────────────────────
+const changeTarget = ref<Trip | null>(null)
+const changeMode = ref<'new' | 'existing'>('new')
+const changeNumber = ref('')
+const changeNumberError = ref('')
+const existingChangeInvoiceId = ref<number | null>(null)
+
+function openChangeInvoice(trip: Trip) {
+  changeTarget.value = trip
+  changeMode.value = 'new'
+  changeNumber.value = ''
+  changeNumberError.value = ''
+  existingChangeInvoiceId.value = null
+}
+
+function closeChangeModal() {
+  changeTarget.value = null
+}
+
+const changeMutation = useMutation({
+  mutationFn: async () => {
+    const trip = changeTarget.value
+    if (!trip) throw new Error('no-target')
+
+    if (changeMode.value === 'new') {
+      const num = changeNumber.value.trim()
+      if (!num) { changeNumberError.value = 'El número de factura es requerido.'; throw new Error('validation') }
+      if (num.length > 15) { changeNumberError.value = 'Máximo 15 caracteres.'; throw new Error('validation') }
+      changeNumberError.value = ''
+    } else if (!existingChangeInvoiceId.value) {
+      throw new Error('Selecciona una factura existente.')
+    }
+
+    // Una factura solo puede reemplazarse, no duplicarse (POST /invoices/
+    // rechaza un viaje que ya tiene otra factura) — se desvincula la actual
+    // primero y luego se asigna la nueva. Si el segundo paso falla, el
+    // viaje queda desvinculado (visible en Pendientes de Facturar para
+    // reintentar), nunca con dos facturas ni en un estado invisible.
+    await tripsApi.patch(trip.id, { invoice: null })
+
+    if (changeMode.value === 'new') {
+      await invoicesApi.create({ number: changeNumber.value.trim(), trip_ids: [trip.id] })
+    } else {
+      await invoicesApi.assignTripsToExistingInvoice({
+        invoice_id: existingChangeInvoiceId.value as number,
+        trip_ids: [trip.id],
+      })
+    }
+  },
+  onSuccess: () => {
+    toast.success(`Factura del viaje #${changeTarget.value?.voucher_num} actualizada.`)
+    qc.invalidateQueries({ queryKey: ['trips'] })
+    qc.invalidateQueries({ queryKey: ['invoices'] })
+    closeChangeModal()
+  },
+  onError: (err: unknown) => {
+    // El desvincular pudo haber ocurrido aunque el paso de asignar fallara
+    // después — refrescar para que la tabla ya lo muestre como pendiente.
+    qc.invalidateQueries({ queryKey: ['trips'] })
+    if (err instanceof Error && err.message === 'validation') return
+    if (err instanceof Error && err.message !== 'no-target' && !err.message.includes('validation')) {
+      toast.error(err.message)
+    } else {
+      toastApiError(err)
+    }
+  },
+})
+
 // ── Ordenamiento tabla pendientes ─────────────────────────────────────────
 type SortKey = 'date' | 'voucher_num' | 'client' | 'value'
 const sortKey = ref<SortKey>('date')
@@ -263,6 +359,28 @@ const invoicedColumns: ColumnDef<ARow>[] = [
     accessorFn: row => (row.payment_detail as { name?: string } | undefined)?.name ?? '—',
     id: 'payment_name',
     header: 'Medio de Pago',
+  },
+  {
+    id: 'actions',
+    header: '',
+    cell: info => {
+      if (!canManage.value) return null
+      const trip = info.row.original as unknown as Trip
+      return h('div', { class: 'flex items-center gap-1' }, [
+        h('button', {
+          type: 'button',
+          class: 'p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors',
+          title: 'Cambiar factura',
+          onClick: () => openChangeInvoice(trip),
+        }, [h(Replace, { class: 'w-4 h-4' })]),
+        h('button', {
+          type: 'button',
+          class: 'p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors',
+          title: 'Desvincular factura',
+          onClick: () => openUnlinkInvoice(trip),
+        }, [h(Unlink, { class: 'w-4 h-4' })]),
+      ])
+    },
   },
 ]
 
@@ -622,6 +740,124 @@ watch(activeTab, () => {
       </div>
     </div>
   </Teleport>
+
+  <!-- ── Modal: Cambiar Factura ────────────────────────────────────────────── -->
+  <Teleport to="body">
+    <div
+      v-if="changeTarget"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+      @click.self="closeChangeModal"
+    >
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40">
+          <div>
+            <h2 class="text-base font-semibold text-gray-900">Cambiar Factura</h2>
+            <p class="text-xs text-gray-400 mt-0.5">
+              Viaje #{{ changeTarget.voucher_num }} — actualmente
+              <span class="font-medium text-gold-700">
+                {{ invoices.find(i => i.id === changeTarget?.invoice)?.number ?? `#${changeTarget.invoice}` }}
+              </span>
+            </p>
+          </div>
+          <button class="text-gray-400 hover:text-gray-600 transition-colors" @click="closeChangeModal">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="px-6 py-5 space-y-5">
+          <!-- Modo: nueva / existente -->
+          <div class="flex gap-3">
+            <label
+              class="flex-1 flex items-center gap-2 rounded-lg border-2 px-4 py-3 cursor-pointer transition-colors"
+              :class="changeMode === 'new' ? 'border-gold-500 bg-gold-50' : 'border-gray-200 hover:border-gray-300'"
+            >
+              <input v-model="changeMode" type="radio" value="new" class="sr-only" />
+              <span
+                class="w-4 h-4 rounded-full border-2 flex-shrink-0"
+                :class="changeMode === 'new' ? 'border-gold-500 bg-gold-500' : 'border-gray-300'"
+              />
+              <span class="text-sm font-medium text-gray-800">Nueva factura</span>
+            </label>
+            <label
+              class="flex-1 flex items-center gap-2 rounded-lg border-2 px-4 py-3 cursor-pointer transition-colors"
+              :class="changeMode === 'existing' ? 'border-gold-500 bg-gold-50' : 'border-gray-200 hover:border-gray-300'"
+            >
+              <input v-model="changeMode" type="radio" value="existing" class="sr-only" />
+              <span
+                class="w-4 h-4 rounded-full border-2 flex-shrink-0"
+                :class="changeMode === 'existing' ? 'border-gold-500 bg-gold-500' : 'border-gray-300'"
+              />
+              <span class="text-sm font-medium text-gray-800">Factura existente</span>
+            </label>
+          </div>
+
+          <!-- Nueva factura -->
+          <div v-if="changeMode === 'new'">
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              N° de Factura <span class="text-red-500">*</span>
+            </label>
+            <input
+              v-model="changeNumber"
+              type="text"
+              maxlength="15"
+              placeholder="Ej: FAC-2024-001"
+              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
+              :class="changeNumberError ? 'border-red-400' : 'border-gray-300'"
+              @input="changeNumberError = ''"
+            />
+            <p v-if="changeNumberError" class="mt-1 text-xs text-red-500">{{ changeNumberError }}</p>
+            <p class="mt-1 text-xs text-gray-400">Máximo 15 caracteres.</p>
+          </div>
+
+          <!-- Factura existente -->
+          <div v-else>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Seleccionar factura <span class="text-red-500">*</span>
+            </label>
+            <SearchableSelect
+              :options="invoiceOptions.filter(o => o.id !== changeTarget?.invoice)"
+              v-model="existingChangeInvoiceId"
+              placeholder="Buscar factura..."
+            />
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button
+            type="button"
+            class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            @click="closeChangeModal"
+          >
+            Cancelar
+          </button>
+          <button
+            :disabled="changeMutation.isPending.value"
+            class="px-4 py-2 text-sm font-medium bg-gold-500 text-stone-900 rounded-lg hover:bg-gold-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            @click="changeMutation.mutate()"
+          >
+            {{ changeMutation.isPending.value ? 'Guardando...' : 'Confirmar cambio' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- ── Confirmar: Desvincular Factura ───────────────────────────────────── -->
+  <ConfirmDialog
+    :open="!!unlinkTarget"
+    title="Desvincular factura"
+    :description="unlinkTarget
+      ? `¿Desvincular el viaje #${unlinkTarget.voucher_num} de su factura? Podrá volver a asignarle una factura después.`
+      : ''"
+    confirm-label="Desvincular"
+    cancel-label="Cancelar"
+    :loading="isUnlinking"
+    @confirm="confirmUnlinkInvoice"
+    @cancel="unlinkTarget = null"
+  />
 </template>
 
 <style scoped>

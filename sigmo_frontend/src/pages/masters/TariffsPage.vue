@@ -63,6 +63,16 @@ function setCellValue(clientId: number | null, typeId: number, val: number | nul
   dirtyKeys.value.add(key)
 }
 
+// Identifica una celda en los toasts de error de saveAll() — "Tarifa
+// general" o el nombre del cliente, más el tipo de vehículo.
+function cellLabel(clientId: number | null, typeId: number): string {
+  const clientName = clientId === null
+    ? 'Tarifa general'
+    : activeClients.value.find((c: Client) => c.id === clientId)?.name ?? `Cliente #${clientId}`
+  const typeName = activeTypes.value.find((t: VehicleType) => t.id === typeId)?.name ?? `Tipo #${typeId}`
+  return `${clientName} — ${typeName}`
+}
+
 const saving = ref(false)
 
 const { mutateAsync: createTariff } = useMutation({
@@ -79,8 +89,14 @@ async function saveAll() {
   if (!dirtyKeys.value.size) return
   saving.value = true
   const today = todayBogota()
-  let errors = 0
-  let invalidValueErrors = 0
+  const totalCount = dirtyKeys.value.size
+  // 9.8: antes el catch era genérico (`catch { errors++ }`) y descartaba el
+  // motivo real que manda el backend — el usuario solo veía un conteo
+  // ("2 tarifa(s) no se pudieron guardar"), sin saber si fue por permisos,
+  // un valor rechazado por el servidor, o la red. Ahora cada falla guarda
+  // su propio mensaje (celda + motivo real vía getApiErrorMessage), igual
+  // que ya hace PhysicalReportPage.vue para su guardado en lote.
+  const failures: string[] = []
   for (const key of dirtyKeys.value) {
     const [clientPart, typePart] = key.split('-')
     const clientId = clientPart === 'general' ? null : parseInt(clientPart)
@@ -101,27 +117,31 @@ async function saveAll() {
         // final igual decía "guardado correctamente" sin indicar qué
         // celda se había ignorado ni por qué. Ahora es un error explícito
         // que cuenta hacia el mensaje final — la celda no se toca.
-        errors++
-        invalidValueErrors++
+        failures.push(`${cellLabel(clientId, typeId)}: el valor debe ser mayor a 0.`)
       } else if (existing) {
         await updateTariff({ id: existing.id, data: { value: val } })
       } else {
         await createTariff({ client: clientId, vehicle_type: typeId, value: val, start_date: today })
       }
-    } catch {
-      errors++
+    } catch (err) {
+      failures.push(`${cellLabel(clientId, typeId)}: ${getApiErrorMessage(err)}`)
     }
   }
   await qc.invalidateQueries({ queryKey: ['tariffs'] })
   editValues.value = {}
   dirtyKeys.value.clear()
   saving.value = false
-  if (errors === 0) {
+
+  if (failures.length === 0) {
     toast.success('Tarifas guardadas correctamente.')
-  } else if (invalidValueErrors === errors) {
-    toast.error(`${errors} tarifa(s) inválida(s): el valor debe ser mayor a 0.`)
-  } else {
-    toast.error(`${errors} tarifa(s) no se pudieron guardar.`)
+    return
+  }
+  const successCount = totalCount - failures.length
+  if (successCount > 0) {
+    toast.success(`${successCount} tarifa(s) guardada(s) correctamente.`)
+  }
+  for (const msg of failures) {
+    toast.error(msg)
   }
 }
 

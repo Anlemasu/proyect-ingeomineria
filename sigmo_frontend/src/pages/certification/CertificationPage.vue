@@ -2,7 +2,7 @@
 import { ref, computed, watch, h } from 'vue'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
-import { BadgeCheck, X, CheckSquare, Square, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { BadgeCheck, X, CheckSquare, Square, ChevronDown, ChevronUp, Unlink, Replace } from 'lucide-vue-next'
 import type { ColumnDef } from '@tanstack/vue-table'
 
 type ARow = Record<string, unknown>
@@ -10,6 +10,7 @@ type ARow = Record<string, unknown>
 import DataTable from '@/components/shared/DataTable.vue'
 import SearchableSelect from '@/components/shared/SearchableSelect.vue'
 import DatePickerInput from '@/components/shared/DatePickerInput.vue'
+import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import { usePersistedRef } from '@/composables/usePersistedFilters'
 import { tripsApi } from '@/api/trips.api'
 import { certificatesApi } from '@/api/certificates.api'
@@ -181,6 +182,102 @@ const assignMutation = useMutation({
   },
 })
 
+// ── Desvincular certificado ──────────────────────────────────────────────────
+// Backend: PATCH /trips/<id>/ con certificate=null (can_unlink_certificate:
+// superuser/certifier) — ya soportado, pero hasta ahora no existía ninguna
+// acción en la UI para dispararlo.
+const unlinkTarget = ref<Trip | null>(null)
+const isUnlinking = ref(false)
+
+function openUnlinkCertificate(trip: Trip) {
+  unlinkTarget.value = trip
+}
+
+async function confirmUnlinkCertificate() {
+  if (!unlinkTarget.value) return
+  isUnlinking.value = true
+  try {
+    await tripsApi.patch(unlinkTarget.value.id, { certificate: null })
+    toast.success(`Viaje #${unlinkTarget.value.voucher_num} desvinculado de su certificado.`)
+    unlinkTarget.value = null
+    qc.invalidateQueries({ queryKey: ['trips'] })
+    qc.invalidateQueries({ queryKey: ['certificates'] })
+  } catch (err) {
+    toastApiError(err)
+  } finally {
+    isUnlinking.value = false
+  }
+}
+
+// ── Modal: cambiar certificado de un viaje ya certificado ─────────────────────
+const changeTarget = ref<Trip | null>(null)
+const changeMode = ref<'new' | 'existing'>('new')
+const changeNumber = ref('')
+const changeNumberError = ref('')
+const existingChangeCertificateId = ref<number | null>(null)
+
+function openChangeCertificate(trip: Trip) {
+  changeTarget.value = trip
+  changeMode.value = 'new'
+  changeNumber.value = ''
+  changeNumberError.value = ''
+  existingChangeCertificateId.value = null
+}
+
+function closeChangeModal() {
+  changeTarget.value = null
+}
+
+const changeMutation = useMutation({
+  mutationFn: async () => {
+    const trip = changeTarget.value
+    if (!trip) throw new Error('no-target')
+
+    if (changeMode.value === 'new') {
+      const num = changeNumber.value.trim()
+      if (!num) { changeNumberError.value = 'El número de certificado es requerido.'; throw new Error('validation') }
+      if (num.length > 15) { changeNumberError.value = 'Máximo 15 caracteres.'; throw new Error('validation') }
+      changeNumberError.value = ''
+    } else if (!existingChangeCertificateId.value) {
+      throw new Error('Selecciona un certificado existente.')
+    }
+
+    // Un certificado solo puede reemplazarse, no duplicarse (POST
+    // /certificates/ rechaza un viaje que ya tiene otro certificado) — se
+    // desvincula el actual primero y luego se asigna el nuevo. Si el
+    // segundo paso falla, el viaje queda desvinculado (visible en
+    // Pendientes de Certificar para reintentar), nunca con dos
+    // certificados ni en un estado invisible.
+    await tripsApi.patch(trip.id, { certificate: null })
+
+    if (changeMode.value === 'new') {
+      await certificatesApi.create({ number: changeNumber.value.trim(), trip_ids: [trip.id] })
+    } else {
+      await certificatesApi.assignTripsToExistingCertificate({
+        certificate_id: existingChangeCertificateId.value as number,
+        trip_ids: [trip.id],
+      })
+    }
+  },
+  onSuccess: () => {
+    toast.success(`Certificado del viaje #${changeTarget.value?.voucher_num} actualizado.`)
+    qc.invalidateQueries({ queryKey: ['trips'] })
+    qc.invalidateQueries({ queryKey: ['certificates'] })
+    closeChangeModal()
+  },
+  onError: (err: unknown) => {
+    // El desvincular pudo haber ocurrido aunque el paso de asignar fallara
+    // después — refrescar para que la tabla ya lo muestre como pendiente.
+    qc.invalidateQueries({ queryKey: ['trips'] })
+    if (err instanceof Error && err.message === 'validation') return
+    if (err instanceof Error && err.message !== 'no-target' && !err.message.includes('validation')) {
+      toast.error(err.message)
+    } else {
+      toastApiError(err)
+    }
+  },
+})
+
 // ── Ordenamiento tabla pendientes ─────────────────────────────────────────
 type SortKey = 'date' | 'voucher_num' | 'client' | 'value'
 const sortKey = ref<SortKey>('date')
@@ -255,6 +352,28 @@ const certifiedColumns: ColumnDef<ARow>[] = [
     accessorFn: row => (row.payment_detail as { name?: string } | undefined)?.name ?? '—',
     id: 'payment_name',
     header: 'Medio de Pago',
+  },
+  {
+    id: 'actions',
+    header: '',
+    cell: info => {
+      if (!canManage.value) return null
+      const trip = info.row.original as unknown as Trip
+      return h('div', { class: 'flex items-center gap-1' }, [
+        h('button', {
+          type: 'button',
+          class: 'p-1.5 rounded text-gray-400 hover:text-gold-700 hover:bg-gold-50 transition-colors',
+          title: 'Cambiar certificado',
+          onClick: () => openChangeCertificate(trip),
+        }, [h(Replace, { class: 'w-4 h-4' })]),
+        h('button', {
+          type: 'button',
+          class: 'p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors',
+          title: 'Desvincular certificado',
+          onClick: () => openUnlinkCertificate(trip),
+        }, [h(Unlink, { class: 'w-4 h-4' })]),
+      ])
+    },
   },
 ]
 
@@ -614,6 +733,124 @@ watch(activeTab, () => {
       </div>
     </div>
   </Teleport>
+
+  <!-- ── Modal: Cambiar Certificado ────────────────────────────────────────── -->
+  <Teleport to="body">
+    <div
+      v-if="changeTarget"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+      @click.self="closeChangeModal"
+    >
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b-2 border-gold-200 bg-gold-50/40">
+          <div>
+            <h2 class="text-base font-semibold text-gray-900">Cambiar Certificado</h2>
+            <p class="text-xs text-gray-400 mt-0.5">
+              Viaje #{{ changeTarget.voucher_num }} — actualmente
+              <span class="font-medium text-gold-700">
+                {{ certificates.find(c => c.id === changeTarget?.certificate)?.number ?? `#${changeTarget.certificate}` }}
+              </span>
+            </p>
+          </div>
+          <button class="text-gray-400 hover:text-gray-600 transition-colors" @click="closeChangeModal">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="px-6 py-5 space-y-5">
+          <!-- Modo: nuevo / existente -->
+          <div class="flex gap-3">
+            <label
+              class="flex-1 flex items-center gap-2 rounded-lg border-2 px-4 py-3 cursor-pointer transition-colors"
+              :class="changeMode === 'new' ? 'border-gold-500 bg-gold-50' : 'border-gray-200 hover:border-gray-300'"
+            >
+              <input v-model="changeMode" type="radio" value="new" class="sr-only" />
+              <span
+                class="w-4 h-4 rounded-full border-2 flex-shrink-0"
+                :class="changeMode === 'new' ? 'border-gold-500 bg-gold-500' : 'border-gray-300'"
+              />
+              <span class="text-sm font-medium text-gray-800">Nuevo certificado</span>
+            </label>
+            <label
+              class="flex-1 flex items-center gap-2 rounded-lg border-2 px-4 py-3 cursor-pointer transition-colors"
+              :class="changeMode === 'existing' ? 'border-gold-500 bg-gold-50' : 'border-gray-200 hover:border-gray-300'"
+            >
+              <input v-model="changeMode" type="radio" value="existing" class="sr-only" />
+              <span
+                class="w-4 h-4 rounded-full border-2 flex-shrink-0"
+                :class="changeMode === 'existing' ? 'border-gold-500 bg-gold-500' : 'border-gray-300'"
+              />
+              <span class="text-sm font-medium text-gray-800">Certificado existente</span>
+            </label>
+          </div>
+
+          <!-- Nuevo certificado -->
+          <div v-if="changeMode === 'new'">
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              N° de Certificado <span class="text-red-500">*</span>
+            </label>
+            <input
+              v-model="changeNumber"
+              type="text"
+              maxlength="15"
+              placeholder="Ej: CERT-2024-001"
+              class="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
+              :class="changeNumberError ? 'border-red-400' : 'border-gray-300'"
+              @input="changeNumberError = ''"
+            />
+            <p v-if="changeNumberError" class="mt-1 text-xs text-red-500">{{ changeNumberError }}</p>
+            <p class="mt-1 text-xs text-gray-400">Máximo 15 caracteres.</p>
+          </div>
+
+          <!-- Certificado existente -->
+          <div v-else>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Seleccionar certificado <span class="text-red-500">*</span>
+            </label>
+            <SearchableSelect
+              :options="certificateOptions.filter(o => o.id !== changeTarget?.certificate)"
+              v-model="existingChangeCertificateId"
+              placeholder="Buscar certificado..."
+            />
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button
+            type="button"
+            class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            @click="closeChangeModal"
+          >
+            Cancelar
+          </button>
+          <button
+            :disabled="changeMutation.isPending.value"
+            class="px-4 py-2 text-sm font-medium bg-gold-500 text-stone-900 rounded-lg hover:bg-gold-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            @click="changeMutation.mutate()"
+          >
+            {{ changeMutation.isPending.value ? 'Guardando...' : 'Confirmar cambio' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- ── Confirmar: Desvincular Certificado ───────────────────────────────── -->
+  <ConfirmDialog
+    :open="!!unlinkTarget"
+    title="Desvincular certificado"
+    :description="unlinkTarget
+      ? `¿Desvincular el viaje #${unlinkTarget.voucher_num} de su certificado? Podrá volver a asignarle un certificado después.`
+      : ''"
+    confirm-label="Desvincular"
+    cancel-label="Cancelar"
+    :loading="isUnlinking"
+    @confirm="confirmUnlinkCertificate"
+    @cancel="unlinkTarget = null"
+  />
 </template>
 
 <style scoped>
