@@ -307,7 +307,25 @@ const annulTrip          = ref<Trip | null>(null)
 const annulJustification = ref('')
 const annulLoading       = ref(false)
 
+// El backend rechaza anular un viaje que ya tiene factura o certificado
+// vinculado (dejaría la factura/certificado apuntando a un registro
+// anulado) — se exige desvincular primero. Se corta acá, antes de abrir el
+// modal, para no hacer llenar la justificación y recién enterarse del
+// rechazo al confirmar.
+function annulBlockReason(trip: Trip): string | null {
+  const linked: string[] = []
+  if (trip.invoice != null) linked.push('factura')
+  if (trip.certificate != null) linked.push('certificado')
+  if (linked.length === 0) return null
+  return `Este viaje ya tiene ${linked.join(' y ')} vinculado y no puede anularse. Desvincule primero.`
+}
+
 function openAnnul(trip: Trip) {
+  const blockReason = annulBlockReason(trip)
+  if (blockReason) {
+    toast.error(blockReason)
+    return
+  }
   annulTrip.value          = trip
   annulJustification.value = ''
 }
@@ -529,8 +547,11 @@ function confirmPrint() {
                     v-if="trip.state && canAnnul && !observationsOnlyMode"
                     type="button"
                     @click="openAnnul(trip)"
-                    class="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                    title="Anular viaje"
+                    class="p-1.5 rounded transition-colors"
+                    :class="annulBlockReason(trip)
+                      ? 'text-gray-300 hover:text-gray-400 hover:bg-gray-50'
+                      : 'text-gray-400 hover:text-red-600 hover:bg-red-50'"
+                    :title="annulBlockReason(trip) ?? 'Anular viaje'"
                   >
                     <Ban class="w-4 h-4" />
                   </button>

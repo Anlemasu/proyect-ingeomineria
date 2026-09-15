@@ -487,6 +487,31 @@ class TripDetailView(APIView):
         is_invoice_only_patch = incoming_fields.issubset(INVOICE_ONLY_FIELDS)
         is_certificate_only_patch = incoming_fields.issubset(CERTIFICATE_ONLY_FIELDS)
 
+        # Un viaje ya facturado y/o certificado no puede anularse directamente
+        # — dejaría la factura/certificado apuntando a un registro anulado,
+        # sin ninguna corrección. Mismo principio que
+        # FINANCIAL_FIELDS_LOCKED_WHEN_INVOICED (editar value/client/payment
+        # de un viaje facturado ya lo bloqueaba), que hasta ahora no cubría
+        # 'state'. Se exige desvincular primero, en un request aparte —
+        # mismo flujo en dos pasos que ya rige para editar esos otros campos
+        # (superuser/contabilidad para factura vía can_unlink_invoice,
+        # superuser/certifier para certificado vía can_unlink_certificate).
+        if is_annulment:
+            linked_to = []
+            if obj.invoice_id is not None:
+                linked_to.append('factura')
+            if obj.certificate_id is not None:
+                linked_to.append('certificado')
+            if linked_to:
+                log_action(request, 'access_denied', 'Trip', object_id=obj.id)
+                return Response({
+                    'error': (
+                        f'Este viaje ya tiene {" y ".join(linked_to)} vinculado y no '
+                        f'puede anularse. Desvincule primero.'
+                    ),
+                    'linked': linked_to,
+                }, status=status.HTTP_409_CONFLICT)
+
         # Decisión: anular un viaje exige justificación siempre, sin importar
         # el rol — incluido superuser. Antes solo se le exigía a cashier/
         # commercial_admin (en vez de bloquearles la anulación por completo,

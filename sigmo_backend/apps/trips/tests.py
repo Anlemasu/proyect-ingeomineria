@@ -580,6 +580,75 @@ class InvoicedTripLockAndUnlinkTests(TripAdvanceFixturesMixin, TestCase):
         self.assertEqual(trip.invoice_id, self.invoice_id)
         self.assertEqual(trip.value, Decimal('200000'))
 
+    def test_annulling_invoiced_trip_is_rejected(self):
+        """Diagnóstico: antes de este fix, un viaje ya facturado se podía
+        anular sin ningún bloqueo — la factura quedaba apuntando a un
+        registro anulado, la misma inconsistencia que ya se evitaba para
+        value/client/payment pero que 'state' no cubría."""
+        resp = self.api.patch(
+            f'/api/trips/{self.trip_id}/',
+            {'state': False, 'justification': 'Intento de anular viaje facturado'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT, resp.data)
+        self.assertIn('factura', resp.data['linked'])
+        trip = Trip.objects.get(pk=self.trip_id)
+        self.assertTrue(trip.state, 'el viaje no debe quedar anulado si se rechaza')
+
+    def test_annulling_after_unlinking_invoice_works_normally(self):
+        unlink_resp = self.api.patch(f'/api/trips/{self.trip_id}/', {'invoice': None}, format='json')
+        self.assertEqual(unlink_resp.status_code, status.HTTP_200_OK, unlink_resp.data)
+
+        annul_resp = self.api.patch(
+            f'/api/trips/{self.trip_id}/',
+            {'state': False, 'justification': 'Anulación tras desvincular factura'},
+            format='json',
+        )
+        self.assertEqual(annul_resp.status_code, status.HTTP_200_OK, annul_resp.data)
+        trip = Trip.objects.get(pk=self.trip_id)
+        self.assertFalse(trip.state)
+
+
+class AnnullingCertifiedTripTests(TripAdvanceFixturesMixin, TestCase):
+    """Mismo bloqueo que InvoicedTripLockAndUnlinkTests.test_annulling_invoiced_trip_is_rejected,
+    pero para certificados de disposición final (apps.certificates) — sigue
+    exactamente el mismo patrón que factura (can_unlink_certificate en vez
+    de can_unlink_invoice)."""
+
+    def setUp(self):
+        super().setUp()
+        trip_resp = self._create_trip(value='200000', payment=self.payment_cash)
+        self.trip_id = trip_resp.data['id']
+        cert_resp = self.api.post(
+            '/api/certificates/', {'number': 'CERT-LOCK-1', 'trip_ids': [self.trip_id]}, format='json'
+        )
+        assert cert_resp.status_code == status.HTTP_201_CREATED, cert_resp.data
+        self.certificate_id = cert_resp.data['id']
+
+    def test_annulling_certified_trip_is_rejected(self):
+        resp = self.api.patch(
+            f'/api/trips/{self.trip_id}/',
+            {'state': False, 'justification': 'Intento de anular viaje certificado'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT, resp.data)
+        self.assertIn('certificado', resp.data['linked'])
+        trip = Trip.objects.get(pk=self.trip_id)
+        self.assertTrue(trip.state)
+
+    def test_annulling_after_unlinking_certificate_works_normally(self):
+        unlink_resp = self.api.patch(f'/api/trips/{self.trip_id}/', {'certificate': None}, format='json')
+        self.assertEqual(unlink_resp.status_code, status.HTTP_200_OK, unlink_resp.data)
+
+        annul_resp = self.api.patch(
+            f'/api/trips/{self.trip_id}/',
+            {'state': False, 'justification': 'Anulación tras desvincular certificado'},
+            format='json',
+        )
+        self.assertEqual(annul_resp.status_code, status.HTTP_200_OK, annul_resp.data)
+        trip = Trip.objects.get(pk=self.trip_id)
+        self.assertFalse(trip.state)
+
 
 class HistoricalAdjustmentResyncTests(TripAdvanceFixturesMixin, TestCase):
     """REQUISITO NUEVO 3.4: ajustar un viaje de un día ya cerrado debe
