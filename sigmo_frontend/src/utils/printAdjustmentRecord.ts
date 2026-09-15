@@ -125,6 +125,7 @@ function generateAdjustmentHtml(
     padding: 0.4mm 1mm;
     white-space: nowrap;
   }
+  .header-comprobante .caption { font-size: 5.5px; margin-top: 0.4mm; }
   .licenses { padding: 0.3mm 2mm; font-size: 5px; color: #333; overflow: hidden; text-align: center; }
   .licenses .lic-list div { margin: 0.15mm 0; }
   .body {
@@ -205,6 +206,7 @@ function generateAdjustmentHtml(
     <div class="header-comprobante">
       <div class="label">Comprobante de ajuste</div>
       <div class="num-box">${voucherLabel}</div>
+      <div class="caption">vale por 1 viaje</div>
     </div>
   </div>
   <div class="licenses">
